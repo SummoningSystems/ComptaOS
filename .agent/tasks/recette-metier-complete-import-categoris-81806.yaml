@@ -1,0 +1,10 @@
+id: recette-metier-complete-import-categoris-81806
+title: Recette metier complete import categorisation facture export
+agent: Codex
+branch: master
+scope: e2e frontend backend
+status: active
+started_at: 2026-07-26T16:03:26.9287382Z
+base_commit: 4a27828c662dac73d5a888a5577cca11e990408b
+tests:
+    result: not_run

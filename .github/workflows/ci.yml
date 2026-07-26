@@ -41,6 +41,16 @@ jobs:
       - name: Test frontend
         run: npm test --prefix frontend
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end accounting workflow
+        run: npm run test:e2e
+        env:
+          WORKSPACE_PATH: ${{ runner.temp }}/comptaos-e2e-workspace
+          AUTH_ENABLED: "false"
+          NODE_ENV: test
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

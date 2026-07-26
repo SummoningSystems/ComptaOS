@@ -7,6 +7,5 @@ created_at: 2026-07-26T13:34:52.0365481Z
 sources:
     - path: .github/workflows/ci.yml
       line_start: 3
-      line_end: 40
-      file_hash: b2dee6b0cd5f53c0
-      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+      line_end: 53
+      file_hash: 8203ab9e7ab33143
