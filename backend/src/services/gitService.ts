@@ -25,7 +25,7 @@ export function mergeWorkspaceGitignore(existing: string): string {
   return `${merged.join("\n")}\n`;
 }
 
-async function ensureWorkspaceGitignore(workspacePath: string): Promise<void> {
+export async function ensureWorkspaceGitignore(workspacePath: string): Promise<void> {
   const ignorePath = path.join(workspacePath, ".gitignore");
   const existing = await fs.readFile(ignorePath, "utf-8").catch(() => "");
   const updated = mergeWorkspaceGitignore(existing);
@@ -48,19 +48,20 @@ async function git(args: string[], cwd: string): Promise<string> {
  * Crée un .gitignore (exclut les pièces jointes) et fait un commit initial.
  */
 export async function initRepo(workspacePath: string): Promise<void> {
+  // Les exclusions sensibles doivent être garanties même lorsque Git n'est pas
+  // installé dans l'image de production.
+  await ensureWorkspaceGitignore(workspacePath);
+
   try {
     await git(["rev-parse", "--git-dir"], workspacePath);
     // Déjà initialisé — s'assurer que l'identité est configurée
     await git(["config", "user.email", "comptaos@localhost"], workspacePath).catch(() => {});
     await git(["config", "user.name", "ComptaOS"], workspacePath).catch(() => {});
-    await ensureWorkspaceGitignore(workspacePath);
   } catch {
     // Nouveau dépôt
     await git(["init"], workspacePath);
     await git(["config", "user.email", "comptaos@localhost"], workspacePath);
     await git(["config", "user.name", "ComptaOS"], workspacePath);
-
-    await ensureWorkspaceGitignore(workspacePath);
 
     try {
       await git(["add", "-A"], workspacePath);

@@ -56,7 +56,7 @@ Les variantes `test:coverage` existent dans `backend/` et `frontend/`. Playwrigh
 Le 2026-07-26 :
 
 - `npm run build` : réussi.
-- backend Vitest : 8 fichiers, 49 tests réussis.
+- backend Vitest : 8 fichiers, 50 tests réussis.
 - frontend Vitest : 3 fichiers, 22 tests réussis.
 - E2E Playwright : 10 scénarios réussis avec un workspace éphémère et `AUTH_ENABLED=false`.
 - avertissement de build restant : bundle frontend principal supérieur à 500 kB.
