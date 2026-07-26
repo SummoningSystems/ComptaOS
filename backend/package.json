@@ -40,7 +40,7 @@
     "@types/node": "^20.14.0",
     "@types/papaparse": "^5.3.14",
     "@vitest/coverage-v8": "^4.1.7",
-    "tsx": "^4.15.7",
+    "tsx": "^4.23.1",
     "typescript": "^5.4.5",
     "vitest": "^4.1.7"
   }
