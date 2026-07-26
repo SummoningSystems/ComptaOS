@@ -1,0 +1,10 @@
+id: traitement-et-surveillance-des-alertes-d-82970
+title: Traitement et surveillance des alertes Dependabot
+agent: Codex
+branch: master
+scope: .github/dependabot.yml package-lock.json backend/package-lock.json frontend/package-lock.json
+status: active
+started_at: 2026-07-26T16:22:50.4311703Z
+base_commit: 63a8dad9e9e055d74e33b116f6c50f0458d682dc
+tests:
+    result: not_run
