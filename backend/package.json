@@ -4,6 +4,9 @@
   "description": "ComptaOS backend — Fastify + TypeScript",
   "type": "module",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -14,20 +17,20 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
-    "@fastify/cors": "^9.0.1",
-    "@fastify/multipart": "^8.3.0",
-    "@fastify/static": "^7.0.4",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^10.1.0",
+    "@fastify/static": "^10.1.2",
     "@mistralai/mistralai": "^2.2.1",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
-    "fastify": "^4.28.1",
+    "fastify": "^5.10.0",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.3",
     "openai": "^6.38.0",
     "papaparse": "^5.4.1",
     "pdf-lib": "^1.17.1",
     "stripe": "^22.1.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "^2.4.5"
   },
   "devDependencies": {

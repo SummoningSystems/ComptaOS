@@ -1,0 +1,10 @@
+id: durcissement-production-node-20-securite-79429
+title: Durcissement production Node 20 securite dependances et bundle
+agent: Codex
+branch: master
+scope: frontend backend deploiement nginx dependances
+status: active
+started_at: 2026-07-26T15:23:49.6557288Z
+base_commit: 7624e8f1eb719389ec87b1760daad9d03b59541e
+tests:
+    result: not_run

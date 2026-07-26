@@ -63,7 +63,7 @@ npm run dev
 npm run electron:build
 ```
 
-**Prérequis :** Node.js 20+, npm 10+
+**Prérequis :** Node.js 20.19+ (production : 20.19.5), npm 10+
 
 ---
 

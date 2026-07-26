@@ -1,29 +1,49 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
 REPO="$HOME/apps/comptaos"
 NGINX_HTML=/usr/share/nginx/html/comptaos
+NODE_IMAGE=node:20.19.5-alpine
 
-echo "=== [1/6] git pull ==="
+echo "=== [1/7] git pull ==="
 cd "$REPO"
 git pull --ff-only origin master
 
-echo "=== [2/6] build frontend ==="
-cd "$REPO/frontend"
-npm ci --prefer-offline --silent
-NODE_OPTIONS=--experimental-global-webcrypto BASE_PATH=/comptaos/ npm run build
+echo "=== [2/7] build frontend (Node 20) ==="
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp \
+  -e BASE_PATH=/comptaos/ \
+  -v "$REPO/frontend:/app" \
+  -w /app \
+  "$NODE_IMAGE" \
+  sh -c 'npm ci --prefer-offline --silent && npm run build'
 
-echo "=== [3/6] build backend ==="
-docker exec comptaos-backend sh -c 'cd /app && npx tsc --build'
+echo "=== [3/7] build backend (Node 20) ==="
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp \
+  -v "$REPO/backend:/app" \
+  -w /app \
+  "$NODE_IMAGE" \
+  sh -c 'npm ci --prefer-offline --silent && npm run build'
 
-echo "=== [4/6] deploy frontend ==="
+echo "=== [4/7] install nginx security headers ==="
+docker cp "$REPO/deployment/nginx/comptaos-security.conf" tipforgood_frontend_1:/etc/nginx/conf.d/comptaos-security.conf
+if ! docker exec tipforgood_frontend_1 nginx -t; then
+  docker exec tipforgood_frontend_1 rm -f /etc/nginx/conf.d/comptaos-security.conf
+  echo "Configuration Nginx refusée et retirée." >&2
+  exit 1
+fi
+
+echo "=== [5/7] deploy frontend ==="
 docker cp "$REPO/frontend/dist/." tipforgood_frontend_1:"$NGINX_HTML/"
-docker exec tipforgood_frontend_1 nginx -t
 docker exec tipforgood_frontend_1 nginx -s reload
 
-echo "=== [5/6] restart backend ==="
-docker restart comptaos-backend
+echo "=== [6/7] migrate or restart backend ==="
+"$REPO/deployment/recreate-backend-node20.sh"
 
-echo "=== [6/6] health check ==="
+echo "=== [7/7] health check ==="
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if curl --fail --silent --show-error https://tipforgood.com/comptaos/api/health; then
     echo

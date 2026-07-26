@@ -2,7 +2,7 @@
 
 ## Prérequis
 
-- Node.js 20+ et npm 10+.
+- Node.js 20.19+ et npm 10+ (production épinglée sur Node.js 20.19.5).
 - Installer les dépendances avec `npm run install:all` après l'installation racine.
 - Copier `backend/.env.example` vers `backend/.env`; `WORKSPACE_PATH` configure le dossier de données.
 

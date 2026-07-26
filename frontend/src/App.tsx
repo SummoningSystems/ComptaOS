@@ -1,36 +1,10 @@
-import { useEffect, useState, Component, type ReactNode } from "react";
+import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
 import { api, fetchCompanies } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
 import { TabBar } from "./components/Layout/TabBar";
 import { StatusBar } from "./components/Layout/StatusBar";
-import { FileEditor } from "./components/Editor/FileEditor";
-import { Dashboard } from "./components/Dashboard/Dashboard";
-import { ImportView } from "./components/Import/ImportView";
-import { PdfImporter } from "./components/Import/PdfImporter";
-import { TransactionsView } from "./components/Transactions/TransactionsView";
 import { CopilotPanel } from "./components/Copilot/CopilotPanel";
 import { SearchOverlay } from "./components/Search/SearchOverlay";
-import { ReportsView } from "./components/Reports/ReportsView";
-import { RecurringView } from "./components/Recurring/RecurringView";
-import { SettingsView } from "./components/Settings/SettingsView";
-import { InvoicesView } from "./components/Invoices/InvoicesView";
-import { QuotesView } from "./components/Quotes/QuotesView";
-import { TiersView } from "./components/Tiers/TiersView";
-import { VatView } from "./components/Vat/VatView";
-import { BudgetsView } from "./components/Budgets/BudgetsView";
-import { SpreadsheetView } from "./components/Spreadsheet/SpreadsheetView";
-import { HistoryView } from "./components/History/HistoryView";
-import { JournalView } from "./components/Journal/JournalView";
-import { AlertsView } from "./components/Alerts/AlertsView";
-import { TemplatesView } from "./components/Templates/TemplatesView";
-import { ReconcileView } from "./components/Reconcile/ReconcileView";
-import { TreasuryView } from "./components/Treasury/TreasuryView";
-import { ExportView } from "./components/Export/ExportView";
-import { ProfitLossView } from "./components/ProfitLoss/ProfitLossView";
-import { PluginsView } from "./components/Plugins/PluginsView";
-import { PricingView } from "./components/Pricing/PricingView";
-import { BankingView } from "./components/Banking/BankingView";
-import { UsersView } from "./components/Auth/UsersView";
 import { CommandPalette } from "./components/Layout/CommandPalette";
 import { OnboardingWizard } from "./components/Onboarding/OnboardingWizard";
 import { useAppStore } from "./stores/appStore";
@@ -41,8 +15,36 @@ import { AcceptInviteView } from "./components/Auth/AcceptInviteView";
 import { fetchAuthStatus, fetchMe, logout, type AuthUser } from "./api/auth";
 import type { TabType } from "./types";
 
+const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
+const Dashboard = lazy(() => import("./components/Dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
+const ImportView = lazy(() => import("./components/Import/ImportView").then((m) => ({ default: m.ImportView })));
+const PdfImporter = lazy(() => import("./components/Import/PdfImporter").then((m) => ({ default: m.PdfImporter })));
+const TransactionsView = lazy(() => import("./components/Transactions/TransactionsView").then((m) => ({ default: m.TransactionsView })));
+const ReportsView = lazy(() => import("./components/Reports/ReportsView").then((m) => ({ default: m.ReportsView })));
+const RecurringView = lazy(() => import("./components/Recurring/RecurringView").then((m) => ({ default: m.RecurringView })));
+const SettingsView = lazy(() => import("./components/Settings/SettingsView").then((m) => ({ default: m.SettingsView })));
+const InvoicesView = lazy(() => import("./components/Invoices/InvoicesView").then((m) => ({ default: m.InvoicesView })));
+const QuotesView = lazy(() => import("./components/Quotes/QuotesView").then((m) => ({ default: m.QuotesView })));
+const TiersView = lazy(() => import("./components/Tiers/TiersView").then((m) => ({ default: m.TiersView })));
+const VatView = lazy(() => import("./components/Vat/VatView").then((m) => ({ default: m.VatView })));
+const BudgetsView = lazy(() => import("./components/Budgets/BudgetsView").then((m) => ({ default: m.BudgetsView })));
+const SpreadsheetView = lazy(() => import("./components/Spreadsheet/SpreadsheetView").then((m) => ({ default: m.SpreadsheetView })));
+const HistoryView = lazy(() => import("./components/History/HistoryView").then((m) => ({ default: m.HistoryView })));
+const JournalView = lazy(() => import("./components/Journal/JournalView").then((m) => ({ default: m.JournalView })));
+const AlertsView = lazy(() => import("./components/Alerts/AlertsView").then((m) => ({ default: m.AlertsView })));
+const TemplatesView = lazy(() => import("./components/Templates/TemplatesView").then((m) => ({ default: m.TemplatesView })));
+const ReconcileView = lazy(() => import("./components/Reconcile/ReconcileView").then((m) => ({ default: m.ReconcileView })));
+const TreasuryView = lazy(() => import("./components/Treasury/TreasuryView").then((m) => ({ default: m.TreasuryView })));
+const ExportView = lazy(() => import("./components/Export/ExportView").then((m) => ({ default: m.ExportView })));
+const ProfitLossView = lazy(() => import("./components/ProfitLoss/ProfitLossView").then((m) => ({ default: m.ProfitLossView })));
+const PluginsView = lazy(() => import("./components/Plugins/PluginsView").then((m) => ({ default: m.PluginsView })));
+const PricingView = lazy(() => import("./components/Pricing/PricingView").then((m) => ({ default: m.PricingView })));
+const BankingView = lazy(() => import("./components/Banking/BankingView").then((m) => ({ default: m.BankingView })));
+const UsersView = lazy(() => import("./components/Auth/UsersView").then((m) => ({ default: m.UsersView })));
 
-
+function ViewLoading() {
+  return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de la vue…</div>;
+}
 
 const TAB_LABELS: Record<TabType, string> = {
   dashboard:    "Dashboard",
@@ -100,7 +102,7 @@ class ViewErrorBoundary extends Component<{ children: ReactNode }, { error: stri
 /** Rendu d'une vue par son type (partagé fenêtre principale + popup) */
 function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null }) {
   return (
-    <>
+    <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
@@ -127,7 +129,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "pricing"       && <PricingView />}
       {type === "banking"       && <BankingView />}
       {type === "users"         && currentUser && <UsersView currentUser={currentUser} />}
-    </>
+    </Suspense>
   );
 }
 
