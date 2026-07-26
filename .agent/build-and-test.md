@@ -59,4 +59,5 @@ Le 2026-07-26 :
 - backend Vitest : 8 fichiers, 50 tests réussis.
 - frontend Vitest : 3 fichiers, 22 tests réussis.
 - E2E Playwright : 10 scénarios réussis avec un workspace éphémère et `AUTH_ENABLED=false`.
-- avertissement de build restant : bundle frontend principal supérieur à 500 kB.
+- bundle initial réduit à environ 329 kB non compressés, réparti en chunks ; les modules lourds sont chargés à la demande.
+- `npm audit --audit-level=low` : zéro vulnérabilité pour la racine, le backend et le frontend.

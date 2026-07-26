@@ -56,3 +56,14 @@ Le serveur n'a pas été modifié pendant cet audit.
 - `/comptaos/api/auth/status` renvoie `needsSetup: true`.
 
 Cette opération est récupérable tant que la sauvegarde privée est conservée.
+
+## Mise à jour après durcissement — 2026-07-26
+
+- le compte propriétaire a été recréé et `needsSetup` vaut désormais `false` ;
+- les builds et le backend utilisent Node.js 20.19.5 ;
+- les en-têtes HTTP de sécurité sont actifs sur `/comptaos` ;
+- les trois audits npm locaux ne signalent aucune vulnérabilité ;
+- le bundle initial est découpé et ramené à environ 329 kB non compressés ;
+- l'ancien conteneur backend Node 18 est conservé arrêté pour rollback.
+
+Les contrôles post-déploiement confirment un healthcheck HTTP 200 et un refus HTTP 401 des routes protégées sans cookie.

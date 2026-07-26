@@ -19,9 +19,10 @@ Le 2026-07-26, CTX a été initialisé avec 180 fichiers indexés. Les six docum
 
 ## Problèmes et risques observés
 
-- Le build frontend produit un bundle principal d'environ 1,5 MB avant gzip et déclenche l'avertissement Vite sur les chunks supérieurs à 500 kB.
+- Le socle frontend initial est ramené d'environ 1,5 MB à environ 329 kB non compressés grâce au chargement à la demande des vues. Le worker tableur reste séparé.
 - La protection atomique couvre les transactions, entreprises, factures, devis, paramètres, frais récurrents, authentification et données bancaires. Des services secondaires écrivent encore directement leurs fichiers, notamment les tableurs et licences.
-- Le déploiement TipForGood fonctionne, mais utilise Node.js 18 alors que le projet attend Node.js 20+, et ses en-têtes HTTP de sécurité restent à renforcer. Voir `DEPLOYMENT_AUDIT.md`.
+- Le déploiement TipForGood utilise Node.js 20.19.5 pour les builds et le backend. Les en-têtes HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy et Permissions-Policy sont actifs sur `/comptaos`.
+- Les trois audits npm locaux ne signalent plus aucune vulnérabilité connue. L'ancien conteneur Node 18 est conservé arrêté pour rollback pendant la période d'observation.
 - L'authentification de production a été réinitialisée le 2026-07-26 avec sauvegarde hors workspace ; le compte propriétaire a ensuite été recréé et les données comptables ont été préservées.
 - Les tests unitaires couvrent actuellement onze fichiers seulement face à un périmètre fonctionnel large.
 
