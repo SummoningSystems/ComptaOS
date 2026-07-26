@@ -3,8 +3,10 @@ title: Traitement et surveillance des alertes Dependabot
 agent: Codex
 branch: master
 scope: .github/dependabot.yml package-lock.json backend/package-lock.json frontend/package-lock.json
-status: active
+status: finished
 started_at: 2026-07-26T16:22:50.4311703Z
+finished_at: 2026-07-26T16:24:18.0683232Z
 base_commit: 63a8dad9e9e055d74e33b116f6c50f0458d682dc
+final_commit: c08c72c64e252ea1f062a9329d13865265339fbc
 tests:
     result: not_run
