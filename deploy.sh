@@ -21,8 +21,6 @@ docker run --rm \
 
 echo "=== [3/7] build backend (Node 20) ==="
 docker run --rm \
-  --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp \
   -v "$REPO/backend:/app" \
   -w /app \
   "$NODE_IMAGE" \
