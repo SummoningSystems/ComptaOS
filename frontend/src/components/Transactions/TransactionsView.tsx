@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category } from "../../types";
-import { fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus } from "../../api/client";
+import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { aiCategorize } from "../../api/ai";
@@ -340,9 +340,7 @@ export function TransactionsView() {
   useEffect(() => { load(); }, []);
 
   async function handleSmartCategorize() {
-    const resp = await fetch("/api/transactions/smart-categorize");
-    if (!resp.ok) { alert("Erreur smart-categorize"); return; }
-    const { suggestions } = await resp.json() as { suggestions: SmartSuggestion[] };
+    const { suggestions } = await fetchSmartSuggestions();
     if (suggestions.length === 0) { alert("Aucune suggestion — toutes les transactions sont déjà catégorisées ou aucun pattern connu."); return; }
     setSmartSuggestions(suggestions);
     // Pré-sélectionner les suggestions "high"
@@ -356,12 +354,7 @@ export function TransactionsView() {
       const changes = smartSuggestions
         .filter((s) => smartSelected.has(s.id))
         .map((s) => ({ id: s.id, category: s.suggestedCategory as Category }));
-      const resp = await fetch("/api/transactions/smart-categorize/apply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ changes }),
-      });
-      if (!resp.ok) { alert("Erreur lors de l'application"); return; }
+      await applySmartCategories(changes);
       setSmartSuggestions(null);
       await load();
     } finally {
@@ -578,9 +571,8 @@ export function TransactionsView() {
 
   async function exportFec() {
     const year = yearFilter || dateFrom.slice(0, 4) || new Date().getFullYear().toString();
-    const resp = await fetch(`/api/transactions/fec?year=${year}`);
-    if (!resp.ok) { alert("Erreur lors de la génération du FEC"); return; }
-    const blob = await resp.blob();
+    const { data } = await api.get(`/transactions/fec?year=${year}`, { responseType: "blob" });
+    const blob = new Blob([data], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

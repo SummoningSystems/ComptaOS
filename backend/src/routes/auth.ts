@@ -21,7 +21,15 @@ import {
 // ── Helpers cookies ───────────────────────────────────────────────────────────
 
 export const COOKIE_NAME = "comptaos_token";
-const SECURE = process.env.HTTPS_ONLY === "true";
+export function shouldUseSecureCookies(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.HTTPS_ONLY === "true" || env.NODE_ENV === "production";
+}
+
+export function isAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.AUTH_ENABLED === "true";
+}
+
+const SECURE = shouldUseSecureCookies();
 
 function setAuthCookie(reply: { header: (k: string, v: string) => void }, token: string): void {
   const maxAge = 30 * 24 * 3600; // 30 jours
@@ -37,9 +45,10 @@ function setAuthCookie(reply: { header: (k: string, v: string) => void }, token:
 }
 
 function clearAuthCookie(reply: { header: (k: string, v: string) => void }): void {
+  const secureFlag = SECURE ? "; Secure" : "";
   reply.header(
     "Set-Cookie",
-    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureFlag}`,
   );
 }
 
@@ -83,9 +92,10 @@ export async function authRoutes(app: FastifyInstance) {
    * Public — indique si l'auth est activée et si un setup initial est requis.
    */
   app.get("/status", async (_req, reply) => {
+    const authEnabled = isAuthEnabled();
     return reply.send({
-      authEnabled: true,
-      needsSetup: !hasUsers(),
+      authEnabled,
+      needsSetup: authEnabled && !hasUsers(),
     });
   });
 

@@ -20,13 +20,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "npm run dev --prefix backend",
+      command: "node backend/node_modules/tsx/dist/cli.mjs backend/src/index.ts",
       url: "http://127.0.0.1:3001/api/health",
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
     {
-      command: "npm run dev --prefix frontend",
+      command: "node frontend/node_modules/vite/bin/vite.js frontend",
       url: "http://localhost:5173",
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

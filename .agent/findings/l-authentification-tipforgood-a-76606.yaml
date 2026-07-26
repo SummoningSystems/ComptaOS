@@ -1,0 +1,12 @@
+id: l-authentification-tipforgood-a-76606
+statement: L authentification TipForGood a été réinitialisée avec sauvegarde privée hors workspace; auth/status attend un nouveau setup et les transactions sont préservées.
+status: verified
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:36:46.5769607Z
+sources:
+    - path: DEPLOYMENT_AUDIT.md
+      line_start: 55
+      line_end: 75
+      file_hash: 373e9f0bbfb70f38
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

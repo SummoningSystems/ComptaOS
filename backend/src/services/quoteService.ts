@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { Quote } from "../types/index.js";
 import { getActiveCompanyPath } from "./companiesService.js";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 function getQuotesFile(): string {
   return join(getActiveCompanyPath(), "settings", "quotes.json");
@@ -19,7 +20,5 @@ export function loadQuotes(): Quote[] {
 
 export function saveQuotes(quotes: Quote[]): void {
   const file = getQuotesFile();
-  const dir = join(getActiveCompanyPath(), "settings");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(file, JSON.stringify(quotes, null, 2), "utf-8");
+  atomicWriteFileSync(file, JSON.stringify(quotes, null, 2));
 }

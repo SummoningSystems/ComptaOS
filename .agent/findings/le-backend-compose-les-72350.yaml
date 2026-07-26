@@ -1,0 +1,12 @@
+id: le-backend-compose-les-72350
+statement: Le backend compose les domaines fonctionnels comme plugins de routes Fastify préfixés sous /api, puis initialise l entreprise active et le dépôt Git du workspace.
+status: observed
+confidence: high
+agent: Codex
+created_at: 2026-07-26T13:25:50.4715841Z
+sources:
+    - path: backend/src/index.ts
+      line_start: 110
+      line_end: 145
+      file_hash: 4a4601b8c141a2f4
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

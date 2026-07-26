@@ -1,0 +1,12 @@
+id: les-services-synchrones-peuvent-74862
+statement: Les services synchrones peuvent remplacer leurs fichiers de manière atomique via un temporaire synchronisé; ce mécanisme protège désormais entreprises, factures, devis, paramètres et frais récurrents.
+status: verified
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:07:42.2380658Z
+sources:
+    - path: backend/src/services/atomicFile.ts
+      line_start: 39
+      line_end: 65
+      file_hash: eee1210b9c4c9ec6
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

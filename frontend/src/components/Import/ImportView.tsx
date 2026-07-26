@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import axios from "axios";
+import { api } from "../../api/client";
 import { CsvImporter } from "./CsvImporter";
 
 type ImportTab = "csv" | "ofx" | "qif";
@@ -39,7 +39,7 @@ function FileImporter({
     setError(null);
     setResult(null);
     try {
-      const { data } = await axios.post<ImportResult>(endpoint, { content });
+      const { data } = await api.post<ImportResult>(endpoint, { content });
       setResult(data);
       setContent("");
     } catch (e: unknown) {
@@ -147,14 +147,14 @@ export function ImportView() {
           <FileImporter
             format="OFX"
             accept={{ "application/x-ofx": [".ofx", ".ofc"] }}
-            endpoint="/api/import/ofx"
+            endpoint="/import/ofx"
           />
         )}
         {activeTab === "qif" && (
           <FileImporter
             format="QIF"
             accept={{ "application/x-qif": [".qif"] }}
-            endpoint="/api/import/qif"
+            endpoint="/import/qif"
           />
         )}
       </div>

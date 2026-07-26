@@ -1,0 +1,12 @@
+id: la-ci-coute-main-72350
+statement: La CI écoute main et develop alors que les instructions de déploiement poussent et tirent master; les pushes sur master peuvent ne pas déclencher ce workflow.
+status: deprecated
+confidence: high
+agent: Codex
+created_at: 2026-07-26T13:25:50.7285195Z
+sources:
+    - path: .github/workflows/ci.yml
+      line_start: 3
+      line_end: 7
+      file_hash: 0eac1e5658e976ef
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

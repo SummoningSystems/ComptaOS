@@ -60,3 +60,6 @@ desktop.ini
 *.user
 *.userosscache
 *.sln.docstates
+# ctx generated artifacts
+.ctx/
+.agent/generated/

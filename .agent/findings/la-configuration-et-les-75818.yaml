@@ -1,0 +1,12 @@
+id: la-configuration-et-les-75818
+statement: La configuration et les connexions Powens sont validées et écrites atomiquement; les erreurs distantes ne renvoient plus leur corps potentiellement sensible.
+status: deprecated
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:23:38.0423626Z
+sources:
+    - path: backend/src/services/bankingService.ts
+      line_start: 89
+      line_end: 215
+      file_hash: b4199df36e70f41e
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

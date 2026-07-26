@@ -1,0 +1,12 @@
+id: les-transactions-sont-valides-74553
+statement: Les transactions sont validées à la lecture, écrites par remplacement atomique et les fichiers illisibles sont exposés dans les alertes d intégrité.
+status: verified
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:02:33.9481473Z
+sources:
+    - path: backend/src/services/transactionService.ts
+      line_start: 132
+      line_end: 184
+      file_hash: 3d0267c411cd2ba2
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

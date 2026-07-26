@@ -249,7 +249,7 @@ export function QuotesView() {
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">Client</label>
-                <input type="text" value={form.client}
+                <input type="text" aria-label="Client" value={form.client}
                   onChange={(e) => setForm((f) => ({ ...f, client: e.target.value }))}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent" />
               </div>
@@ -267,13 +267,13 @@ export function QuotesView() {
               </div>
               <div className="col-span-2">
                 <label className="text-xs text-vscode-muted block mb-1">Description</label>
-                <input type="text" value={form.description}
+                <input type="text" aria-label="Description" value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent" />
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">Montant HT (€)</label>
-                <input type="number" min={0} step={0.01} value={form.amount_ht}
+                <input type="number" aria-label="Montant HT" min={0} step={0.01} value={form.amount_ht}
                   onChange={(e) => {
                     const ht = parseFloat(e.target.value) || 0;
                     setForm((f) => ({ ...f, amount_ht: ht, amount_ttc: parseFloat((ht * (1 + f.vat_rate / 100)).toFixed(2)) }));

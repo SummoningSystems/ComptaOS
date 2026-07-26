@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { OutgoingInvoice } from "../types/index.js";
 import { getActiveCompanyPath } from "./companiesService.js";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 function getInvoicesFile(): string {
   return join(getActiveCompanyPath(), "settings", "invoices.json");
@@ -19,7 +20,5 @@ export function loadOutgoingInvoices(): OutgoingInvoice[] {
 
 export function saveOutgoingInvoices(invoices: OutgoingInvoice[]): void {
   const file = getInvoicesFile();
-  const dir = join(getActiveCompanyPath(), "settings");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(file, JSON.stringify(invoices, null, 2), "utf-8");
+  atomicWriteFileSync(file, JSON.stringify(invoices, null, 2));
 }

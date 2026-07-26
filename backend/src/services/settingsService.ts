@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { Category } from "../types/index.js";
 import { getActiveCompanyPath } from "./companiesService.js";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 function getSettingsDir(): string {
   return join(getActiveCompanyPath(), "settings");
@@ -32,7 +33,7 @@ export function loadCategoryRules(): CategoryRule[] {
 
 export function saveCategoryRules(rules: CategoryRule[]): void {
   ensureDir();
-  writeFileSync(join(getSettingsDir(), "category_rules.json"), JSON.stringify(rules, null, 2), "utf-8");
+  atomicWriteFileSync(join(getSettingsDir(), "category_rules.json"), JSON.stringify(rules, null, 2));
 }
 
 export function applyCategoryRules(label: string, rules: CategoryRule[]): Category | null {
@@ -62,7 +63,7 @@ export function loadTreasuryAlert(): TreasuryAlert {
 
 export function saveTreasuryAlert(alert: TreasuryAlert): void {
   ensureDir();
-  writeFileSync(join(getSettingsDir(), "treasury_alert.json"), JSON.stringify(alert, null, 2), "utf-8");
+  atomicWriteFileSync(join(getSettingsDir(), "treasury_alert.json"), JSON.stringify(alert, null, 2));
 }
 
 // ── AI config ──────────────────────────────────────────────────
@@ -108,7 +109,7 @@ export function loadAiConfig(): AiConfig | null {
 
 export function saveAiConfig(config: AiConfig): void {
   ensureDir();
-  writeFileSync(join(getSettingsDir(), "ai_config.json"), JSON.stringify(config, null, 2), "utf-8");
+  atomicWriteFileSync(join(getSettingsDir(), "ai_config.json"), JSON.stringify(config, null, 2));
 }
 
 export { DEFAULT_MODELS };
@@ -132,7 +133,7 @@ export function loadBudgets(): CategoryBudget[] {
 
 export function saveBudgets(budgets: CategoryBudget[]): void {
   ensureDir();
-  writeFileSync(join(getSettingsDir(), "budgets.json"), JSON.stringify(budgets, null, 2), "utf-8");
+  atomicWriteFileSync(join(getSettingsDir(), "budgets.json"), JSON.stringify(budgets, null, 2));
 }
 
 // ── Profil entreprise ─────────────────────────────────────────────────────────
@@ -167,5 +168,5 @@ export function loadCompanyProfile(): CompanyProfile {
 
 export function saveCompanyProfile(profile: CompanyProfile): void {
   ensureDir();
-  writeFileSync(join(getSettingsDir(), "company_profile.json"), JSON.stringify(profile, null, 2), "utf-8");
+  atomicWriteFileSync(join(getSettingsDir(), "company_profile.json"), JSON.stringify(profile, null, 2));
 }

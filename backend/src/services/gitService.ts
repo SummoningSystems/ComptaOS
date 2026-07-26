@@ -2,8 +2,35 @@ import { execFile as _execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import fs from "fs/promises";
+import { atomicWriteFile } from "./atomicFile.js";
 
 const execFile = promisify(_execFile);
+
+export const WORKSPACE_GITIGNORE_ENTRIES = [
+  "attachments/",
+  "*.tmp",
+  ".DS_Store",
+  "auth.json",
+  ".jwt_secret",
+  ".banking_config.json",
+  "banking/",
+];
+
+export function mergeWorkspaceGitignore(existing: string): string {
+  const lines = existing.split(/\r?\n/).map((line) => line.trim());
+  const merged = [...lines.filter(Boolean)];
+  for (const entry of WORKSPACE_GITIGNORE_ENTRIES) {
+    if (!merged.includes(entry)) merged.push(entry);
+  }
+  return `${merged.join("\n")}\n`;
+}
+
+async function ensureWorkspaceGitignore(workspacePath: string): Promise<void> {
+  const ignorePath = path.join(workspacePath, ".gitignore");
+  const existing = await fs.readFile(ignorePath, "utf-8").catch(() => "");
+  const updated = mergeWorkspaceGitignore(existing);
+  if (updated !== existing) await atomicWriteFile(ignorePath, updated);
+}
 
 /** Lance une commande git dans un répertoire donné. */
 async function git(args: string[], cwd: string): Promise<string> {
@@ -26,14 +53,14 @@ export async function initRepo(workspacePath: string): Promise<void> {
     // Déjà initialisé — s'assurer que l'identité est configurée
     await git(["config", "user.email", "comptaos@localhost"], workspacePath).catch(() => {});
     await git(["config", "user.name", "ComptaOS"], workspacePath).catch(() => {});
+    await ensureWorkspaceGitignore(workspacePath);
   } catch {
     // Nouveau dépôt
     await git(["init"], workspacePath);
     await git(["config", "user.email", "comptaos@localhost"], workspacePath);
     await git(["config", "user.name", "ComptaOS"], workspacePath);
 
-    const gitignore = "attachments/\n*.tmp\n.DS_Store\n";
-    await fs.writeFile(path.join(workspacePath, ".gitignore"), gitignore, "utf-8");
+    await ensureWorkspaceGitignore(workspacePath);
 
     try {
       await git(["add", "-A"], workspacePath);

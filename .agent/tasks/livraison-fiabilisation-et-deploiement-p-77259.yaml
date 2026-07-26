@@ -1,0 +1,10 @@
+id: livraison-fiabilisation-et-deploiement-p-77259
+title: Livraison fiabilisation et deploiement production
+agent: Codex
+branch: master
+scope: revue commit push deploy smoke tests
+status: active
+started_at: 2026-07-26T14:47:39.6366254Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

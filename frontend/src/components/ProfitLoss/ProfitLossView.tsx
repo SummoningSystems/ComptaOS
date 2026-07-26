@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
-import { api } from "../../api/client";
+import { api, apiUrl } from "../../api/client";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => String(CURRENT_YEAR - i));
@@ -93,7 +93,7 @@ export function ProfitLossView() {
           {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <a
-          href={`/api/reports/pl-pdf?year=${year}`}
+          href={apiUrl(`/reports/pl-pdf?year=${year}`)}
           target="_blank"
           rel="noreferrer"
           className="text-xs text-vscode-muted hover:text-vscode-text border border-vscode-border rounded px-3 py-1.5 flex items-center gap-1"

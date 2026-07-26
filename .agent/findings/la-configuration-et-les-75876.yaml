@@ -1,0 +1,12 @@
+id: la-configuration-et-les-75876
+statement: La configuration et les connexions Powens sont validées, écrites atomiquement et forcées en permissions locales restrictives; les erreurs distantes ne renvoient pas leur corps.
+status: verified
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:24:36.1107242Z
+sources:
+    - path: backend/src/services/bankingService.ts
+      line_start: 89
+      line_end: 216
+      file_hash: e999b3e9ff8343ff
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

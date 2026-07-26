@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, develop]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build:
@@ -34,6 +34,12 @@ jobs:
 
       - name: Type check frontend
         run: npm run build --prefix frontend
+
+      - name: Test backend
+        run: npm test --prefix backend
+
+      - name: Test frontend
+        run: npm test --prefix frontend
 
   lint:
     name: Lint

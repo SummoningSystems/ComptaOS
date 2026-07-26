@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, mkdirSync, existsSync } from "fs";
 import { join, resolve } from "path";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 const ROOT = resolve(process.env.WORKSPACE_PATH ?? join(process.cwd(), "..", "workspace"));
 const COMPANIES_FILE = join(ROOT, "_companies.json");
@@ -31,7 +32,7 @@ export function loadCompanies(): Company[] {
 
 function saveCompanies(companies: Company[]): void {
   if (!existsSync(ROOT)) mkdirSync(ROOT, { recursive: true });
-  writeFileSync(COMPANIES_FILE, JSON.stringify(companies, null, 2), "utf-8");
+  atomicWriteFileSync(COMPANIES_FILE, JSON.stringify(companies, null, 2));
 }
 
 export function getActiveCompanyId(): string | null {
@@ -44,7 +45,7 @@ export function getActiveCompanyId(): string | null {
 }
 
 export function setActiveCompanyId(companyId: string): void {
-  writeFileSync(ACTIVE_FILE, JSON.stringify({ companyId }, null, 2), "utf-8");
+  atomicWriteFileSync(ACTIVE_FILE, JSON.stringify({ companyId }, null, 2));
   _activeCompanyPath = null; // invalider le cache
 }
 

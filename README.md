@@ -119,14 +119,19 @@ Copiez `backend/.env.example` vers `backend/.env` et remplissez :
 | `WORKSPACE_PATH` | `../workspace` | Chemin du workspace de données |
 | `PORT` | `3001` | Port du backend |
 | `LOCAL_API_KEY` | _(vide)_ | Clé API optionnelle pour sécuriser l'accès local |
+| `AUTH_ENABLED` | `false` | Active l'authentification JWT ; obligatoire sur une instance Internet |
+| `HTTPS_ONLY` | `false` | Ajoute l'attribut `Secure` au cookie JWT |
+| `JWT_SECRET` | _(généré localement)_ | Secret JWT persistant ; à fournir par l'environnement en production |
 | `ANTHROPIC_API_KEY` | _(vide)_ | Clé Anthropic pour l'IA copilote |
 | `MISTRAL_API_KEY` | _(vide)_ | Clé Mistral (alternative) |
 | `STRIPE_SECRET_KEY` | _(vide)_ | Clé secrète Stripe (Pro / Pro+) |
 | `STRIPE_WEBHOOK_SECRET` | _(vide)_ | Signing secret webhook Stripe |
 | `STRIPE_PRICE_PRO` | _(vide)_ | Price ID ou Product ID Stripe — plan Pro |
 | `STRIPE_PRICE_PROPLUS` | _(vide)_ | Price ID ou Product ID Stripe — plan Pro+ |
-| `GOCARDLESS_SECRET_ID` | _(vide)_ | ID GoCardless (connexion bancaire PSD2) |
-| `GOCARDLESS_SECRET_KEY` | _(vide)_ | Clé secrète GoCardless |
+| `POWENS_DOMAIN` | _(vide)_ | Domaine client Powens |
+| `POWENS_CLIENT_ID` | _(vide)_ | Identifiant client Powens |
+| `POWENS_CLIENT_SECRET` | _(vide)_ | Secret client Powens |
+| `POWENS_USER_TOKEN` | _(vide)_ | Jeton utilisateur Powens persistant optionnel |
 
 > Pour le mode développement, seul `WORKSPACE_PATH` est obligatoire. Les autres variables activent des fonctionnalités optionnelles.
 

@@ -15,6 +15,7 @@ import fs from "fs/promises";
 import path from "path";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { getCompaniesRoot } from "./companiesService.js";
+import { atomicWriteFile } from "./atomicFile.js";
 
 const POWENS_BASE = (domain: string) => `https://${domain}.biapi.pro/2.0`;
 
@@ -85,6 +86,31 @@ export interface BankAccount {
   importedCount?: number;
 }
 
+function isBankingConfig(value: unknown): value is BankingConfig {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Partial<BankingConfig>;
+  return (
+    typeof config.domain === "string" && /^[a-z0-9-]+$/i.test(config.domain) &&
+    typeof config.clientId === "string" && config.clientId.length > 0 &&
+    typeof config.clientSecret === "string" && config.clientSecret.length > 0 &&
+    (config.userToken === undefined || (typeof config.userToken === "string" && config.userToken.length > 0))
+  );
+}
+
+function isBankConnections(value: unknown): value is BankConnection[] {
+  return Array.isArray(value) && value.every((connection) => (
+    !!connection && typeof connection === "object" &&
+    typeof connection.connectionId === "number" && Number.isFinite(connection.connectionId) &&
+    typeof connection.connectorName === "string" &&
+    typeof connection.createdAt === "string" &&
+    typeof connection.status === "string" &&
+    Array.isArray(connection.accounts) && connection.accounts.every((account: unknown) => (
+      !!account && typeof account === "object" &&
+      typeof (account as BankAccount).id === "number" && Number.isFinite((account as BankAccount).id)
+    ))
+  ));
+}
+
 // ── Stockage local ────────────────────────────────────────────────────────────
 
 function bankingDir(): string {
@@ -99,10 +125,6 @@ function connectionsFile(): string {
   return path.join(bankingDir(), "connections.json");
 }
 
-async function ensureBankingDir(): Promise<void> {
-  await fs.mkdir(bankingDir(), { recursive: true });
-}
-
 export async function getConfig(): Promise<BankingConfig | null> {
   // Priorité 1 : variables d'environnement (mode hébergé)
   const envDomain = process.env.POWENS_DOMAIN?.trim();
@@ -110,15 +132,53 @@ export async function getConfig(): Promise<BankingConfig | null> {
   const envClientSecret = process.env.POWENS_CLIENT_SECRET?.trim();
   const envUserToken = process.env.POWENS_USER_TOKEN?.trim();
   if (envDomain && envClientId && envClientSecret) {
-    return { domain: envDomain, clientId: envClientId, clientSecret: envClientSecret, userToken: envUserToken };
+    const config = { domain: envDomain, clientId: envClientId, clientSecret: envClientSecret, userToken: envUserToken };
+    validateBankingConfig(config);
+    return config;
   }
   // Priorité 2 : fichier local (mode auto-hébergé)
   try {
     const raw = await fs.readFile(configFile(), "utf-8");
-    return JSON.parse(raw) as BankingConfig;
-  } catch {
-    return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isBankingConfig(parsed)) throw new Error("structure invalide");
+    await fs.chmod(configFile(), 0o600).catch(() => undefined);
+    return parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Configuration bancaire locale invalide (${reason}).`);
   }
+}
+
+export function validateBankingConfig(config: BankingConfig): void {
+  if (!isBankingConfig(config)) {
+    throw new Error("Configuration bancaire invalide.");
+  }
+}
+
+export function validateBankConnections(connections: BankConnection[]): void {
+  if (!isBankConnections(connections)) {
+    throw new Error("Connexions bancaires invalides.");
+  }
+}
+
+export async function getConnections(): Promise<BankConnection[]> {
+  try {
+    const raw = await fs.readFile(connectionsFile(), "utf-8");
+    const parsed: unknown = JSON.parse(raw);
+    if (!isBankConnections(parsed)) throw new Error("structure invalide");
+    await fs.chmod(connectionsFile(), 0o600).catch(() => undefined);
+    return parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Connexions bancaires locales invalides (${reason}).`);
+  }
+}
+
+export async function saveConnections(connections: BankConnection[]): Promise<void> {
+  validateBankConnections(connections);
+  await atomicWriteFile(connectionsFile(), JSON.stringify(connections, null, 2));
 }
 
 export function isConfiguredViaEnv(): boolean {
@@ -130,22 +190,8 @@ export function isConfiguredViaEnv(): boolean {
 }
 
 export async function saveConfig(config: BankingConfig): Promise<void> {
-  await fs.mkdir(path.dirname(configFile()), { recursive: true });
-  await fs.writeFile(configFile(), JSON.stringify(config, null, 2));
-}
-
-export async function getConnections(): Promise<BankConnection[]> {
-  try {
-    const raw = await fs.readFile(connectionsFile(), "utf-8");
-    return JSON.parse(raw) as BankConnection[];
-  } catch {
-    return [];
-  }
-}
-
-async function saveConnections(connections: BankConnection[]): Promise<void> {
-  await ensureBankingDir();
-  await fs.writeFile(connectionsFile(), JSON.stringify(connections, null, 2));
+  validateBankingConfig(config);
+  await atomicWriteFile(configFile(), JSON.stringify(config, null, 2));
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -165,8 +211,7 @@ async function powensFetch<T>(
     },
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Powens ${res.status}: ${err}`);
+    throw new Error(`Powens ${res.status}: requête refusée`);
   }
   return res.json() as Promise<T>;
 }
@@ -181,8 +226,7 @@ async function initUser(config: BankingConfig): Promise<string> {
     body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret }),
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Powens auth/init échoué: ${err}`);
+    throw new Error(`Powens auth/init échoué (${res.status})`);
   }
   const data = await res.json() as { auth_token: string };
   return data.auth_token;
@@ -330,7 +374,7 @@ export async function syncAccountTransactions(
     };
 
     const filename = `${transaction.date}_${id}.yaml`;
-    await fs.writeFile(path.join(txnDir, filename), yaml.stringify(transaction));
+    await atomicWriteFile(path.join(txnDir, filename), yaml.stringify(transaction));
     imported++;
   }
 

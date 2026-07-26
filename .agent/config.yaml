@@ -1,0 +1,22 @@
+version: 1
+project:
+    name: compta_code
+index:
+    max_file_size_kb: 1024
+    respect_gitignore: true
+    excluded_paths:
+        - build/
+        - dist/
+        - node_modules/
+        - vendor/
+        - .git/
+        - .ctx/
+languages:
+    enabled:
+        - typescript
+context:
+    default_max_tokens: 2000
+    characters_per_token: 4
+sharing:
+    agent_directory: .agent
+    local_database: .ctx/context.db

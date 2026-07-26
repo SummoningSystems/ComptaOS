@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "../../api/client";
 
 interface ReconcileTransaction {
   id: string;
@@ -32,8 +32,8 @@ export function ReconcileView() {
     setLoading(true);
     setSelected(new Set());
     try {
-      const { data } = await axios.get<{ transactions: ReconcileTransaction[]; reconciled: number; total: number; pending: number }>(
-        `/api/reconcile?month=${month}`
+      const { data } = await api.get<{ transactions: ReconcileTransaction[]; reconciled: number; total: number; pending: number }>(
+        `/reconcile?month=${month}`
       );
       setTransactions(Array.isArray(data?.transactions) ? data.transactions : []);
     } catch {
@@ -48,7 +48,7 @@ export function ReconcileView() {
   async function toggleOne(id: string, value: boolean) {
     setSaving(true);
     try {
-      await axios.patch(`/api/reconcile/${id}`, { reconciled: value });
+      await api.patch(`/reconcile/${id}`, { reconciled: value });
       setTransactions((list) => list.map((t) => (t.id === id ? { ...t, reconciled: value } : t)));
     } finally {
       setSaving(false);
@@ -59,7 +59,7 @@ export function ReconcileView() {
     if (selected.size === 0) return;
     setSaving(true);
     try {
-      await axios.post("/api/reconcile/bulk", { ids: [...selected], reconciled: value });
+      await api.post("/reconcile/bulk", { ids: [...selected], reconciled: value });
       const ids = selected;
       setTransactions((list) => list.map((t) => (ids.has(t.id) ? { ...t, reconciled: value } : t)));
       setSelected(new Set());

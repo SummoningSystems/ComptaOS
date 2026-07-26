@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { getActiveCompanyPath } from "./companiesService.js";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 function getManualFile(): string {
   return join(getActiveCompanyPath(), "settings", "manual_recurring.json");
@@ -28,7 +29,5 @@ export function loadManualRecurring(): ManualRecurring[] {
 
 export function saveManualRecurring(entries: ManualRecurring[]): void {
   const file = getManualFile();
-  const dir = join(getActiveCompanyPath(), "settings");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(file, JSON.stringify(entries, null, 2), "utf-8");
+  atomicWriteFileSync(file, JSON.stringify(entries, null, 2));
 }

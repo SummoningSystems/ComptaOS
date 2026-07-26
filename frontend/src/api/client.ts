@@ -17,7 +17,18 @@ import {
 } from "../types";
 
 // En production (base path configuré dans vite.config.ts), l'API est sous BASE_URL/api
-export const api = axios.create({ baseURL: `${import.meta.env.BASE_URL}api` });
+export function buildApiUrl(basePath: string, path = ""): string {
+  const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  const normalizedPath = path.replace(/^\/+/, "");
+  return `${normalizedBase}api${normalizedPath ? `/${normalizedPath}` : ""}`;
+}
+
+export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
+
+/** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
+export function apiUrl(path: string): string {
+  return buildApiUrl(import.meta.env.BASE_URL, path);
+}
 
 // Injecte automatiquement X-API-Key si configurée (stockée dans localStorage)
 const _apiKey = localStorage.getItem("comptaos_api_key");
@@ -107,7 +118,7 @@ export async function uploadAttachment(
 ): Promise<{ filename: string; transaction: Transaction }> {
   const form = new FormData();
   form.append("file", file);
-  const { data } = await axios.post(`/api/attachments/upload/${txnId}`, form, {
+  const { data } = await api.post(`/attachments/upload/${txnId}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;
@@ -121,7 +132,7 @@ export async function deleteAttachment(txnId: string, filename: string): Promise
 }
 
 export function attachmentUrl(filename: string): string {
-  return `/api/attachments/file/${encodeURIComponent(filename)}`;
+  return apiUrl(`/attachments/file/${encodeURIComponent(filename)}`);
 }
 
 // ── Import CSV ────────────────────────────────────────────────────────────────

@@ -248,6 +248,7 @@ export function InvoicesView() {
                 <label className="text-xs text-vscode-muted block mb-1">Client</label>
                 <input
                   type="text"
+                  aria-label="Client"
                   value={form.client}
                   onChange={(e) => setForm((f) => ({ ...f, client: e.target.value }))}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
@@ -275,6 +276,7 @@ export function InvoicesView() {
                 <label className="text-xs text-vscode-muted block mb-1">Description</label>
                 <input
                   type="text"
+                  aria-label="Description"
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
@@ -284,6 +286,7 @@ export function InvoicesView() {
                 <label className="text-xs text-vscode-muted block mb-1">Montant HT (€)</label>
                 <input
                   type="number"
+                  aria-label="Montant HT"
                   min={0}
                   step={0.01}
                   value={form.amount_ht}

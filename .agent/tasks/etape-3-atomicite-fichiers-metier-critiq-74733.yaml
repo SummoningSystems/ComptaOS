@@ -1,0 +1,12 @@
+id: etape-3-atomicite-fichiers-metier-critiq-74733
+title: Etape 3 atomicite fichiers metier critiques
+agent: Codex
+branch: master
+scope: companies invoices quotes settings recurring
+status: finished
+started_at: 2026-07-26T14:05:33.6321186Z
+finished_at: 2026-07-26T14:07:48.7895399Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+final_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

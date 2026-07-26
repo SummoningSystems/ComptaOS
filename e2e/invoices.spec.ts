@@ -4,8 +4,8 @@ test.describe("Module Factures", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
     // Attendre que l'app soit chargée (dashboard ou sidebar visible)
-    await page.waitForSelector("text=Factures", { timeout: 15_000 });
-    await page.getByText("Factures").first().click();
+    await page.getByTitle("Documents").click();
+    await page.getByRole("button", { name: /Factures$/i }).click();
   });
 
   test("affiche la liste des factures", async ({ page }) => {

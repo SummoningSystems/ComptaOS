@@ -1,0 +1,12 @@
+id: etape-1-fiabilisation-ci-et-chemins-api-72590
+title: Etape 1 fiabilisation CI et chemins API
+agent: Codex
+branch: master
+scope: .github et frontend/src/api
+status: finished
+started_at: 2026-07-26T13:29:50.2090456Z
+finished_at: 2026-07-26T13:35:03.8508537Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+final_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

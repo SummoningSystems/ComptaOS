@@ -1,0 +1,12 @@
+id: initialisation-r-elle-de-la-m-moire-proj-72172
+title: Initialisation réelle de la mémoire projet CTX
+agent: Codex
+branch: master
+scope: .agent et architecture du dépôt
+status: finished
+started_at: 2026-07-26T13:22:52.826005Z
+finished_at: 2026-07-26T13:26:14.582055Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+final_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

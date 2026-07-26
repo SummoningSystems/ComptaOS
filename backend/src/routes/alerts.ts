@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { loadAllTransactions } from "../services/transactionService.js";
+import { getTransactionLoadIssues, loadAllTransactions } from "../services/transactionService.js";
 import { loadBudgets } from "../services/settingsService.js";
 
 export interface SystemAlert {
@@ -15,10 +15,21 @@ export async function alertsRoutes(app: FastifyInstance) {
   app.get("/", async (_req, reply) => {
     const alerts: SystemAlert[] = [];
     const transactions = await loadAllTransactions();
+    const loadIssues = getTransactionLoadIssues();
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     const validTxns = transactions.filter((t) => t.status !== "rejected");
+
+    if (loadIssues.length > 0) {
+      alerts.push({
+        id: "transaction_files_invalid",
+        level: "error",
+        category: "Intégrité des données",
+        message: `${loadIssues.length} fichier${loadIssues.length > 1 ? "s" : ""} de transaction illisible${loadIssues.length > 1 ? "s" : ""}. Consultez les logs avant de poursuivre.`,
+        count: loadIssues.length,
+      });
+    }
 
     // 1. Transactions non justifiées
     const unjustified = validTxns.filter((t) => t.justified === false);

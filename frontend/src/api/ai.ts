@@ -1,7 +1,5 @@
-import axios from "axios";
 import { ChatMessage } from "../types";
-
-const api = axios.create({ baseURL: "/api" });
+import { api } from "./client";
 
 export async function aiCategorize(
   label: string,

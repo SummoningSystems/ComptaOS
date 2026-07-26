@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "../../api/client";
 
 interface SystemAlert {
   id: string;
@@ -32,7 +32,7 @@ export function AlertsView() {
   async function load() {
     setLoading(true);
     try {
-      const { data } = await axios.get<{ alerts: SystemAlert[]; count: number }>("/api/alerts");
+      const { data } = await api.get<{ alerts: SystemAlert[]; count: number }>("/alerts");
       setAlerts(Array.isArray(data?.alerts) ? data.alerts : []);
     } catch {
       setAlerts([]);

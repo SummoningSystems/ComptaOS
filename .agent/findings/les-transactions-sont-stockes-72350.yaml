@@ -1,0 +1,12 @@
+id: les-transactions-sont-stockes-72350
+statement: Les transactions sont stockées individuellement en YAML sous le dossier transactions de l entreprise active.
+status: deprecated
+confidence: high
+agent: Codex
+created_at: 2026-07-26T13:25:50.5602003Z
+sources:
+    - path: backend/src/services/transactionService.ts
+      line_start: 119
+      line_end: 131
+      file_hash: 40871d29ae87909d
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

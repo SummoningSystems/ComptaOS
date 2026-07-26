@@ -1,0 +1,12 @@
+id: diagnostic-connexion-production-401-75958
+title: Diagnostic connexion production 401
+agent: Codex
+branch: master
+scope: auth production read-only
+status: finished
+started_at: 2026-07-26T14:25:58.730715Z
+finished_at: 2026-07-26T14:28:22.9189603Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+final_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

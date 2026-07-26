@@ -1,0 +1,12 @@
+id: reset-authentification-production-76510
+title: Reset authentification production
+agent: Codex
+branch: master
+scope: operation serveur auth uniquement
+status: finished
+started_at: 2026-07-26T14:35:10.1468102Z
+finished_at: 2026-07-26T14:36:46.9680002Z
+base_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+final_commit: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec
+tests:
+    result: not_run

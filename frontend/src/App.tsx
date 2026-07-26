@@ -1,5 +1,5 @@
 import { useEffect, useState, Component, type ReactNode } from "react";
-import { api } from "./api/client";
+import { api, fetchCompanies } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
 import { TabBar } from "./components/Layout/TabBar";
 import { StatusBar } from "./components/Layout/StatusBar";
@@ -171,9 +171,12 @@ export default function App() {
       .then(({ data }) => setPendingCount(data.filter((t) => t.status === "pending").length))
       .catch(() => {});
     // Ouvrir automatiquement le wizard si aucune entreprise (non annulable)
-    import("./api/client").then(({ fetchCompanies }) =>
-      fetchCompanies().then((list) => { if (list.length === 0) { setWizardCanCancel(false); setShowCompanyWizard(true); } })
-    );
+    fetchCompanies().then((list) => {
+      if (list.length === 0) {
+        setWizardCanCancel(false);
+        setShowCompanyWizard(true);
+      }
+    });
   }, [authState]);
 
   // Raccourci Ctrl+K / Cmd+K → ouvre la recherche globale

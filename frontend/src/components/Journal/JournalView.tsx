@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { api } from "../../api/client";
 
 interface JournalEntry {
   date: string;
@@ -42,7 +42,7 @@ export function JournalView() {
     try {
       const params = new URLSearchParams({ year });
       if (month) params.set("month", month.padStart(2, "0"));
-      const { data: d } = await axios.get<JournalData>(`/api/journal?${params}`);
+      const { data: d } = await api.get<JournalData>(`/journal?${params}`);
       setData(d && Array.isArray(d.entries) ? d : { entries: [], totalDebit: 0, totalCredit: 0, years: [year] });
     } catch {
       setData({ entries: [], totalDebit: 0, totalCredit: 0, years: [year] });

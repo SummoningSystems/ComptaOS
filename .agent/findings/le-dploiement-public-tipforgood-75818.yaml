@@ -1,0 +1,12 @@
+id: le-dploiement-public-tipforgood-75818
+statement: Le déploiement public TipForGood répond correctement avec auth active, mais utilise Node 18 au lieu de Node 20 et ne fournit pas encore les en-têtes HTTP de sécurité recommandés.
+status: deprecated
+confidence: high
+agent: Codex
+created_at: 2026-07-26T14:23:38.1216931Z
+sources:
+    - path: DEPLOYMENT_AUDIT.md
+      line_start: 1
+      line_end: 45
+      file_hash: 715513e794a2f0db
+      commit_hash: ac0ee8b83df3aeed0512ea58875d85bf5dceeeec

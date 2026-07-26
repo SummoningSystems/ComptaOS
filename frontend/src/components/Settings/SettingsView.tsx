@@ -165,6 +165,7 @@ export function SettingsView() {
               <label className="text-xs text-vscode-muted">{label}</label>
               <input
                 type="text"
+                aria-label={key === "name" ? "Nom de l'entreprise" : label}
                 value={(profile[key] as string) ?? ""}
                 onChange={profileField(key)}
                 placeholder={placeholder}

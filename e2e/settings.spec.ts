@@ -3,8 +3,8 @@ import { test, expect } from "@playwright/test";
 test.describe("Paramètres — profil entreprise", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
-    await page.waitForSelector("text=Paramètres", { timeout: 15_000 });
-    await page.getByText("Paramètres").first().click();
+    await page.getByTitle("Outils").click();
+    await page.getByRole("button", { name: /Param/i }).click();
   });
 
   test("affiche le formulaire de profil entreprise", async ({ page }) => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { api } from "../../api/client";
 
 interface Plan {
   id: string;
@@ -65,10 +66,10 @@ export function PricingView() {
 
   useEffect(() => {
     Promise.all([
-      axios.get<Plan[]>("/api/license/plans"),
-      axios.get<License>("/api/license"),
-      axios.get<{ count: number }>("/api/waitlist/count"),
-      axios.get<{ configured: boolean }>("/api/stripe/status").catch(() => ({ data: { configured: false } })),
+      api.get<Plan[]>("/license/plans"),
+      api.get<License>("/license"),
+      api.get<{ count: number }>("/waitlist/count"),
+      api.get<{ configured: boolean }>("/stripe/status").catch(() => ({ data: { configured: false } })),
     ]).then(([p, l, w, s]) => {
       setPlans(p.data);
       setLicense(l.data);
@@ -82,15 +83,15 @@ export function PricingView() {
     if (sessionId) {
       window.history.replaceState({}, "", window.location.pathname);
       setVerifying(true);
-      axios.get<{ paid: boolean; plan?: string; license?: { key: string; email: string } }>(
-        `/api/stripe/verify?session_id=${sessionId}`
+      api.get<{ paid: boolean; plan?: string; license?: { key: string; email: string } }>(
+        `/stripe/verify?session_id=${sessionId}`
       ).then(({ data }) => {
         if (data.paid && data.license) {
           setVerifyMsg({
             ok: true,
             text: `✅ Paiement confirmé ! Votre licence ${data.plan === "pro_plus" ? "Pro+" : "Pro"} a été activée automatiquement.`,
           });
-          return axios.get<License>("/api/license").then(({ data: lic }) => setLicense(lic));
+          return api.get<License>("/license").then(({ data: lic }) => setLicense(lic));
         }
       }).catch(() => {
         setVerifyMsg({ ok: false, text: "Impossible de vérifier le paiement. Utilisez votre clé reçue par email." });
@@ -101,7 +102,7 @@ export function PricingView() {
   async function handleCheckout(plan: "pro" | "pro_plus") {
     setCheckoutLoading(plan);
     try {
-      const { data } = await axios.post<{ url: string }>("/api/stripe/checkout", {
+      const { data } = await api.post<{ url: string }>("/stripe/checkout", {
         plan,
         email: checkoutEmail || undefined,
         successUrl: window.location.href,
@@ -109,7 +110,7 @@ export function PricingView() {
       });
       window.location.href = data.url;
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.error : "Erreur Stripe";
+      const msg = isAxiosError<{ error?: string }>(err) ? err.response?.data?.error : "Erreur Stripe";
       setActivateMsg({ ok: false, text: msg ?? "Erreur" });
       setCheckoutLoading(null);
     }
@@ -120,7 +121,7 @@ export function PricingView() {
     setActivating(true);
     setActivateMsg(null);
     try {
-      const { data } = await axios.post<License>("/api/license/activate", {
+      const { data } = await api.post<License>("/license/activate", {
         key: activateKey,
         email: activateEmail,
       });
@@ -129,7 +130,7 @@ export function PricingView() {
       setActivateKey("");
       setActivateEmail("");
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.error : "Erreur inconnue";
+      const msg = isAxiosError<{ error?: string }>(err) ? err.response?.data?.error : "Erreur inconnue";
       setActivateMsg({ ok: false, text: msg ?? "Erreur inconnue" });
     } finally {
       setActivating(false);
@@ -138,8 +139,8 @@ export function PricingView() {
 
   async function handleDeactivate() {
     if (!confirm("Désactiver la licence ? Vous reviendrez au plan Gratuit.")) return;
-    await axios.post("/api/license/deactivate");
-    const { data } = await axios.get<License>("/api/license");
+    await api.post("/license/deactivate");
+    const { data } = await api.get<License>("/license");
     setLicense(data);
   }
 
@@ -148,7 +149,7 @@ export function PricingView() {
     setWaitLoading(true);
     setWaitMsg(null);
     try {
-      const { data } = await axios.post<{ ok: boolean; message: string }>("/api/waitlist", {
+      const { data } = await api.post<{ ok: boolean; message: string }>("/waitlist", {
         email: waitEmail,
         plan: waitPlan,
         source: "pricing_view",
@@ -157,7 +158,7 @@ export function PricingView() {
       setWaitEmail("");
       setWaitCount((c) => (c !== null ? c + 1 : 1));
     } catch (err: unknown) {
-      const msg = axios.isAxiosError(err) ? err.response?.data?.error : "Erreur";
+      const msg = isAxiosError<{ error?: string }>(err) ? err.response?.data?.error : "Erreur";
       setWaitMsg({ ok: false, text: msg ?? "Erreur" });
     } finally {
       setWaitLoading(false);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "../../api/client";
 
 interface TransactionTemplate {
   id: string;
@@ -40,7 +40,7 @@ export function TemplatesView() {
   async function load() {
     setLoading(true);
     try {
-      const { data } = await axios.get<TransactionTemplate[]>("/api/templates");
+      const { data } = await api.get<TransactionTemplate[]>("/templates");
       setTemplates(Array.isArray(data) ? data : []);
     } catch {
       setTemplates([]);
@@ -56,7 +56,7 @@ export function TemplatesView() {
     setSaving(true);
     setError(null);
     try {
-      await axios.post("/api/templates", form);
+      await api.post("/templates", form);
       setForm(EMPTY);
       setShowForm(false);
       await load();
@@ -70,7 +70,7 @@ export function TemplatesView() {
   async function handleDelete(id: string) {
     setDeleting(id);
     try {
-      await axios.delete(`/api/templates/${id}`);
+      await api.delete(`/templates/${id}`);
       setTemplates((t) => t.filter((x) => x.id !== id));
     } finally {
       setDeleting(null);

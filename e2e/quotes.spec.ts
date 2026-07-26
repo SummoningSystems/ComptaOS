@@ -3,8 +3,8 @@ import { test, expect } from "@playwright/test";
 test.describe("Module Devis", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
-    await page.waitForSelector("text=Devis", { timeout: 15_000 });
-    await page.getByText("Devis").first().click();
+    await page.getByTitle("Documents").click();
+    await page.getByRole("button", { name: /Devis$/i }).click();
   });
 
   test("affiche la vue des devis", async ({ page }) => {

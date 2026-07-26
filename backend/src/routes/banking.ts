@@ -118,6 +118,7 @@ export async function bankingRoutes(app: FastifyInstance) {
     const fsMod = await import("fs/promises");
     const pathMod = await import("path");
     const { getWorkspaceRoot } = await import("../services/fileSystem.js");
+    const { atomicWriteFile } = await import("../services/atomicFile.js");
 
     const transactions = await loadAllTransactions();
 
@@ -140,7 +141,7 @@ export async function bankingRoutes(app: FastifyInstance) {
       const file = files.find((f) => f.includes(txn.id) && f.endsWith(".yaml"));
       if (!file) continue;
       const filePath = pathMod.default.join(txnDir, file);
-      await fsMod.default.writeFile(filePath, yaml.stringify({ ...txn, status: "rejected" }), "utf-8");
+      await atomicWriteFile(filePath, yaml.stringify({ ...txn, status: "rejected" }));
       rejected++;
     }
 

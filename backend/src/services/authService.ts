@@ -1,8 +1,9 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { chmodSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getCompaniesRoot } from "./companiesService.js";
+import { atomicWriteFileSync } from "./atomicFile.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,37 @@ interface AuthStore {
   invitations: Invitation[];
 }
 
+const USER_ROLES = new Set<UserRole>(["owner", "admin", "member", "readonly"]);
+const INVITATION_ROLES = new Set<string>(["admin", "member", "readonly"]);
+
+function isAuthStore(value: unknown): value is AuthStore {
+  if (!value || typeof value !== "object") return false;
+  const store = value as Partial<AuthStore>;
+  if (!Array.isArray(store.users) || !Array.isArray(store.invitations)) return false;
+
+  const usersValid = store.users.every((user) => (
+    !!user && typeof user === "object" &&
+    typeof user.id === "string" && user.id.length > 0 &&
+    typeof user.username === "string" && user.username.length > 0 &&
+    typeof user.displayName === "string" &&
+    typeof user.passwordHash === "string" && user.passwordHash.length > 0 &&
+    USER_ROLES.has(user.role) &&
+    typeof user.createdAt === "string" &&
+    typeof user.active === "boolean"
+  ));
+
+  const invitationsValid = store.invitations.every((invitation) => (
+    !!invitation && typeof invitation === "object" &&
+    typeof invitation.token === "string" && invitation.token.length > 0 &&
+    INVITATION_ROLES.has(invitation.role) &&
+    typeof invitation.createdBy === "string" &&
+    typeof invitation.createdAt === "string" &&
+    typeof invitation.expiresAt === "string"
+  ));
+
+  return usersValid && invitationsValid;
+}
+
 // ── Chemins ───────────────────────────────────────────────────────────────────
 
 function getAuthFilePath(): string {
@@ -57,14 +89,18 @@ function loadStore(): AuthStore {
   const p = getAuthFilePath();
   if (!existsSync(p)) return { users: [], invitations: [] };
   try {
-    return JSON.parse(readFileSync(p, "utf-8")) as AuthStore;
-  } catch {
-    return { users: [], invitations: [] };
+    const parsed: unknown = JSON.parse(readFileSync(p, "utf-8"));
+    if (!isAuthStore(parsed)) throw new Error("structure invalide");
+    try { chmodSync(p, 0o600); } catch { /* non supporté sur certains systèmes */ }
+    return parsed;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Stockage d'authentification invalide (${reason}).`);
   }
 }
 
 function saveStore(store: AuthStore): void {
-  writeFileSync(getAuthFilePath(), JSON.stringify(store, null, 2), "utf-8");
+  atomicWriteFileSync(getAuthFilePath(), JSON.stringify(store, null, 2));
 }
 
 function strip(user: AuthUser): PublicUser {
@@ -79,9 +115,14 @@ function strip(user: AuthUser): PublicUser {
 export function getJwtSecret(): string {
   if (process.env.JWT_SECRET?.trim()) return process.env.JWT_SECRET.trim();
   const secretFile = getJwtSecretFilePath();
-  if (existsSync(secretFile)) return readFileSync(secretFile, "utf-8").trim();
+  if (existsSync(secretFile)) {
+    const existing = readFileSync(secretFile, "utf-8").trim();
+    if (existing.length < 32) throw new Error("Secret JWT local invalide ou tronqué.");
+    try { chmodSync(secretFile, 0o600); } catch { /* non supporté sur certains systèmes */ }
+    return existing;
+  }
   const secret = crypto.randomBytes(64).toString("hex");
-  writeFileSync(secretFile, secret, "utf-8");
+  atomicWriteFileSync(secretFile, secret);
   console.log("[auth] Nouveau secret JWT généré automatiquement.");
   return secret;
 }
