@@ -17,7 +17,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "concurrently": "^8.2.2",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
