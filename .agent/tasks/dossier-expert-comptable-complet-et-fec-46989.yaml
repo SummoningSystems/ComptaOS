@@ -3,15 +3,10 @@ title: Dossier expert comptable complet et FEC conforme
 agent: Codex
 branch: master
 scope: backend/src/services/accountingExportService.ts backend/src/routes/accounting.ts frontend/src/components/Export package.json
-status: active
+status: finished
 started_at: 2026-08-04T12:36:29.2318337Z
+finished_at: 2026-08-04T12:49:31.093579Z
 base_commit: c481b093cb8351dc256e815fb67dcb7da08ae688
+final_commit: 49f3981cc3a9aff91ec668865fdba8358cfbc96a
 tests:
     result: passed
-    commands:
-        - npm.cmd run build
-        - npm.cmd test --prefix backend
-        - npm.cmd test --prefix frontend
-        - npm.cmd audit --prefix backend --audit-level=low
-        - smoke API preview FEC ZIP
-    summary: build complet, 61 tests backend, 22 tests frontend, audit zero vulnerabilite, FEC et ZIP generes
