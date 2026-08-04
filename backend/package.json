@@ -30,7 +30,7 @@
     "openai": "^6.38.0",
     "papaparse": "^5.4.1",
     "pdf-lib": "^1.17.1",
-    "stripe": "^22.1.1",
+    "stripe": "^22.4.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "^2.4.5"
   },
