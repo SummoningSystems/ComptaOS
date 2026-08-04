@@ -1,0 +1,10 @@
+id: correction-resolution-fichiers-transacti-39633
+title: Correction resolution fichiers transactions PSD2
+agent: Codex
+branch: master
+scope: backend/src/services/transactionService.ts backend/src/__tests__/transactionService.test.ts
+status: active
+started_at: 2026-08-04T10:33:53.4251184Z
+base_commit: 17848eceb12b331d73a5e9bca5d021995393435e
+tests:
+    result: not_run

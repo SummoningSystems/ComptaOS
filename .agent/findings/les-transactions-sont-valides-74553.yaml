@@ -6,6 +6,6 @@ agent: Codex
 created_at: 2026-07-26T14:02:33.9481473Z
 sources:
     - path: backend/src/services/transactionService.ts
-      line_start: 156
-      line_end: 208
-      file_hash: 31cff62c51c31237
+      line_start: 160
+      line_end: 233
+      file_hash: 2112ed17cbb5be62

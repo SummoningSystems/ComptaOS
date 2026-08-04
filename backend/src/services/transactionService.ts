@@ -3,7 +3,7 @@ import fsSync from "fs";
 import path from "path";
 import yaml from "yaml";
 import { Transaction } from "../types/index.js";
-import { getWorkspaceRoot, resolveSafe } from "./fileSystem.js";
+import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 
 const TXN_DIR = "transactions";
@@ -16,6 +16,7 @@ function txnDir(): string {
 // ── Cache mémoire ─────────────────────────────────────────────────────────────
 let _cache: Transaction[] | null = null;
 let _watcher: fsSync.FSWatcher | null = null;
+let _fileByTransactionId = new Map<string, string>();
 
 export interface TransactionLoadIssue {
   file: string;
@@ -28,7 +29,10 @@ export function getTransactionLoadIssues(): TransactionLoadIssue[] {
   return _loadIssues.map((issue) => ({ ...issue }));
 }
 
-function invalidateCache() { _cache = null; }
+function invalidateCache() {
+  _cache = null;
+  _fileByTransactionId = new Map<string, string>();
+}
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -169,6 +173,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
         throw new Error("structure de transaction invalide");
       }
       transactions.push(normalizeTransaction(parsed));
+      _fileByTransactionId.set(parsed.id, path.join(dir, file));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       issues.push({ file, message });
@@ -197,10 +202,26 @@ export async function saveTransactions(txns: Transaction[]): Promise<void> {
   // invalidateCache() déjà appelé dans saveTransaction
 }
 
+async function findTransactionFile(id: string): Promise<string> {
+  if (!id || !/^[A-Za-z0-9._-]+$/.test(id)) {
+    throw new Error("Identifiant de transaction invalide");
+  }
+
+  const knownPath = _fileByTransactionId.get(id);
+  if (knownPath) return knownPath;
+
+  await loadAllTransactions();
+  const indexedPath = _fileByTransactionId.get(id);
+  if (indexedPath) return indexedPath;
+
+  const error = new Error(`Transaction introuvable: ${id}`) as NodeJS.ErrnoException;
+  error.code = "ENOENT";
+  throw error;
+}
+
 /** Met à jour une transaction existante. */
 export async function updateTransaction(id: string, patch: Partial<Transaction>): Promise<Transaction> {
-  const dir = txnDir();
-  const filePath = path.join(dir, `${id}.yaml`);
+  const filePath = await findTransactionFile(id);
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
   const updated = normalizeTransaction({ ...txn, ...patch });
@@ -211,7 +232,7 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
 
 /** Supprime une transaction. */
 export async function deleteTransaction(id: string): Promise<void> {
-  const filePath = resolveSafe(`${TXN_DIR}/${id}.yaml`);
+  const filePath = await findTransactionFile(id);
   await fs.unlink(filePath);
   invalidateCache();
 }

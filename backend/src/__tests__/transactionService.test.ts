@@ -96,6 +96,28 @@ describe("transactionService persistence", () => {
     ])).toContain("total TTC");
   });
 
+  it("met a jour une transaction PSD2 dont le nom de fichier contient la date", async () => {
+    const directory = path.join(workspace.root, "transactions");
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(
+      path.join(directory, "2026-08-03_bank_powens_61.yaml"),
+      yaml.stringify(transaction({ id: "bank_powens_61", label: "Repas PSD2", amount_ttc: -26.8, amount_ht: -26.8, vat: 0, vat_rate: 0 })),
+      "utf-8",
+    );
+
+    const updated = await updateTransaction("bank_powens_61", {
+      vat_splits: [
+        { rate: 10, amount_ttc: -17.8 },
+        { rate: 20, amount_ttc: -9 },
+      ],
+    });
+
+    expect(updated.vat).toBe(-3.12);
+    const stored = yaml.parse(await fs.readFile(path.join(directory, "2026-08-03_bank_powens_61.yaml"), "utf-8"));
+    expect(stored.vat_splits).toHaveLength(2);
+    await expect(fs.access(path.join(directory, "bank_powens_61.yaml"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("signale un fichier YAML invalide tout en chargeant les transactions valides", async () => {
     await saveTransaction(transaction());
     const directory = path.join(workspace.root, "transactions");
