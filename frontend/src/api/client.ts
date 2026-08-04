@@ -26,6 +26,13 @@ export function buildApiUrl(basePath: string, path = ""): string {
 
 export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
 
+export interface ReceiptOcrProposal {
+  supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountTtc: number;
+  category: Transaction["category"]; vatSplits: Array<{ rate: number; amountTtc: number }>;
+  confidence: "high" | "medium" | "low";
+}
+export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; message?: string }
+
 /** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
 export function apiUrl(path: string): string {
   return buildApiUrl(import.meta.env.BASE_URL, path);
@@ -116,7 +123,7 @@ export async function createTransaction(txn: Omit<Transaction, "id">): Promise<T
 export async function uploadAttachment(
   txnId: string,
   file: File
-): Promise<{ filename: string; transaction: Transaction; compression: CompressionResult }> {
+): Promise<{ filename: string; transaction: Transaction; compression: CompressionResult; ocr: AttachmentOcrResult }> {
   let compression: CompressionResult;
   try {
     compression = await compressAttachment(file);

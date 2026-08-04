@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit } from "../../types";
-import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories } from "../../api/client";
+import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
+import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
 import { aiCategorize } from "../../api/ai";
 import { fetchAllTags } from "../../api/search";
 
@@ -440,6 +441,7 @@ export function TransactionsView() {
   const [vatSplitTransaction, setVatSplitTransaction] = useState<Transaction | null>(null);
   const [vatSaveMessage, setVatSaveMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [ocrReview, setOcrReview] = useState<{ transaction: Transaction; proposal: ReceiptOcrProposal } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -587,10 +589,13 @@ export function TransactionsView() {
     setUploadingAttachment(txnId);
     setAttachmentMessage(null);
     try {
-      const { transaction, compression } = await uploadAttachment(txnId, file);
+      const { transaction, compression, ocr } = await uploadAttachment(txnId, file);
       setTransactions((prev) => prev.map((t) => (t.id === txnId ? transaction : t)));
       const uploadedMb = (compression.uploadedBytes / 1024 / 1024).toFixed(1);
       setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée.` : "Pièce justificative enregistrée." });
+      if (ocr.status === "success" && ocr.proposal) setOcrReview({ transaction, proposal: ocr.proposal });
+      else if (ocr.status === "unavailable") setAttachmentMessage({ type: "success", text: "Pièce enregistrée. OCR non configuré : la saisie manuelle reste disponible." });
+      else if (ocr.status === "error") setAttachmentMessage({ type: "success", text: "Pièce enregistrée, mais l'analyse OCR a échoué. La saisie manuelle reste disponible." });
     } catch (error) {
       setAttachmentMessage({ type: "error", text: error instanceof Error ? error.message : "Erreur lors de l'envoi de la pièce jointe." });
     } finally {
@@ -602,6 +607,15 @@ export function TransactionsView() {
     if (!confirm("Supprimer la pièce jointe ?")) return;
     const updated = await deleteAttachment(txnId, filename);
     setTransactions((prev) => prev.map((t) => (t.id === txnId ? updated : t)));
+  }
+
+  async function applyOcrProposal(values: { category: Category; invoiceRef?: string; vatSplits: Array<{ rate: number; amountTtc: number }> }) {
+    if (!ocrReview) return;
+    const sign = ocrReview.transaction.amount_ttc < 0 ? -1 : 1;
+    const updated = await updateTransaction(ocrReview.transaction.id, { category: values.category, invoiceRef: values.invoiceRef, vat_splits: values.vatSplits.map((split) => ({ rate: split.rate, amount_ttc: sign * split.amountTtc })) });
+    setTransactions((current) => current.map((transaction) => transaction.id === updated.id ? updated : transaction));
+    setAttachmentMessage({ type: "success", text: "TVA et informations du justificatif appliquées. Tu peux encore les modifier manuellement." });
+    setOcrReview(null);
   }
 
   async function handleInvoiceRefSave(id: string) {
@@ -756,6 +770,7 @@ export function TransactionsView() {
   return (
     <div className="flex flex-col h-full">
       {attachmentMessage && <div role={attachmentMessage.type === "error" ? "alert" : "status"} className={`fixed right-4 top-14 z-50 max-w-sm rounded border px-4 py-2 text-xs shadow-lg ${attachmentMessage.type === "success" ? "border-green-700 bg-green-950 text-green-300" : "border-red-700 bg-red-950 text-red-300"}`}>{attachmentMessage.text}<button onClick={() => setAttachmentMessage(null)} className="ml-3 text-vscode-muted">×</button></div>}
+      {ocrReview && <ReceiptOcrDialog transaction={ocrReview.transaction} proposal={ocrReview.proposal} onApply={applyOcrProposal} onClose={() => setOcrReview(null)} />}
       <datalist id="vat-rate-presets">
         {VAT_RATE_PRESETS.map((rate) => (
           <option key={rate} value={rate} />

@@ -5,6 +5,8 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
+import { extractReceiptFromDocument, type ReceiptProposal } from "../services/ocrService.js";
+import { loadAiConfig } from "../services/settingsService.js";
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -48,13 +50,25 @@ export async function attachmentsRoutes(app: FastifyInstance) {
       const buffer = await data.toBuffer();
       await fs.writeFile(path.join(attachmentsDir, filename), buffer);
 
-      // Met à jour la transaction
+      // Attacher d'abord la pièce : une indisponibilité OCR ne doit jamais faire perdre l'upload.
       const updated = await updateTransaction(txnId, { attachment: filename, justified: true });
       if (previousAttachment && previousAttachment !== filename) {
         try { await fs.unlink(path.join(attachmentsDir, path.basename(previousAttachment))); } catch { /* ancien fichier déjà absent */ }
       }
 
-      return reply.status(201).send({ filename, transaction: updated });
+      let ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; message?: string } = { status: "unavailable", message: "OCR non configuré" };
+      const aiConfig = loadAiConfig();
+      const hasOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY);
+      if (hasOcr && aiConfig?.apiKey) {
+        try {
+          const result = await extractReceiptFromDocument(buffer, data.mimetype);
+          ocr = { status: "success", proposal: result.proposal };
+        } catch (error) {
+          ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" };
+        }
+      }
+
+      return reply.status(201).send({ filename, transaction: updated, ocr });
     }
   );
 
