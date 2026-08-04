@@ -20,12 +20,12 @@ docker run -d \
   --volume comptaos-ocr-models:/root/.paddlex:rw \
   "$IMAGE" >/dev/null
 
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
+for attempt in $(seq 1 120); do
   if docker exec "$CONTAINER" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then
     echo "OCR local prêt (CPU limité à 1, file séquentielle)."
     exit 0
   fi
-  sleep 2
+  sleep 5
 done
 
 echo "Le service OCR local n'a pas passé son health check." >&2

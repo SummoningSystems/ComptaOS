@@ -20,9 +20,9 @@ def engine():
         ENGINE = PaddleOCR(
             lang="fr",
             ocr_version="PP-OCRv5",
-            use_doc_orientation_classify=True,
+            use_doc_orientation_classify=False,
             use_doc_unwarping=False,
-            use_textline_orientation=True,
+            use_textline_orientation=False,
             text_detection_model_name="PP-OCRv5_mobile_det",
             text_recognition_model_name="latin_PP-OCRv5_mobile_rec",
         )
@@ -99,4 +99,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # Charge et télécharge les petits modèles avant d'annoncer le service prêt.
+    engine()
     ThreadingHTTPServer(("0.0.0.0", int(os.getenv("PORT", "8000"))), Handler).serve_forever()
