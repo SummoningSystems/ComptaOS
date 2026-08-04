@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Transaction, Category } from "../../types";
+import { Transaction, Category, VatSplit } from "../../types";
 import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
@@ -147,7 +147,11 @@ function VatRateEditor({
       return;
     }
 
-    await onSave(txn.id, normalized);
+    try {
+      await onSave(txn.id, normalized);
+    } catch {
+      setDraft(formatVatRateInput(value));
+    }
   }
 
   return (
@@ -171,6 +175,127 @@ function VatRateEditor({
       aria-label="Taux de TVA"
       placeholder="0"
     />
+  );
+}
+
+function VatSplitDialog({
+  txn,
+  onSave,
+  onClose,
+}: {
+  txn: Transaction;
+  onSave: (id: string, splits: VatSplit[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const sign = txn.amount_ttc < 0 ? -1 : 1;
+  const initial = txn.vat_splits && txn.vat_splits.length >= 2
+    ? txn.vat_splits
+    : [
+        { rate: 10, amount_ttc: 0 },
+        { rate: 20, amount_ttc: txn.amount_ttc },
+      ];
+  const [splits, setSplits] = useState<VatSplit[]>(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const round2 = (value: number) => Math.round(value * 100) / 100;
+  const total = round2(splits.reduce((sum, split) => sum + split.amount_ttc, 0));
+  const remaining = round2(txn.amount_ttc - total);
+  const isBalanced = splits.length >= 2 && Math.abs(remaining) < 0.005;
+
+  function updateSplit(index: number, patch: Partial<VatSplit>) {
+    setSplits((current) => current.map((split, i) => i === index ? { ...split, ...patch } : split));
+    setError("");
+  }
+
+  function fillRemaining(index: number) {
+    const otherTotal = splits.reduce((sum, split, i) => i === index ? sum : sum + split.amount_ttc, 0);
+    updateSplit(index, { amount_ttc: round2(txn.amount_ttc - otherTotal) });
+  }
+
+  async function save(nextSplits: VatSplit[]) {
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(txn.id, nextSplits);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La ventilation TVA n'a pas pu être enregistrée.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Ventilation TVA">
+      <div className="w-full max-w-lg rounded-lg border border-vscode-border bg-vscode-panel p-4 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-vscode-text">Ventiler la TVA du repas</h3>
+            <p className="mt-1 text-xs text-vscode-muted">{txn.label} · Total TTC {Math.abs(txn.amount_ttc).toFixed(2)} €</p>
+          </div>
+          <button onClick={onClose} className="text-vscode-muted hover:text-vscode-text" aria-label="Fermer">×</button>
+        </div>
+
+        <div className="space-y-2">
+          {splits.map((split, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <select
+                value={split.rate}
+                onChange={(event) => updateSplit(index, { rate: Number(event.target.value) })}
+                className="rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs text-vscode-text"
+                aria-label={`Taux TVA ligne ${index + 1}`}
+              >
+                {VAT_RATE_PRESETS.map((rate) => <option key={rate} value={rate}>{rate} %</option>)}
+              </select>
+              <label className="flex items-center gap-1 text-xs text-vscode-muted">
+                TTC
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={Math.abs(split.amount_ttc)}
+                  onChange={(event) => updateSplit(index, { amount_ttc: round2(sign * (Number(event.target.value) || 0)) })}
+                  className="w-28 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-right font-mono text-vscode-text"
+                  aria-label={`Montant TTC ligne ${index + 1}`}
+                />
+                €
+              </label>
+              <button onClick={() => fillRemaining(index)} className="rounded border border-vscode-border px-2 py-1 text-xs text-vscode-muted hover:text-vscode-text" title="Affecter le montant restant">Solde</button>
+              <button
+                onClick={() => setSplits((current) => current.filter((_, i) => i !== index))}
+                disabled={splits.length <= 2}
+                className="px-1 text-vscode-muted hover:text-red-400 disabled:opacity-30"
+                aria-label={`Supprimer la ligne ${index + 1}`}
+              >×</button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            onClick={() => setSplits((current) => [...current, { rate: 20, amount_ttc: remaining }])}
+            className="rounded border border-vscode-border px-2 py-1 text-xs text-vscode-muted hover:text-vscode-text"
+          >+ Ajouter un taux</button>
+          <span className={`text-xs font-mono ${isBalanced ? "text-green-400" : "text-orange-400"}`}>
+            {isBalanced ? "Total équilibré" : `Reste ${Math.abs(remaining).toFixed(2)} €`}
+          </span>
+        </div>
+
+        {error && <p role="alert" className="mt-3 text-xs text-red-400">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2">
+          {txn.vat_splits && txn.vat_splits.length >= 2 && (
+            <button onClick={() => void save([])} disabled={saving} className="mr-auto rounded px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/20">Supprimer la ventilation</button>
+          )}
+          <button onClick={onClose} disabled={saving} className="rounded px-3 py-1.5 text-xs text-vscode-muted hover:text-vscode-text">Annuler</button>
+          <button
+            onClick={() => void save(splits)}
+            disabled={!isBalanced || saving}
+            className="rounded bg-vscode-accent px-3 py-1.5 text-xs text-white disabled:opacity-40"
+          >{saving ? "Enregistrement…" : "Enregistrer la TVA"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -312,6 +437,8 @@ export function TransactionsView() {
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[] | null>(null);
   const [smartApplying, setSmartApplying] = useState(false);
   const [smartSelected, setSmartSelected] = useState<Set<string>>(new Set());
+  const [vatSplitTransaction, setVatSplitTransaction] = useState<Transaction | null>(null);
+  const [vatSaveMessage, setVatSaveMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -381,8 +508,26 @@ export function TransactionsView() {
   }
 
   async function handleVatRateChange(id: string, vat_rate: number) {
-    const updated = await updateTransaction(id, { vat_rate });
+    setVatSaveMessage(null);
+    try {
+      const updated = await updateTransaction(id, { vat_rate, vat_splits: [] });
+      setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      setVatSaveMessage({ id, type: "success", text: "TVA enregistrée" });
+    } catch (err) {
+      setVatSaveMessage({
+        id,
+        type: "error",
+        text: err instanceof Error ? err.message : "Échec de l'enregistrement de la TVA",
+      });
+      throw err;
+    }
+  }
+
+  async function handleVatSplitsChange(id: string, vat_splits: VatSplit[]) {
+    const updated = await updateTransaction(id, { vat_splits });
     setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    setVatSplitTransaction(updated);
+    setVatSaveMessage({ id, type: "success", text: vat_splits.length >= 2 ? "Ventilation TVA enregistrée" : "Ventilation supprimée" });
   }
 
   async function handleTagsChange(id: string, tags: string[]) {
@@ -611,6 +756,13 @@ export function TransactionsView() {
           <option key={rate} value={rate} />
         ))}
       </datalist>
+      {vatSplitTransaction && (
+        <VatSplitDialog
+          txn={vatSplitTransaction}
+          onSave={handleVatSplitsChange}
+          onClose={() => setVatSplitTransaction(null)}
+        />
+      )}
       {showAddModal && (
         <AddTransactionModal
           onClose={() => setShowAddModal(false)}
@@ -967,7 +1119,19 @@ export function TransactionsView() {
                                     onSave={handleVatRateChange}
                                   />
                                   <span className="text-[10px] text-vscode-muted">%</span>
+                                  <button
+                                    onClick={() => setVatSplitTransaction(txn)}
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] ${txn.vat_splits && txn.vat_splits.length >= 2 ? "border-purple-500 text-purple-300" : "border-vscode-border text-vscode-muted hover:text-vscode-text"}`}
+                                    title="Détailler plusieurs taux de TVA sur cette transaction"
+                                  >
+                                    {txn.vat_splits && txn.vat_splits.length >= 2 ? `${txn.vat_splits.length} taux` : "Multi-TVA"}
+                                  </button>
                                 </div>
+                                {vatSaveMessage?.id === txn.id && (
+                                  <div role={vatSaveMessage.type === "error" ? "alert" : "status"} className={`mt-1 text-[9px] ${vatSaveMessage.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                                    {vatSaveMessage.text}
+                                  </div>
+                                )}
                               </td>
                               <td className="px-2 py-1.5">
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}

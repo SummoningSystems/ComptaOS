@@ -1,0 +1,10 @@
+id: correction-tva-transaction-psd2-et-venti-37758
+title: Correction TVA transaction PSD2 et ventilation multi-taux
+agent: Codex
+branch: master
+scope: frontend/src/components/Transactions frontend/src/components/Vat backend/src/services/transactionService.ts backend/src/routes/transactions.ts
+status: active
+started_at: 2026-08-04T10:02:38.2036931Z
+base_commit: 41702046cd598711b13a6a49a96df5bc0fefc61b
+tests:
+    result: not_run

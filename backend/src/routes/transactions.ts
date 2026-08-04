@@ -4,6 +4,7 @@ import {
   saveTransaction,
   updateTransaction,
   deleteTransaction,
+  validateVatSplits,
 } from "../services/transactionService.js";
 import { Transaction, Category } from "../types/index.js";
 import { autoCommit } from "../services/gitService.js";
@@ -172,6 +173,8 @@ export async function transactionsRoutes(app: FastifyInstance) {
     if (!txn.id || !txn.date || !txn.label) {
       return reply.status(400).send({ error: "id, date et label sont requis" });
     }
+    const vatError = validateVatSplits(txn.amount_ttc, txn.vat_splits);
+    if (vatError) return reply.status(400).send({ error: vatError });
     await saveTransaction(txn);
     const sign = txn.amount_ttc >= 0 ? "+" : "";
     autoCommit(getWorkspaceRoot(), `ajout: ${txn.label} (${sign}${txn.amount_ttc.toFixed(2)}€)`).catch(() => {});
@@ -180,6 +183,12 @@ export async function transactionsRoutes(app: FastifyInstance) {
 
   // PATCH /api/transactions/:id
   app.patch<{ Params: { id: string }; Body: Partial<Transaction> }>( "/:id", async (req, reply) => {
+    if (req.body.vat_splits !== undefined) {
+      const current = (await loadAllTransactions()).find((transaction) => transaction.id === req.params.id);
+      if (!current) return reply.status(404).send({ error: "Transaction introuvable" });
+      const vatError = validateVatSplits(current.amount_ttc, req.body.vat_splits);
+      if (vatError) return reply.status(400).send({ error: vatError });
+    }
     const updated = await updateTransaction(req.params.id, req.body);
     autoCommit(getWorkspaceRoot(), `maj: ${updated.label}`).catch(() => {});
     return reply.send(updated);

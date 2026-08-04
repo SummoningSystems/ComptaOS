@@ -18,6 +18,7 @@ import {
   loadAllTransactions,
   saveTransaction,
   updateTransaction,
+  validateVatSplits,
 } from "../services/transactionService.js";
 
 function transaction(overrides: Partial<Transaction> = {}): Transaction {
@@ -68,6 +69,31 @@ describe("transactionService persistence", () => {
     await expect(loadAllTransactions()).resolves.toMatchObject([
       { id: "txn_test", label: "Licence annuelle", status: "validated" },
     ]);
+  });
+
+  it("calcule la TVA d'un repas ventile entre 10 % et 20 %", async () => {
+    await saveTransaction(transaction({ amount_ttc: -30, amount_ht: -30, vat: 0, vat_rate: 0 }));
+
+    const updated = await updateTransaction("txn_test", {
+      vat_splits: [
+        { rate: 10, amount_ttc: -20 },
+        { rate: 20, amount_ttc: -10 },
+      ],
+    });
+
+    expect(updated.vat_splits).toEqual([
+      { rate: 10, amount_ttc: -20 },
+      { rate: 20, amount_ttc: -10 },
+    ]);
+    expect(updated.amount_ht).toBe(-26.51);
+    expect(updated.vat).toBe(-3.49);
+  });
+
+  it("refuse une ventilation dont le total ne correspond pas a la transaction", () => {
+    expect(validateVatSplits(-30, [
+      { rate: 10, amount_ttc: -10 },
+      { rate: 20, amount_ttc: -10 },
+    ])).toContain("total TTC");
   });
 
   it("signale un fichier YAML invalide tout en chargeant les transactions valides", async () => {

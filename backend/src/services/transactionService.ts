@@ -54,6 +54,30 @@ function isTransaction(value: unknown): value is Transaction {
 // Taux TVA légaux français
 const STANDARD_VAT_RATES = [0, 2.1, 5.5, 10, 20];
 
+export function validateVatSplits(amountTtc: number, splits: Transaction["vat_splits"]): string | null {
+  if (splits === undefined || splits.length === 0) return null;
+  if (splits.length < 2) return "Une ventilation TVA doit contenir au moins deux lignes";
+
+  const sign = Math.sign(amountTtc);
+  for (const split of splits) {
+    if (!Number.isFinite(split.rate) || split.rate < 0 || split.rate > 100) {
+      return "Chaque taux de TVA doit être compris entre 0 et 100";
+    }
+    if (!Number.isFinite(split.amount_ttc)) {
+      return "Chaque montant TTC de ventilation doit être un nombre valide";
+    }
+    if (split.amount_ttc !== 0 && Math.sign(split.amount_ttc) !== sign) {
+      return "Les montants ventilés doivent avoir le même sens que la transaction";
+    }
+  }
+
+  const splitTotal = round2(splits.reduce((sum, split) => sum + split.amount_ttc, 0));
+  if (Math.abs(splitTotal - round2(amountTtc)) >= 0.01) {
+    return "Le total TTC de la ventilation doit correspondre au montant de la transaction";
+  }
+  return null;
+}
+
 /** Snap un taux calculé vers le taux légal le plus proche si écart < 0.5 pt */
 function snapVatRate(rate: number): number {
   for (const std of STANDARD_VAT_RATES) {
