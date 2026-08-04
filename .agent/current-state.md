@@ -18,6 +18,7 @@ Le 2026-07-26, CTX a été initialisé avec 180 fichiers indexés. Les six docum
 - 13 tests E2E Playwright réussis dans un workspace éphémère, dont une recette comptable complète, une ventilation multi-TVA et le rapprochement bancaire guidé.
 - Le 2026-08-04, le dossier expert-comptable a été ajouté : écritures en partie double, lignes HT/TVA/TTC, comptes PCG configurables, balance générale, anomalies bloquantes, FEC contrôlé et archive de justificatifs. Le build complet, 61 tests backend, 22 tests frontend et un smoke test API FEC/ZIP sont réussis ; l'audit backend signale zéro vulnérabilité.
 - Le pilotage des frais récurrents consolide désormais les frais confirmés et les récurrences bancaires, mensualise correctement toutes les fréquences, projette les échéances par mois calendrier et permet de simuler conservation, réduction, suppression ou nouveau projet avec impact annuel et trésorerie.
+- Les justificatifs photo supérieurs à 1 Mo sont compressés dans le navigateur avant envoi : dimension maximale 2 200 px, JPEG progressif visant environ 1,5 Mo, retour du gain obtenu et suppression de l'ancien fichier lors d'un remplacement. Les PDF et petites images restent inchangés.
 
 ## Problèmes et risques observés
 

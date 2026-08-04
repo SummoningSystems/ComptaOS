@@ -15,6 +15,7 @@ import {
   Company,
   CompanyProfile,
 } from "../types";
+import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
 // En production (base path configuré dans vite.config.ts), l'API est sous BASE_URL/api
 export function buildApiUrl(basePath: string, path = ""): string {
@@ -115,13 +116,20 @@ export async function createTransaction(txn: Omit<Transaction, "id">): Promise<T
 export async function uploadAttachment(
   txnId: string,
   file: File
-): Promise<{ filename: string; transaction: Transaction }> {
+): Promise<{ filename: string; transaction: Transaction; compression: CompressionResult }> {
+  let compression: CompressionResult;
+  try {
+    compression = await compressAttachment(file);
+  } catch (error) {
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("Cette photo HEIC ne peut pas être lue par ce navigateur. Choisissez JPEG dans les réglages de l'appareil ou convertissez la photo.");
+    compression = { file, compressed: false, originalBytes: file.size, uploadedBytes: file.size, savedPercent: 0 };
+  }
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", compression.file);
   const { data } = await api.post(`/attachments/upload/${txnId}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return data;
+  return { ...data, compression };
 }
 
 export async function deleteAttachment(txnId: string, filename: string): Promise<Transaction> {

@@ -1,0 +1,14 @@
+id: compression-automatique-des-justificatif-51020
+title: Compression automatique des justificatifs photo
+branch: master
+status: active
+started_at: 2026-08-04T13:43:40.4267792Z
+base_commit: c80deb6a4aed8dca1e1ff33578e9013e84a3a111
+tests:
+    result: passed
+    commands:
+        - npm.cmd run build
+        - npm.cmd test --prefix backend
+        - npm.cmd test --prefix frontend
+        - npm.cmd test --prefix frontend -- --run src/__tests__/imageCompression.test.ts
+    summary: build complet, 63 tests backend et 32 tests frontend reussis, compression 2 Mo vers 300 Ko verifiee

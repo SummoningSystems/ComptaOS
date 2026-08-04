@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
-import { updateTransaction } from "../services/transactionService.js";
+import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -26,6 +26,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     "/upload/:txnId",
     async (req, reply) => {
       const { txnId } = req.params;
+      const previousAttachment = (await loadAllTransactions()).find((transaction) => transaction.id === txnId)?.attachment;
 
       const data = await req.file();
       if (!data) {
@@ -49,6 +50,9 @@ export async function attachmentsRoutes(app: FastifyInstance) {
 
       // Met à jour la transaction
       const updated = await updateTransaction(txnId, { attachment: filename, justified: true });
+      if (previousAttachment && previousAttachment !== filename) {
+        try { await fs.unlink(path.join(attachmentsDir, path.basename(previousAttachment))); } catch { /* ancien fichier déjà absent */ }
+      }
 
       return reply.status(201).send({ filename, transaction: updated });
     }

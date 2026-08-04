@@ -439,6 +439,7 @@ export function TransactionsView() {
   const [smartSelected, setSmartSelected] = useState<Set<string>>(new Set());
   const [vatSplitTransaction, setVatSplitTransaction] = useState<Transaction | null>(null);
   const [vatSaveMessage, setVatSaveMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null);
+  const [attachmentMessage, setAttachmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -584,11 +585,14 @@ export function TransactionsView() {
 
   async function handleAttachmentUpload(txnId: string, file: File) {
     setUploadingAttachment(txnId);
+    setAttachmentMessage(null);
     try {
-      const { transaction } = await uploadAttachment(txnId, file);
+      const { transaction, compression } = await uploadAttachment(txnId, file);
       setTransactions((prev) => prev.map((t) => (t.id === txnId ? transaction : t)));
-    } catch {
-      alert("Erreur lors de l'upload de la pièce jointe.");
+      const uploadedMb = (compression.uploadedBytes / 1024 / 1024).toFixed(1);
+      setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée.` : "Pièce justificative enregistrée." });
+    } catch (error) {
+      setAttachmentMessage({ type: "error", text: error instanceof Error ? error.message : "Erreur lors de l'envoi de la pièce jointe." });
     } finally {
       setUploadingAttachment(null);
     }
@@ -751,6 +755,7 @@ export function TransactionsView() {
 
   return (
     <div className="flex flex-col h-full">
+      {attachmentMessage && <div role={attachmentMessage.type === "error" ? "alert" : "status"} className={`fixed right-4 top-14 z-50 max-w-sm rounded border px-4 py-2 text-xs shadow-lg ${attachmentMessage.type === "success" ? "border-green-700 bg-green-950 text-green-300" : "border-red-700 bg-red-950 text-red-300"}`}>{attachmentMessage.text}<button onClick={() => setAttachmentMessage(null)} className="ml-3 text-vscode-muted">×</button></div>}
       <datalist id="vat-rate-presets">
         {VAT_RATE_PRESETS.map((rate) => (
           <option key={rate} value={rate} />
@@ -1202,7 +1207,7 @@ export function TransactionsView() {
                                       {uploadingAttachment === txn.id ? "⏳" : "📎"}
                                       <input
                                         type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                        accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
                                         className="hidden"
                                         disabled={uploadingAttachment !== null}
                                         onChange={(e) => {
