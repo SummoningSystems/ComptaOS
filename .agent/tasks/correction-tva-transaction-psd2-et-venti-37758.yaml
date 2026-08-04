@@ -3,8 +3,10 @@ title: Correction TVA transaction PSD2 et ventilation multi-taux
 agent: Codex
 branch: master
 scope: frontend/src/components/Transactions frontend/src/components/Vat backend/src/services/transactionService.ts backend/src/routes/transactions.ts
-status: active
+status: finished
 started_at: 2026-08-04T10:02:38.2036931Z
+finished_at: 2026-08-04T10:15:13.4803347Z
 base_commit: 41702046cd598711b13a6a49a96df5bc0fefc61b
+final_commit: bbf629ea50fd00a91b95b0d9982476c91e5a6975
 tests:
     result: not_run
