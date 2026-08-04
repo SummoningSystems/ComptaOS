@@ -3,8 +3,10 @@ title: Amelioration du rapprochement bancaire guide
 agent: Codex
 branch: master
 scope: frontend/src/components/Reconcile backend/src/routes/reconcile.ts backend/src/services/reconciliationService.ts
-status: active
+status: finished
 started_at: 2026-08-04T12:14:17.9946949Z
+finished_at: 2026-08-04T12:24:44.5043881Z
 base_commit: 3d682f9bcbb911837bcb14bbba8e8dad511aa85a
+final_commit: b745b3291cc30f3a6c695e3752464afc1fecb21f
 tests:
     result: not_run
