@@ -1,13 +1,10 @@
 id: ocr-automatique-des-justificatifs-avec-s-52633
 title: OCR automatique des justificatifs avec saisie manuelle
 branch: master
-status: active
+status: finished
 started_at: 2026-08-04T14:10:33.0280945Z
+finished_at: 2026-08-04T14:15:50.1228038Z
 base_commit: 116aa748bbbb6330e0e46d4cbb2236bce0dffbf4
+final_commit: 045ed3603a27970f0c7e546a34c3a51b64943091
 tests:
     result: passed
-    commands:
-        - npm.cmd run build
-        - npm.cmd test --prefix backend
-        - npm.cmd test --prefix frontend
-    summary: build complet, 65 tests backend et 34 tests frontend reussis, OCR multi TVA et saisie manuelle couverts
