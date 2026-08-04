@@ -13,9 +13,9 @@ Le 2026-07-26, CTX a été initialisé avec 180 fichiers indexés. Les six docum
 ## Validation connue
 
 - Build backend et frontend réussi le 2026-07-26.
-- 53 tests unitaires backend réussis.
+- 57 tests unitaires backend réussis sur 9 fichiers.
 - 22 tests unitaires frontend réussis.
-- 12 tests E2E Playwright réussis dans un workspace éphémère, dont une recette comptable complète et une ventilation multi-TVA exécutées par la CI.
+- 13 tests E2E Playwright réussis dans un workspace éphémère, dont une recette comptable complète, une ventilation multi-TVA et le rapprochement bancaire guidé.
 
 ## Problèmes et risques observés
 

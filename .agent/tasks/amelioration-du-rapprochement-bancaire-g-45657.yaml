@@ -1,0 +1,10 @@
+id: amelioration-du-rapprochement-bancaire-g-45657
+title: Amelioration du rapprochement bancaire guide
+agent: Codex
+branch: master
+scope: frontend/src/components/Reconcile backend/src/routes/reconcile.ts backend/src/services/reconciliationService.ts
+status: active
+started_at: 2026-08-04T12:14:17.9946949Z
+base_commit: 3d682f9bcbb911837bcb14bbba8e8dad511aa85a
+tests:
+    result: not_run

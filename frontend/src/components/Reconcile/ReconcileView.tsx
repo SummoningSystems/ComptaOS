@@ -10,7 +10,16 @@ interface ReconcileTransaction {
   account: string;
   reconciled: boolean;
   status: string;
+  reconciliation_issues: ReconciliationIssue[];
 }
+
+type ReconciliationIssue = "status" | "category" | "justification";
+
+const ISSUE_LABELS: Record<ReconciliationIssue, string> = {
+  status: "Valider la transaction",
+  category: "Choisir une catégorie",
+  justification: "Ajouter ou valider un justificatif",
+};
 
 const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
@@ -23,6 +32,7 @@ export function ReconcileView() {
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const reconciled = transactions.filter((t) => t.reconciled).length;
   const total = transactions.length;
@@ -31,6 +41,7 @@ export function ReconcileView() {
   async function load() {
     setLoading(true);
     setSelected(new Set());
+    setError("");
     try {
       const { data } = await api.get<{ transactions: ReconcileTransaction[]; reconciled: number; total: number; pending: number }>(
         `/reconcile?month=${month}`
@@ -38,6 +49,7 @@ export function ReconcileView() {
       setTransactions(Array.isArray(data?.transactions) ? data.transactions : []);
     } catch {
       setTransactions([]);
+      setError("Le rapprochement bancaire n'a pas pu être chargé.");
     } finally {
       setLoading(false);
     }
@@ -47,9 +59,12 @@ export function ReconcileView() {
 
   async function toggleOne(id: string, value: boolean) {
     setSaving(true);
+    setError("");
     try {
       await api.patch(`/reconcile/${id}`, { reconciled: value });
       setTransactions((list) => list.map((t) => (t.id === id ? { ...t, reconciled: value } : t)));
+    } catch {
+      setError("Cette transaction doit être complétée avant d'être rapprochée.");
     } finally {
       setSaving(false);
     }
@@ -58,11 +73,14 @@ export function ReconcileView() {
   async function bulkSet(value: boolean) {
     if (selected.size === 0) return;
     setSaving(true);
+    setError("");
     try {
       await api.post("/reconcile/bulk", { ids: [...selected], reconciled: value });
       const ids = selected;
       setTransactions((list) => list.map((t) => (ids.has(t.id) ? { ...t, reconciled: value } : t)));
       setSelected(new Set());
+    } catch {
+      setError("La sélection contient une transaction qui n'est pas encore prête.");
     } finally {
       setSaving(false);
     }
@@ -81,6 +99,11 @@ export function ReconcileView() {
     if (selected.size === transactions.length) setSelected(new Set());
     else setSelected(new Set(transactions.map((t) => t.id)));
   }
+
+  const selectedTransactions = transactions.filter((transaction) => selected.has(transaction.id));
+  const selectedCanReconcile = selectedTransactions.every(
+    (transaction) => transaction.reconciled || transaction.reconciliation_issues.length === 0,
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -133,7 +156,8 @@ export function ReconcileView() {
             <span className="text-[10px] text-vscode-muted">{selected.size} sélectionnée{selected.size > 1 ? "s" : ""}</span>
             <button
               onClick={() => bulkSet(true)}
-              disabled={saving}
+              disabled={saving || !selectedCanReconcile}
+              title={!selectedCanReconcile ? "Complète les transactions signalées avant de les rapprocher" : "Marquer la sélection comme rapprochée"}
               className="text-xs bg-green-700 hover:bg-green-600 text-white px-2.5 py-1 rounded disabled:opacity-50"
             >
               ✓ Réconcilier
@@ -148,6 +172,16 @@ export function ReconcileView() {
           </div>
         )}
       </div>
+
+      <div className="border-b border-vscode-border bg-blue-950/30 px-4 py-2 text-[11px] text-vscode-muted">
+        <span className="font-semibold text-blue-300">Quand rapprocher ?</span>{" "}
+        Quand l'opération bancaire est contrôlée, validée, catégorisée et, pour une dépense, accompagnée d'un justificatif.
+        La TVA peut être nulle ou multi-taux : elle ne bloque pas le rapprochement.
+      </div>
+
+      {error && (
+        <div role="alert" className="border-b border-red-800 bg-red-950/30 px-4 py-2 text-xs text-red-300">{error}</div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center flex-1 text-vscode-muted text-xs">Chargement…</div>
@@ -174,7 +208,8 @@ export function ReconcileView() {
                 <th className="text-left px-3 py-2 w-28">Catégorie</th>
                 <th className="text-left px-3 py-2 w-36">Compte</th>
                 <th className="text-right px-3 py-2 w-28">Montant TTC</th>
-                <th className="text-center px-3 py-2 w-28">Réconcilié</th>
+                <th className="text-left px-3 py-2 w-52">État du contrôle</th>
+                <th className="sticky right-0 bg-vscode-panel text-center px-3 py-2 w-28">Réconcilié</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-vscode-border/30">
@@ -198,17 +233,32 @@ export function ReconcileView() {
                   <td className={`px-3 py-2 text-right font-mono font-semibold ${t.amount_ttc >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {t.amount_ttc >= 0 ? "+" : ""}{t.amount_ttc.toFixed(2)} €
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-3 py-2">
+                    {t.reconciled ? (
+                      <span className="rounded bg-green-900/40 px-2 py-1 text-[10px] text-green-300">✓ Rapprochée</span>
+                    ) : t.reconciliation_issues.length === 0 ? (
+                      <span className="rounded bg-blue-900/40 px-2 py-1 text-[10px] text-blue-300">Prête à rapprocher</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {t.reconciliation_issues.map((issue) => (
+                          <span key={issue} className="rounded bg-orange-900/30 px-1.5 py-0.5 text-[10px] text-orange-300">
+                            {ISSUE_LABELS[issue]}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="sticky right-0 bg-vscode-bg px-3 py-2 text-center">
                     <button
                       onClick={() => toggleOne(t.id, !t.reconciled)}
-                      disabled={saving}
-                      className={`w-8 h-5 rounded-full relative transition-colors disabled:opacity-50 ${t.reconciled ? "bg-green-600" : "bg-vscode-border"}`}
-                      title={t.reconciled ? "Annuler la réconciliation" : "Marquer comme réconcilié"}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${t.reconciled ? "left-3" : "left-0.5"}`}
-                      />
-                    </button>
+                      disabled={saving || (!t.reconciled && t.reconciliation_issues.length > 0)}
+                      className={`rounded border px-2 py-1 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${t.reconciled ? "border-vscode-border text-vscode-muted" : "border-green-700 bg-green-900/30 text-green-300"}`}
+                      title={t.reconciled
+                        ? "Annuler le rapprochement"
+                        : t.reconciliation_issues.length > 0
+                          ? t.reconciliation_issues.map((issue) => ISSUE_LABELS[issue]).join(" · ")
+                          : "Marquer comme rapprochée"}
+                    >{t.reconciled ? "Annuler" : "Rapprocher"}</button>
                   </td>
                 </tr>
               ))}
