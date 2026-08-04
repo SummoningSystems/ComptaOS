@@ -1,0 +1,14 @@
+id: refonte-pilotage-des-frais-recurrents-49616
+title: Refonte pilotage des frais recurrents
+branch: master
+status: active
+started_at: 2026-08-04T13:20:16.1820889Z
+base_commit: 23cc1b922c12d7836f15e48bbd1d1cac9f1a96dc
+tests:
+    result: passed
+    commands:
+        - npm.cmd run build
+        - npm.cmd test --prefix backend
+        - npm.cmd test --prefix frontend
+        - npm.cmd run test:e2e -- --grep pilote un frais annuel
+    summary: build complet, 63 tests backend, 28 tests frontend et recette Playwright reussis

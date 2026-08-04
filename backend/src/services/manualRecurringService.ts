@@ -15,14 +15,26 @@ export interface ManualRecurring {
   frequency: "mensuel" | "trimestriel" | "annuel";
   nextPayment: string; // ISO YYYY-MM-DD
   active: boolean;
+  decision?: "keep" | "reduce" | "cancel" | "planned";
+  simulatedAmount?: number;
+  notes?: string;
+}
+
+export function isManualRecurring(value: unknown): value is ManualRecurring {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<ManualRecurring>;
+  return typeof item.id === "string" && item.id.length > 0 && typeof item.label === "string" && item.label.trim().length > 0 && typeof item.category === "string" && typeof item.amount === "number" && Number.isFinite(item.amount) && item.amount > 0 && ["mensuel", "trimestriel", "annuel"].includes(item.frequency ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(item.nextPayment ?? "") && typeof item.active === "boolean" && (item.decision === undefined || ["keep", "reduce", "cancel", "planned"].includes(item.decision)) && (item.simulatedAmount === undefined || (Number.isFinite(item.simulatedAmount) && item.simulatedAmount >= 0));
 }
 
 export function loadManualRecurring(): ManualRecurring[] {
   const file = getManualFile();
   if (!existsSync(file)) return [];
   try {
-    return JSON.parse(readFileSync(file, "utf-8")) as ManualRecurring[];
-  } catch {
+    const parsed = JSON.parse(readFileSync(file, "utf-8")) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every(isManualRecurring)) throw new Error("Le fichier des frais récurrents contient une entrée invalide.");
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("entrée invalide")) throw error;
     return [];
   }
 }

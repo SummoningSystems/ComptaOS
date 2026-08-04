@@ -193,6 +193,9 @@ export interface ManualRecurring {
   frequency: "mensuel" | "trimestriel" | "annuel";
   nextPayment: string;
   active: boolean;
+  decision?: "keep" | "reduce" | "cancel" | "planned";
+  simulatedAmount?: number;
+  notes?: string;
 }
 
 export interface Tab {

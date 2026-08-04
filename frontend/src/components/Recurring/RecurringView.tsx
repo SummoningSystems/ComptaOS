@@ -1,615 +1,68 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchTransactions, fetchManualRecurring, saveManualRecurring, fetchTreasuryAlert } from "../../api/client";
+import { fetchManualRecurring, fetchTransactions, fetchTreasuryAlert, saveManualRecurring } from "../../api/client";
 import { Category, ManualRecurring, Transaction, TreasuryAlert } from "../../types";
+import { addCalendarMonths, buildForecast, detectRecurring, Frequency, monthlyEquivalent, removeManualDuplicates, scenarioAmount } from "./recurringModel";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type Frequency = "mensuel" | "trimestriel" | "annuel";
-
-interface RecurringPattern {
-  key: string;
-  label: string;
-  category: Category;
-  avgAmount: number;
-  frequency: Frequency;
-  avgIntervalDays: number;
-  lastDate: string;
-  nextExpected: string;
-  occurrences: number;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function monthKey(dateStr: string): string {
-  return dateStr.slice(0, 7); // "YYYY-MM"
-}
-
-function normalizeLabel(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-// Détecte les patterns récurrents à partir d'un tableau de transactions
-function detectRecurring(transactions: Transaction[]): RecurringPattern[] {
-  // Grouper les dépenses par label normalisé
-  const groups = new Map<string, Transaction[]>();
-  for (const t of transactions) {
-    if (t.amount_ttc >= 0) continue; // dépenses uniquement
-    const key = normalizeLabel(t.label);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(t);
-  }
-
-  const patterns: RecurringPattern[] = [];
-
-  for (const [key, txns] of groups.entries()) {
-    if (txns.length < 2) continue;
-
-    const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date));
-
-    // Calculer les intervalles entre occurrences consécutives
-    const intervals: number[] = [];
-    for (let i = 1; i < sorted.length; i++) {
-      const diff =
-        (new Date(sorted[i].date).getTime() - new Date(sorted[i - 1].date).getTime()) /
-        86_400_000;
-      intervals.push(diff);
-    }
-    const avgInterval = intervals.reduce((s, v) => s + v, 0) / intervals.length;
-
-    // Classifier la fréquence
-    let frequency: Frequency | null = null;
-    if (avgInterval >= 20 && avgInterval <= 45) frequency = "mensuel";
-    else if (avgInterval >= 80 && avgInterval <= 105) frequency = "trimestriel";
-    else if (avgInterval >= 340 && avgInterval <= 400) frequency = "annuel";
-    if (!frequency) continue;
-
-    const avgAmount = sorted.reduce((s, t) => s + Math.abs(t.amount_ttc), 0) / sorted.length;
-    const lastDate = sorted[sorted.length - 1].date;
-    const nextExpected = addDays(lastDate, Math.round(avgInterval));
-
-    patterns.push({
-      key,
-      label: sorted[sorted.length - 1].label,
-      category: sorted[sorted.length - 1].category,
-      avgAmount,
-      frequency,
-      avgIntervalDays: Math.round(avgInterval),
-      lastDate,
-      nextExpected,
-      occurrences: sorted.length,
-    });
-  }
-
-  return patterns.sort((a, b) => b.avgAmount - a.avgAmount);
-}
-
-// Projette les occurrences sur les N prochains mois
-function buildForecast(patterns: RecurringPattern[], monthsAhead = 6): Map<string, RecurringPattern[]> {
-  const today = new Date();
-  const forecast = new Map<string, RecurringPattern[]>();
-
-  // Initialiser les mois vides
-  for (let i = 0; i < monthsAhead; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    forecast.set(key, []);
-  }
-
-  const startKey = monthKey(today.toISOString());
-  const endKey = monthKey(
-    new Date(today.getFullYear(), today.getMonth() + monthsAhead, 1).toISOString()
-  );
-
-  for (const p of patterns) {
-    // Projeter en avançant par intervalles depuis nextExpected
-    let cursor = p.nextExpected;
-    let safety = 0;
-    while (cursor < endKey + "-31" && safety < 50) {
-      safety++;
-      const m = monthKey(cursor);
-      if (m >= startKey && m < endKey && forecast.has(m)) {
-        forecast.get(m)!.push(p);
-      }
-      if (p.frequency === "mensuel") cursor = addDays(cursor, p.avgIntervalDays);
-      else if (p.frequency === "trimestriel") cursor = addDays(cursor, p.avgIntervalDays);
-      else break; // annuel : une seule occurrence
-    }
-  }
-
-  return forecast;
-}
-
-// ── Component ────────────────────────────────────────────────────────────────
-
-const FREQ_LABEL: Record<Frequency, string> = {
-  mensuel: "Mensuel",
-  trimestriel: "Trimestriel",
-  annuel: "Annuel",
-};
-
-const FREQ_COLOR: Record<Frequency, string> = {
-  mensuel: "bg-blue-900/40 text-blue-300 border-blue-800",
-  trimestriel: "bg-purple-900/40 text-purple-300 border-purple-800",
-  annuel: "bg-amber-900/40 text-amber-300 border-amber-800",
-};
-
-const CATEGORY_COLORS: Partial<Record<Category, string>> = {
-  hosting: "bg-indigo-800 text-indigo-200",
-  software: "bg-blue-800 text-blue-200",
-  travel: "bg-green-800 text-green-200",
-  subscription: "bg-purple-800 text-purple-200",
-  rent: "bg-teal-800 text-teal-200",
-  equipment: "bg-amber-800 text-amber-200",
-  taxes: "bg-red-800 text-red-200",
-  salary: "bg-teal-800 text-teal-200",
-  restaurant: "bg-orange-800 text-orange-200",
-  misc: "bg-gray-700 text-gray-300",
-};
-
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "travel", "restaurant",
-  "taxes", "equipment", "subscription", "rent", "misc",
-];
-
-/** Convertit une entrée manuelle en RecurringPattern pour le prévisionnel. */
-function manualToPattern(m: ManualRecurring): RecurringPattern {
-  const intervalDays = m.frequency === "mensuel" ? 30 : m.frequency === "trimestriel" ? 91 : 365;
-  return {
-    key: `manual_${m.id}`,
-    label: m.label,
-    category: m.category,
-    avgAmount: m.amount,
-    frequency: m.frequency,
-    avgIntervalDays: intervalDays,
-    lastDate: addDays(m.nextPayment, -intervalDays),
-    nextExpected: m.nextPayment,
-    occurrences: 0,
-  };
-}
+const CATEGORIES: Category[] = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORY_LABELS: Record<Category, string> = { hosting: "Hébergement", software: "Logiciels", salary: "Salaires", travel: "Déplacements", restaurant: "Restaurant", food: "Alimentation", taxes: "Impôts et taxes", equipment: "Équipement", subscription: "Abonnements", rent: "Loyer", legal: "Honoraires", insurance: "Assurance", misc: "Divers" };
+const FREQUENCY_LABELS: Record<Frequency, string> = { mensuel: "Mensuel", trimestriel: "Trimestriel", annuel: "Annuel" };
+const DECISION_LABELS = { keep: "Conserver", reduce: "Réduire", cancel: "Supprimer", planned: "Projet" } as const;
+const today = () => new Date().toISOString().slice(0, 10);
+const euros = (value: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 
 export function RecurringView() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [manual, setManual] = useState<ManualRecurring[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<ManualRecurring>>({});
-  const [forecastMonths, setForecastMonths] = useState<6 | 12>(6);
-  const [treasuryAlert, setTreasuryAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false });
-  const [dismissed, setDismissed] = useState<Set<string>>(
-    () => new Set<string>(JSON.parse(localStorage.getItem("compta_dismissed_patterns") ?? "[]"))
-  );
+  const [transactions, setTransactions] = useState<Transaction[]>([]); const [manual, setManual] = useState<ManualRecurring[]>([]);
+  const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false }); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
+  const [horizon, setHorizon] = useState<3 | 6 | 12>(6); const [view, setView] = useState<"pilot" | "calendar">("pilot");
+  const [editingId, setEditingId] = useState<string | null>(null); const [form, setForm] = useState<Partial<ManualRecurring>>({});
+  const [ignored, setIgnored] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("compta_dismissed_patterns") ?? "[]") as string[]));
 
-  function dismissPattern(key: string) {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(key);
-      localStorage.setItem("compta_dismissed_patterns", JSON.stringify([...next]));
-      return next;
-    });
-  }
+  useEffect(() => { Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert()]).then(([entries, stored, treasuryAlert]) => { setTransactions(entries); setManual(stored); setAlert(treasuryAlert); }).finally(() => setLoading(false)); }, []);
+  const detectedAll = useMemo(() => removeManualDuplicates(detectRecurring(transactions), manual), [transactions, manual]);
+  const detected = useMemo(() => detectedAll.filter((item) => !ignored.has(item.key)), [detectedAll, ignored]);
+  const currentBalance = useMemo(() => transactions.filter((entry) => entry.status !== "rejected").reduce((sum, entry) => sum + entry.amount_ttc, 0), [transactions]);
+  const baseMonthly = useMemo(() => manual.filter((item) => item.active && item.decision !== "planned").reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0) + detected.reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0), [manual, detected]);
+  const scenarioMonthly = useMemo(() => manual.reduce((sum, item) => sum + monthlyEquivalent(scenarioAmount(item), item.frequency), 0) + detected.reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0), [manual, detected]);
+  const savingsMonthly = baseMonthly - scenarioMonthly;
+  const scenarioItems = useMemo(() => [...manual.map((item) => ({ id: item.id, label: item.label, amount: scenarioAmount(item), frequency: item.frequency, nextPayment: item.nextPayment, active: item.active && scenarioAmount(item) > 0 })), ...detected.map((item) => ({ id: `auto-${item.key}`, label: item.label, amount: item.amount, frequency: item.frequency, nextPayment: item.nextPayment, active: true }))], [manual, detected]);
+  const forecast = useMemo(() => buildForecast(scenarioItems, transactions, horizon, currentBalance), [scenarioItems, transactions, horizon, currentBalance]);
+  const next30 = useMemo(() => { const limit = new Date(); limit.setDate(limit.getDate() + 30); const end = limit.toISOString().slice(0, 10); return scenarioItems.filter((item) => item.active && item.nextPayment >= today() && item.nextPayment <= end).reduce((sum, item) => sum + item.amount, 0); }, [scenarioItems]);
+  const runway = scenarioMonthly > 0 ? currentBalance / scenarioMonthly : Infinity;
+  const warnings = useMemo(() => {
+    const messages: string[] = [];
+    const overdue = manual.filter((item) => item.active && item.nextPayment < today()).length; if (overdue) messages.push(`${overdue} échéance(s) manuelle(s) sont dépassées : confirme le paiement ou décale la prochaine date.`);
+    const increases = detected.filter((item) => item.trendPercent >= 10); if (increases.length) messages.push(`${increases.length} frais détecté(s) ont augmenté d'au moins 10 %.`);
+    const thresholdMonth = alert.enabled ? forecast.find((month) => month.balance < alert.threshold) : undefined; if (thresholdMonth) messages.push(`Le solde passerait sous ${euros(alert.threshold)} en ${thresholdMonth.month}.`);
+    if (detected.length) messages.push(`${detected.length} récurrence(s) bancaire(s) attendent confirmation.`);
+    return messages;
+  }, [manual, detected, forecast, alert]);
 
-  function restoreDismissed() {
-    localStorage.removeItem("compta_dismissed_patterns");
-    setDismissed(new Set());
-  }
+  async function persist(entries: ManualRecurring[]) { setSaving(true); setManual(entries); try { await saveManualRecurring(entries); } finally { setSaving(false); } }
+  function startNew() { setEditingId("new"); setForm({ label: "", amount: 0, category: "misc", frequency: "mensuel", nextPayment: today(), active: true, decision: "keep" }); }
+  function startEdit(item: ManualRecurring) { setEditingId(item.id); setForm(item); }
+  async function saveForm() { if (!form.label?.trim() || !form.amount || form.amount <= 0 || !form.nextPayment) return; const item = { id: editingId === "new" ? `manual_${Date.now()}` : editingId!, label: form.label.trim(), amount: Number(form.amount), category: form.category ?? "misc", frequency: form.frequency ?? "mensuel", nextPayment: form.nextPayment, active: form.active ?? true, decision: form.decision ?? "keep", simulatedAmount: form.simulatedAmount, notes: form.notes } satisfies ManualRecurring; await persist(editingId === "new" ? [...manual, item] : manual.map((entry) => entry.id === editingId ? item : entry)); setEditingId(null); setForm({}); }
+  async function patchManual(id: string, changes: Partial<ManualRecurring>) { await persist(manual.map((item) => item.id === id ? { ...item, ...changes } : item)); }
+  async function confirmDetected(key: string) { const item = detected.find((entry) => entry.key === key); if (!item) return; await persist([...manual, { id: `manual_${Date.now()}`, label: item.label, amount: item.amount, category: item.category, frequency: item.frequency, nextPayment: item.nextPayment, active: true, decision: "keep" }]); }
+  function ignoreDetected(key: string) { const next = new Set(ignored).add(key); setIgnored(next); localStorage.setItem("compta_dismissed_patterns", JSON.stringify([...next])); }
+  async function advancePayment(item: ManualRecurring) { await patchManual(item.id, { nextPayment: addCalendarMonths(item.nextPayment, item.frequency === "mensuel" ? 1 : item.frequency === "trimestriel" ? 3 : 12) }); }
 
-  useEffect(() => {
-    Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert()]).then(([txns, man, alert]) => {
-      setTransactions(txns);
-      setManual(man);
-      setTreasuryAlert(alert);
-      setLoading(false);
-    });
-  }, []);
+  if (loading) return <div className="p-6 text-sm text-vscode-muted">Analyse des frais en cours…</div>;
+  return <div className="h-full overflow-auto p-6 flex flex-col gap-5 max-w-6xl mx-auto">
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold text-vscode-text">Pilotage des frais récurrents</h1><p className="text-xs text-vscode-muted mt-1">Visualise le coût structurel, prépare les décisions et mesure leur effet sur la trésorerie.</p></div><button onClick={startNew} disabled={editingId !== null} className="px-3 py-2 bg-vscode-accent text-white text-xs rounded disabled:opacity-40">＋ Ajouter un frais</button></header>
 
-  const allPatterns = useMemo(() => detectRecurring(transactions), [transactions]);
-  const patterns = useMemo(() => allPatterns.filter((p) => !dismissed.has(p.key)), [allPatterns, dismissed]);
-  const monthlyPatterns = patterns.filter((p) => p.frequency === "mensuel");
-  const otherPatterns = patterns.filter((p) => p.frequency !== "mensuel");
+    <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[
+      ["Coût mensuel", euros(baseMonthly), "text-red-400"], ["Coût annuel réel", euros(baseMonthly * 12), "text-vscode-text"], ["À payer sous 30 j", euros(next30), "text-amber-400"], [savingsMonthly >= 0 ? "Économie simulée" : "Surcoût simulé", euros(Math.abs(savingsMonthly) * 12) + "/an", savingsMonthly >= 0 ? "text-green-400" : "text-red-400"], ["Autonomie sur frais fixes", Number.isFinite(runway) ? `${runway.toFixed(1)} mois` : "∞", runway < 3 ? "text-red-400" : "text-vscode-text"],
+    ].map(([label, value, color]) => <div key={label} className="bg-vscode-panel border border-vscode-border rounded-lg p-4"><p className="text-[10px] uppercase tracking-wide text-vscode-muted">{label}</p><p className={`text-xl font-semibold mt-1 ${color}`}>{value}</p></div>)}</section>
 
-  const manualPatterns = useMemo(
-    () => manual.filter((m) => m.active).map(manualToPattern),
-    [manual]
-  );
-  const manualMonthlyCount = manualPatterns.filter((p) => p.frequency === "mensuel").length;
+    {warnings.length > 0 && <section className="border border-amber-700/60 bg-amber-900/10 rounded-lg p-3"><h2 className="text-xs font-semibold text-amber-300 mb-1">Points d'attention</h2><ul className="text-xs text-amber-200/90 space-y-1">{warnings.map((message) => <li key={message}>• {message}</li>)}</ul></section>}
+    <nav className="flex gap-1 border-b border-vscode-border"><button onClick={() => setView("pilot")} className={`px-3 py-2 text-xs ${view === "pilot" ? "text-vscode-text border-b-2 border-vscode-accent" : "text-vscode-muted"}`}>Liste et décisions</button><button onClick={() => setView("calendar")} className={`px-3 py-2 text-xs ${view === "calendar" ? "text-vscode-text border-b-2 border-vscode-accent" : "text-vscode-muted"}`}>Calendrier prévisionnel</button></nav>
 
-  const allPatternsForForecast = useMemo(
-    () => [...patterns, ...manualPatterns],
-    [patterns, manualPatterns]
-  );
+    {view === "pilot" && <>
+      {editingId && <section className="border border-vscode-accent rounded-lg p-4 bg-blue-900/10 grid sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end"><label className="lg:col-span-2 text-[10px] text-vscode-muted">Libellé<input value={form.label ?? ""} onChange={(event) => setForm({ ...form, label: event.target.value })} className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text"/></label><label className="text-[10px] text-vscode-muted">Montant TTC<input type="number" min="0" step="0.01" value={form.amount ?? ""} onChange={(event) => setForm({ ...form, amount: Number(event.target.value) })} className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text"/></label><label className="text-[10px] text-vscode-muted">Fréquence<select value={form.frequency ?? "mensuel"} onChange={(event) => setForm({ ...form, frequency: event.target.value as Frequency })} className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text"><option value="mensuel">Mensuel</option><option value="trimestriel">Trimestriel</option><option value="annuel">Annuel</option></select></label><label className="text-[10px] text-vscode-muted">Prochaine échéance<input type="date" value={form.nextPayment ?? ""} onChange={(event) => setForm({ ...form, nextPayment: event.target.value })} className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text"/></label><div className="flex gap-1"><button onClick={() => void saveForm()} disabled={!form.label || !form.amount || saving} className="px-3 py-1.5 bg-vscode-accent text-white text-xs rounded">Enregistrer</button><button onClick={() => setEditingId(null)} className="px-2 py-1.5 border border-vscode-border text-xs rounded">Annuler</button></div><label className="text-[10px] text-vscode-muted">Catégorie<select value={form.category ?? "misc"} onChange={(event) => setForm({ ...form, category: event.target.value as Category })} className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text">{CATEGORIES.map((category) => <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}</select></label><label className="lg:col-span-5 text-[10px] text-vscode-muted">Note de décision<input value={form.notes ?? ""} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Engagement, préavis, alternative…" className="block w-full mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text"/></label></section>}
+      <section><div className="flex justify-between items-baseline mb-2"><h2 className="text-xs font-semibold uppercase tracking-wide text-vscode-muted">Frais confirmés ({manual.length})</h2><span className="text-[10px] text-vscode-muted">Le scénario est enregistré avec chaque frais.</span></div><div className="border border-vscode-border rounded-lg overflow-auto"><table className="w-full text-xs"><thead className="bg-vscode-panel text-vscode-muted"><tr>{["Frais", "Coût", "Échéance", "Décision", "Impact mensuel", "Actions"].map((title) => <th key={title} className="text-left font-normal px-3 py-2">{title}</th>)}</tr></thead><tbody>{manual.map((item) => { const scenario = scenarioAmount(item); return <tr key={item.id} className={`border-t border-vscode-border ${item.active ? "" : "opacity-40"}`}><td className="px-3 py-2"><p className="text-vscode-text font-medium">{item.label}</p><p className="text-[10px] text-vscode-muted">{CATEGORY_LABELS[item.category]} · {FREQUENCY_LABELS[item.frequency]}{item.notes ? ` · ${item.notes}` : ""}</p></td><td className="px-3 py-2"><p>{euros(item.amount)}</p><p className="text-[10px] text-vscode-muted">{euros(monthlyEquivalent(item.amount, item.frequency))}/mois</p></td><td className={`px-3 py-2 ${item.nextPayment < today() ? "text-amber-400" : ""}`}>{item.nextPayment}<button onClick={() => void advancePayment(item)} className="block text-[10px] text-vscode-accent mt-0.5">Paiement effectué →</button></td><td className="px-3 py-2"><select value={item.decision ?? "keep"} onChange={(event) => void patchManual(item.id, { decision: event.target.value as ManualRecurring["decision"] })} className="bg-vscode-bg border border-vscode-border rounded px-2 py-1">{Object.entries(DECISION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{item.decision === "reduce" && <input type="number" min="0" value={item.simulatedAmount ?? item.amount} onChange={(event) => void patchManual(item.id, { simulatedAmount: Number(event.target.value) })} className="block w-24 mt-1 bg-vscode-bg border border-vscode-border rounded px-2 py-1"/>}</td><td className={scenario < item.amount ? "px-3 py-2 text-green-400" : "px-3 py-2 text-vscode-muted"}>{scenario < item.amount ? `−${euros(monthlyEquivalent(item.amount - scenario, item.frequency))}/mois` : "—"}</td><td className="px-3 py-2 whitespace-nowrap"><button onClick={() => startEdit(item)} className="mr-2 text-vscode-accent">Modifier</button><button onClick={() => void persist(manual.filter((entry) => entry.id !== item.id))} className="text-red-400">Supprimer</button></td></tr>; })}{manual.length === 0 && <tr><td colSpan={6} className="text-center text-vscode-muted py-6">Aucun frais confirmé.</td></tr>}</tbody></table></div></section>
+      <section><div className="flex justify-between items-baseline mb-2"><h2 className="text-xs font-semibold uppercase tracking-wide text-vscode-muted">Détectés dans la banque ({detected.length})</h2>{ignored.size > 0 && <button onClick={() => { setIgnored(new Set()); localStorage.removeItem("compta_dismissed_patterns"); }} className="text-[10px] text-vscode-accent">Restaurer les éléments ignorés</button>}</div><div className="grid md:grid-cols-2 gap-2">{detected.map((item) => <article key={item.key} className="border border-vscode-border rounded-lg p-3 flex justify-between gap-3"><div className="min-w-0"><p className="text-xs text-vscode-text truncate">{item.label}</p><p className="text-[10px] text-vscode-muted mt-1">{euros(item.amount)} · {FREQUENCY_LABELS[item.frequency]} · {item.occurrences} occurrences · confiance {item.confidence}</p>{item.trendPercent >= 10 && <p className="text-[10px] text-amber-400 mt-1">Hausse observée : +{item.trendPercent} %</p>}</div><div className="flex flex-col gap-1 shrink-0"><button onClick={() => void confirmDetected(item.key)} className="px-2 py-1 bg-vscode-accent text-white rounded text-[10px]">Confirmer</button><button onClick={() => ignoreDetected(item.key)} className="px-2 py-1 border border-vscode-border rounded text-[10px] text-vscode-muted">Ignorer</button></div></article>)}{detected.length === 0 && <p className="text-xs text-vscode-muted italic">Aucune nouvelle récurrence à confirmer.</p>}</div></section>
+    </>}
 
-  const totalMonthly = useMemo(() => {
-    const auto = monthlyPatterns.reduce((s, p) => s + p.avgAmount, 0);
-    const man = manualPatterns.filter((p) => p.frequency === "mensuel").reduce((s, p) => s + p.avgAmount, 0);
-    return auto + man;
-  }, [monthlyPatterns, manualPatterns]);
-
-  const currentBalance = useMemo(
-    () => transactions.filter((t) => t.status !== "rejected").reduce((s, t) => s + t.amount_ttc, 0),
-    [transactions]
-  );
-
-  const forecast = useMemo(() => buildForecast(allPatternsForForecast, forecastMonths), [allPatternsForForecast, forecastMonths]);
-
-  const forecastWithBalance = useMemo(() => {
-    let balance = currentBalance;
-    return [...forecast.entries()].map(([monthStr, monthPatterns]) => {
-      const expenses = monthPatterns.reduce((s, p) => s + p.avgAmount, 0);
-      balance -= expenses;
-      return { monthStr, monthPatterns, expenses, balanceAtEnd: balance };
-    });
-  }, [forecast, currentBalance]);
-
-  async function doSaveManual(updated: ManualRecurring[]) {
-    setManual(updated);
-    await saveManualRecurring(updated);
-  }
-
-  function openAdd() {
-    setEditingId("new");
-    setForm({ label: "", category: "misc", amount: 0, frequency: "mensuel", nextPayment: new Date().toISOString().slice(0, 10), active: true });
-  }
-
-  function openEdit(m: ManualRecurring) {
-    setEditingId(m.id);
-    setForm({ ...m });
-  }
-
-  function closeForm() { setEditingId(null); setForm({}); }
-
-  async function handleSave() {
-    if (!form.label || !form.amount || !form.nextPayment) return;
-    if (editingId === "new") {
-      const entry: ManualRecurring = {
-        id: `manual_${Date.now()}`,
-        label: form.label!,
-        category: form.category ?? "misc",
-        amount: Number(form.amount),
-        frequency: form.frequency ?? "mensuel",
-        nextPayment: form.nextPayment!,
-        active: true,
-      };
-      await doSaveManual([...manual, entry]);
-    } else {
-      await doSaveManual(manual.map((m) => (m.id === editingId ? ({ ...m, ...form } as ManualRecurring) : m)));
-    }
-    closeForm();
-  }
-
-  async function handleDelete(id: string) { await doSaveManual(manual.filter((m) => m.id !== id)); }
-  async function handleToggle(id: string) { await doSaveManual(manual.map((m) => (m.id === id ? { ...m, active: !m.active } : m))); }
-
-  if (loading) {
-    return <div className="text-vscode-muted text-sm p-6">Analyse en cours…</div>;
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-auto p-6 gap-6">
-      <div className="flex items-baseline gap-4">
-        <h2 className="text-vscode-text text-sm font-semibold">Frais récurrents</h2>
-        <span className="text-vscode-muted text-xs">
-          {patterns.length} auto · {manual.length} manuels · {transactions.filter((t) => t.amount_ttc < 0).length} dépenses
-        </span>
-      </div>
-
-      {/* ── Résumé ─────────────────────────────────────────────────── */}
-      <div className="bg-vscode-panel border border-vscode-border rounded-lg p-4 flex items-center gap-6 flex-wrap">
-        <div>
-          <div className="text-vscode-muted text-[10px] uppercase tracking-wide mb-0.5">Frais fixes / mois</div>
-          <div className="text-2xl font-bold text-red-400">{totalMonthly.toFixed(2)} €</div>
-        </div>
-        <div className="h-8 w-px bg-vscode-border" />
-        <div>
-          <div className="text-vscode-muted text-[10px] uppercase tracking-wide mb-0.5">Postes mensuels</div>
-          <div className="text-lg font-semibold text-vscode-text">{monthlyPatterns.length + manualMonthlyCount}</div>
-        </div>
-        <div className="h-8 w-px bg-vscode-border" />
-        <div>
-          <div className="text-vscode-muted text-[10px] uppercase tracking-wide mb-0.5">Frais annuels estimés</div>
-          <div className="text-lg font-semibold text-vscode-text">{(totalMonthly * 12).toFixed(0)} €</div>
-        </div>
-        <div className="h-8 w-px bg-vscode-border" />
-        <div>
-          <div className="text-vscode-muted text-[10px] uppercase tracking-wide mb-0.5">Solde actuel estimé</div>
-          <div className={`text-lg font-semibold ${currentBalance >= 0 ? "text-green-400" : "text-red-400"}`}>
-            {currentBalance >= 0 ? "+" : ""}{currentBalance.toFixed(2)} €
-          </div>
-        </div>
-      </div>
-
-      {/* ── Frais manuels ──────────────────────────────────────────── */}
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">
-            Frais manuels ({manual.length})
-          </h3>
-          <button
-            onClick={openAdd}
-            disabled={editingId !== null}
-            className="text-[10px] px-2 py-0.5 rounded bg-vscode-accent text-white hover:bg-blue-600 disabled:opacity-40"
-          >
-            ＋ Ajouter
-          </button>
-        </div>
-
-        {editingId !== null && (
-          <div className="border border-vscode-accent rounded-lg p-3 mb-2 bg-blue-900/10 flex flex-wrap gap-2 items-end">
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-vscode-muted">Libellé</label>
-              <input
-                className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded w-48 focus:outline-none focus:border-vscode-accent"
-                value={form.label ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                placeholder="ex: Loyer bureau"
-              />
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-vscode-muted">Montant (€)</label>
-              <input
-                type="number"
-                className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded w-24 focus:outline-none focus:border-vscode-accent"
-                value={form.amount ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
-                min={0} step={0.01}
-              />
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-vscode-muted">Catégorie</label>
-              <select
-                className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded focus:outline-none"
-                value={form.category ?? "misc"}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as Category }))}
-              >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-vscode-muted">Fréquence</label>
-              <select
-                className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded focus:outline-none"
-                value={form.frequency ?? "mensuel"}
-                onChange={(e) => setForm((f) => ({ ...f, frequency: e.target.value as Frequency }))}
-              >
-                <option value="mensuel">Mensuel</option>
-                <option value="trimestriel">Trimestriel</option>
-                <option value="annuel">Annuel</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] text-vscode-muted">Prochain paiement</label>
-              <input
-                type="date"
-                className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded focus:outline-none focus:border-vscode-accent"
-                value={form.nextPayment ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, nextPayment: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                disabled={!form.label || !form.amount}
-                className="text-[10px] px-3 py-1 rounded bg-vscode-accent text-white hover:bg-blue-600 disabled:opacity-40"
-              >
-                Enregistrer
-              </button>
-              <button
-                onClick={closeForm}
-                className="text-[10px] px-3 py-1 rounded border border-vscode-border text-vscode-muted hover:text-vscode-text"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        )}
-
-        {manual.length === 0 && editingId === null ? (
-          <p className="text-[11px] text-vscode-muted italic">
-            Aucun frais manuel. Cliquez sur « ＋ Ajouter » pour définir un loyer ou un abonnement non détecté automatiquement.
-          </p>
-        ) : manual.length > 0 && (
-          <div className="border border-vscode-border rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-vscode-panel border-b border-vscode-border">
-                <tr>
-                  {["", "Libellé", "Catégorie", "Montant", "Fréquence", "Prochain", ""].map((h, i) => (
-                    <th key={i} className="text-left px-3 py-2 text-vscode-muted font-normal">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {manual.map((m) => {
-                  const isOverdue = m.nextPayment <= new Date().toISOString().slice(0, 10);
-                  return (
-                    <tr key={m.id} className={`border-b border-vscode-border last:border-0 hover:bg-vscode-panel/50 ${m.active ? "" : "opacity-40"}`}>
-                      <td className="px-3 py-1.5 w-6">
-                        <input type="checkbox" checked={m.active} onChange={() => handleToggle(m.id)} className="accent-vscode-accent" />
-                      </td>
-                      <td className="px-3 py-1.5 max-w-[200px] truncate" title={m.label}>{m.label}</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${CATEGORY_COLORS[m.category] ?? "bg-gray-700 text-gray-300"}`}>{m.category}</span>
-                      </td>
-                      <td className="px-3 py-1.5 font-mono text-red-400">{m.amount.toFixed(2)} €</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${FREQ_COLOR[m.frequency]}`}>{FREQ_LABEL[m.frequency]}</span>
-                      </td>
-                      <td className={`px-3 py-1.5 ${isOverdue ? "text-yellow-400 font-medium" : "text-vscode-text"}`}>
-                        {isOverdue ? "⚠ " : ""}{m.nextPayment}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex gap-2">
-                          <button onClick={() => openEdit(m)} disabled={editingId !== null} className="text-vscode-muted hover:text-vscode-text disabled:opacity-30">✏</button>
-                          <button onClick={() => handleDelete(m.id)} disabled={editingId !== null} className="text-vscode-muted hover:text-red-400 disabled:opacity-30">✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* ── Détection automatique ──────────────────────────────────── */}
-      {patterns.length === 0 ? (
-        <div className="text-center text-vscode-muted py-8 text-sm border border-vscode-border rounded-lg">
-          Aucune récurrence détectée automatiquement.<br />
-          <span className="text-[11px]">Il faut au moins 2 transactions avec le même libellé espacées de 20–400 jours.</span>
-        </div>
-      ) : (
-        <>
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">Auto-détectés mensuels ({monthlyPatterns.length})</h3>
-              {dismissed.size > 0 && (
-                <button onClick={restoreDismissed} className="text-[10px] text-vscode-muted hover:text-vscode-text">
-                  Restaurer {dismissed.size} masqué{dismissed.size > 1 ? "s" : ""}
-                </button>
-              )}
-            </div>
-            <div className="border border-vscode-border rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-vscode-panel border-b border-vscode-border">
-                  <tr>
-                    {["Libellé", "Catégorie", "Moy. / occur.", "Fréquence", "Dernière", "Prochaine", "Occur.", ""].map((h) => (
-                      <th key={h} className="text-left px-3 py-2 text-vscode-muted font-normal">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthlyPatterns.map((p) => {
-                    const isOverdue = p.nextExpected <= new Date().toISOString().slice(0, 10);
-                    return (
-                      <tr key={p.key} className="border-b border-vscode-border hover:bg-vscode-panel last:border-0">
-                        <td className="px-3 py-1.5 max-w-[220px] truncate" title={p.label}>{p.label}</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${CATEGORY_COLORS[p.category] ?? "bg-gray-700 text-gray-300"}`}>{p.category}</span>
-                        </td>
-                        <td className="px-3 py-1.5 font-mono text-red-400">{p.avgAmount.toFixed(2)} €</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${FREQ_COLOR[p.frequency]}`}>{FREQ_LABEL[p.frequency]}</span>
-                        </td>
-                        <td className="px-3 py-1.5 text-vscode-muted">{p.lastDate}</td>
-                        <td className={`px-3 py-1.5 ${isOverdue ? "text-yellow-400 font-medium" : "text-vscode-text"}`}>
-                          {isOverdue ? "⚠ " : ""}{p.nextExpected}
-                        </td>
-                        <td className="px-3 py-1.5 text-vscode-muted">{p.occurrences}×</td>
-                        <td className="px-3 py-1.5">
-                          <button onClick={() => dismissPattern(p.key)} title="Retirer" className="text-vscode-muted hover:text-red-400 transition-colors">✕</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {otherPatterns.length > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide mb-2">Trimestriels / Annuels ({otherPatterns.length})</h3>
-              <div className="border border-vscode-border rounded-lg overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-vscode-panel border-b border-vscode-border">
-                    <tr>
-                      {["Libellé", "Catégorie", "Moy. / occur.", "Fréquence", "Prochaine", "Occur.", ""].map((h) => (
-                        <th key={h} className="text-left px-3 py-2 text-vscode-muted font-normal">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {otherPatterns.map((p) => (
-                      <tr key={p.key} className="border-b border-vscode-border hover:bg-vscode-panel last:border-0">
-                        <td className="px-3 py-1.5 max-w-[220px] truncate" title={p.label}>{p.label}</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${CATEGORY_COLORS[p.category] ?? "bg-gray-700 text-gray-300"}`}>{p.category}</span>
-                        </td>
-                        <td className="px-3 py-1.5 font-mono text-red-400">{p.avgAmount.toFixed(2)} €</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${FREQ_COLOR[p.frequency]}`}>{FREQ_LABEL[p.frequency]}</span>
-                        </td>
-                        <td className="px-3 py-1.5 text-vscode-text">{p.nextExpected}</td>
-                        <td className="px-3 py-1.5 text-vscode-muted">{p.occurrences}×</td>
-                        <td className="px-3 py-1.5">
-                          <button onClick={() => dismissPattern(p.key)} title="Retirer" className="text-vscode-muted hover:text-red-400 transition-colors">✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* ── Prévisionnel configurable ─────────────────────────── */}
-      {allPatternsForForecast.length > 0 && (
-        <section>
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">Prévisionnel</h3>
-            <div className="flex gap-1">
-              {([6, 12] as const).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setForecastMonths(n)}
-                  className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
-                    forecastMonths === n
-                      ? "bg-vscode-accent text-white"
-                      : "border border-vscode-border text-vscode-muted hover:text-vscode-text"
-                  }`}
-                >
-                  {n} mois
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className={`grid gap-3 ${forecastMonths === 12 ? "grid-cols-4" : "grid-cols-3"}`}>
-            {forecastWithBalance.map(({ monthStr, monthPatterns, expenses, balanceAtEnd }) => {
-              const [year, mon] = monthStr.split("-");
-              const isCurrentMonth = monthStr === new Date().toISOString().slice(0, 7);
-              const balanceColor = balanceAtEnd >= 0 ? "text-green-400" : "text-red-400";
-              return (
-                <div key={monthStr} className={`border rounded-lg p-3 ${isCurrentMonth ? "border-vscode-accent bg-blue-900/10" : "border-vscode-border bg-vscode-panel"}`}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-xs font-semibold text-vscode-text">
-                      {MONTHS_FR[parseInt(mon, 10) - 1]} {year}
-                      {isCurrentMonth && <span className="ml-1 text-[10px] text-vscode-accent">← now</span>}
-                    </span>
-                    <span className="text-xs font-mono text-red-400">{expenses > 0 ? `−${expenses.toFixed(0)} €` : "—"}</span>
-                  </div>
-                  {monthPatterns.length === 0 ? (
-                    <div className="text-[10px] text-vscode-muted italic">Aucun frais prévu</div>
-                  ) : (
-                    <ul className="space-y-0.5">
-                      {monthPatterns.map((p, i) => (
-                        <li key={i} className="flex items-center justify-between text-[10px]">
-                          <span className="text-vscode-muted truncate max-w-[130px]" title={p.label}>{p.label}</span>
-                          <span className="text-red-400 font-mono shrink-0 ml-1">{p.avgAmount.toFixed(2)} €</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="mt-2 pt-2 border-t border-vscode-border flex justify-between text-[10px]">
-                    <span className="text-vscode-muted">Solde estimé</span>
-                    <span className={`font-mono font-semibold ${balanceColor}`}>
-                      {balanceAtEnd >= 0 ? "+" : ""}{balanceAtEnd.toFixed(0)} €
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-    </div>
-  );
+    {view === "calendar" && <section><div className="flex items-center justify-between mb-3"><div><h2 className="text-xs font-semibold uppercase tracking-wide text-vscode-muted">Projection avec le scénario courant</h2><p className="text-[10px] text-vscode-muted mt-1">Recettes : moyenne observée sur les trois derniers mois. Dépenses : échéances récurrentes confirmées et détectées.</p></div><div className="flex gap-1">{([3, 6, 12] as const).map((months) => <button key={months} onClick={() => setHorizon(months)} className={`px-2 py-1 text-[10px] rounded ${horizon === months ? "bg-vscode-accent text-white" : "border border-vscode-border text-vscode-muted"}`}>{months} mois</button>)}</div></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{forecast.map((month) => <article key={month.month} className={`border rounded-lg p-3 ${alert.enabled && month.balance < alert.threshold ? "border-red-700 bg-red-900/10" : "border-vscode-border bg-vscode-panel"}`}><div className="flex justify-between"><strong className="text-sm text-vscode-text">{month.month}</strong><span className={month.balance >= 0 ? "text-green-400 text-sm" : "text-red-400 text-sm"}>{euros(month.balance)}</span></div><div className="grid grid-cols-2 gap-2 my-2 text-[10px]"><span className="text-green-400">Recettes moy. +{euros(month.revenue)}</span><span className="text-red-400 text-right">Frais −{euros(month.expenses)}</span></div><ul className="border-t border-vscode-border pt-2 space-y-1">{month.items.map((item) => <li key={item.key} className="flex justify-between text-[10px] text-vscode-muted"><span className="truncate">{item.label}</span><span className="ml-2 shrink-0">{euros(item.amount)}</span></li>)}{month.items.length === 0 && <li className="text-[10px] text-vscode-muted italic">Aucune échéance</li>}</ul></article>)}</div><div className={`mt-4 border rounded-lg p-4 ${savingsMonthly >= 0 ? "border-green-800 bg-green-900/10" : "border-red-800 bg-red-900/10"}`}><p className="text-xs text-vscode-muted">Effet du scénario sur 12 mois</p><p className={`text-xl font-semibold mt-1 ${savingsMonthly >= 0 ? "text-green-400" : "text-red-400"}`}>{euros(Math.abs(savingsMonthly) * 12)} {savingsMonthly >= 0 ? "économisés" : "de surcoût"}</p><p className="text-[10px] text-vscode-muted mt-1">Coût structurel simulé : {euros(scenarioMonthly)}/mois contre {euros(baseMonthly)}/mois actuellement.</p></div></section>}
+  </div>;
 }
