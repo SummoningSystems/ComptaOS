@@ -28,7 +28,7 @@ export function PdfImporter() {
       setRawText(result.rawText);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur lors du traitement";
-      setError(msg.includes("503") ? "Clé MISTRAL_API_KEY ou ANTHROPIC_API_KEY non configurée" : msg);
+      setError(msg.includes("503") ? "Le service OCR local est indisponible. Tu peux saisir la facture manuellement." : msg);
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export function PdfImporter() {
       <div className="flex items-center justify-between">
         <h2 className="text-vscode-text text-sm font-semibold">OCR Factures PDF</h2>
         <div className="text-[10px] text-vscode-muted bg-vscode-panel px-2 py-0.5 rounded border border-vscode-border">
-          Mistral OCR + Claude
+          OCR local — aucune facture envoyée à un service payant
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export function PdfImporter() {
             {isDragActive ? "Déposez la facture PDF…" : "Glissez-déposez une facture PDF"}
           </p>
           <p className="text-vscode-muted text-xs mt-1">
-            {loading ? "Extraction OCR en cours…" : "Extraction automatique via IA"}
+            {loading ? "Extraction OCR locale en cours…" : "Extraire avec l’OCR local"}
           </p>
           {loading && (
             <div className="mt-4 flex justify-center gap-1">

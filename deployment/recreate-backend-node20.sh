@@ -2,36 +2,31 @@
 set -euo pipefail
 
 CONTAINER=comptaos-backend
-BACKUP_CONTAINER=comptaos-backend-node18-backup
 NODE_IMAGE=node:20.19.5-alpine
 REPO="$HOME/apps/comptaos"
 
 current_image=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER")
-if [ "$current_image" = "$NODE_IMAGE" ]; then
+has_local_ocr=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | grep -c '^OCR_LOCAL_URL=http://comptaos-ocr:8000$' || true)
+if [ "$current_image" = "$NODE_IMAGE" ] && [ "$has_local_ocr" -eq 1 ]; then
   docker restart "$CONTAINER" >/dev/null
-  echo "$CONTAINER redémarré avec $NODE_IMAGE"
+  echo "$CONTAINER redémarré avec OCR local actif"
   exit 0
-fi
-
-if docker container inspect "$BACKUP_CONTAINER" >/dev/null 2>&1; then
-  echo "Le conteneur de rollback $BACKUP_CONTAINER existe déjà; migration refusée." >&2
-  exit 1
 fi
 
 env_file=$(mktemp /tmp/comptaos-env.XXXXXX)
 chmod 600 "$env_file"
 trap 'rm -f "$env_file"' EXIT
 docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" \
-  | grep -Ev '^(PATH|NODE_VERSION|YARN_VERSION)=' > "$env_file"
+  | grep -Ev '^(PATH|NODE_VERSION|YARN_VERSION|OCR_LOCAL_URL|OCR_REMOTE_FALLBACK)=' > "$env_file"
 
-docker pull "$NODE_IMAGE" >/dev/null
-docker rename "$CONTAINER" "$BACKUP_CONTAINER"
-docker stop "$BACKUP_CONTAINER" >/dev/null
+backup_container="comptaos-backend-rollback-$(date +%Y%m%d%H%M%S)"
+docker rename "$CONTAINER" "$backup_container"
+docker stop "$backup_container" >/dev/null
 
 rollback() {
-  echo "Échec Node 20, restauration du conteneur Node 18." >&2
+  echo "Échec de la recréation, restauration du backend précédent." >&2
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-  docker rename "$BACKUP_CONTAINER" "$CONTAINER"
+  docker rename "$backup_container" "$CONTAINER"
   docker start "$CONTAINER" >/dev/null
 }
 trap 'rollback; rm -f "$env_file"' ERR
@@ -41,6 +36,8 @@ docker run -d \
   --restart unless-stopped \
   --network tipforgood_tipforgood-network \
   --env-file "$env_file" \
+  -e OCR_LOCAL_URL=http://comptaos-ocr:8000 \
+  -e OCR_REMOTE_FALLBACK=false \
   -v "$REPO/backend:/app" \
   -v "$REPO/workspace:/workspace" \
   -w /app \
@@ -50,11 +47,11 @@ docker run -d \
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if docker exec "$CONTAINER" wget -q -O /dev/null http://127.0.0.1:3003/api/health; then
     trap 'rm -f "$env_file"' EXIT
-    echo "$CONTAINER migré vers $NODE_IMAGE; rollback conservé dans $BACKUP_CONTAINER"
+    echo "$CONTAINER recréé; rollback conservé dans $backup_container"
     exit 0
   fi
   sleep 2
 done
 
-echo "Le backend Node 20 n'a pas passé son health check." >&2
+echo "Le backend n'a pas passé son health check." >&2
 false

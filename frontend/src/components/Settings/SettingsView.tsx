@@ -450,20 +450,20 @@ export function SettingsView() {
         <GitSyncPanel />
       </section>
 
-      {/* OCR Mistral */}
+      {/* OCR local et secours distant facultatif */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-vscode-text border-b border-vscode-border pb-2">
-          OCR Factures (Mistral)
+          OCR local des justificatifs (Mistral facultatif)
         </h2>
         <p className="text-xs text-vscode-muted">
-          L'OCR utilise l'API Mistral pour extraire le texte des PDF, puis votre fournisseur IA pour structurer les données.
-          Obtenez une clé sur{" "}
+          PaddleOCR traite gratuitement les justificatifs sur le serveur ComptaOS. La clé Mistral ci-dessous est facultative et reste inutilisée tant que le recours distant est désactivé.
+          Pour activer volontairement ce secours, obtenez une clé sur{" "}
           <a href="https://console.mistral.ai" target="_blank" rel="noreferrer" className="text-vscode-accent underline">
             console.mistral.ai
           </a>.
         </p>
         <div className="space-y-1">
-          <label className="text-xs text-vscode-muted uppercase tracking-wide">Clé API Mistral (OCR)</label>
+          <label className="text-xs text-vscode-muted uppercase tracking-wide">Clé API Mistral facultative</label>
           <div className="relative">
             <input
               type={showMistralKey ? "text" : "password"}

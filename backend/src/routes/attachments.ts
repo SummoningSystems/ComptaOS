@@ -7,6 +7,7 @@ import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
 import { extractReceiptFromDocument, type ReceiptProposal } from "../services/ocrService.js";
 import { loadAiConfig } from "../services/settingsService.js";
+import { localOcrUrl } from "../services/localOcrService.js";
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -58,8 +59,8 @@ export async function attachmentsRoutes(app: FastifyInstance) {
 
       let ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; message?: string } = { status: "unavailable", message: "OCR non configuré" };
       const aiConfig = loadAiConfig();
-      const hasOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY);
-      if (hasOcr && aiConfig?.apiKey) {
+      const hasRemoteOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY) && Boolean(aiConfig?.apiKey);
+      if (localOcrUrl() || hasRemoteOcr) {
         try {
           const result = await extractReceiptFromDocument(buffer, data.mimetype);
           ocr = { status: "success", proposal: result.proposal };

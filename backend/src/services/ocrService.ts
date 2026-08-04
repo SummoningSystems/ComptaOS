@@ -3,6 +3,8 @@ import { Category, Invoice } from "../types/index.js";
 import { nanoid } from "../utils/id.js";
 import { loadAiConfig } from "./settingsService.js";
 import { callAi } from "./aiService.js";
+import { extractTextLocally, localOcrUrl } from "./localOcrService.js";
+import { parseReceiptTextLocally } from "./receiptParser.js";
 
 function getMistralClient(): Mistral {
   const config = loadAiConfig();
@@ -42,7 +44,7 @@ export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
   return { supplier: typeof input.supplier === "string" ? input.supplier.trim() : "Inconnu", date: typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : undefined, invoiceRef: typeof input.invoice_ref === "string" ? input.invoice_ref.trim() : undefined, amountHt: Number.isFinite(amountHt) ? round2(Math.abs(amountHt)) : 0, amountTtc: Number.isFinite(amountTtc) ? round2(Math.abs(amountTtc)) : 0, category, vatSplits, confidence };
 }
 
-async function extractText(buffer: Buffer, mimetype: string): Promise<string> {
+async function extractTextRemotely(buffer: Buffer, mimetype: string): Promise<string> {
   const mistral = getMistralClient();
   const base64 = buffer.toString("base64");
   const document = mimetype === "application/pdf"
@@ -57,7 +59,7 @@ async function extractText(buffer: Buffer, mimetype: string): Promise<string> {
 /**
  * Parse le texte extrait par OCR en structure de facture via le fournisseur IA configuré.
  */
-async function parseReceiptText(rawText: string): Promise<ReceiptProposal> {
+async function parseReceiptTextRemotely(rawText: string): Promise<ReceiptProposal> {
   const system = `Tu extrais fidèlement les données d'un justificatif comptable français. Réponds UNIQUEMENT avec un JSON valide, sans inventer les valeurs illisibles.`;
   const prompt = `Analyse ce ticket ou cette facture. Retourne ce JSON exact :
 {
@@ -86,8 +88,17 @@ ${rawText.slice(0, 3000)}`;
 }
 
 export async function extractReceiptFromDocument(buffer: Buffer, mimetype: string): Promise<{ proposal: ReceiptProposal; rawText: string }> {
-  const rawText = await extractText(buffer, mimetype);
-  return { proposal: await parseReceiptText(rawText), rawText };
+  if (localOcrUrl()) {
+    try {
+      const rawText = await extractTextLocally(buffer, mimetype);
+      const proposal = parseReceiptTextLocally(rawText);
+      if (proposal.confidence !== "low" || process.env.OCR_REMOTE_FALLBACK !== "true") return { proposal, rawText };
+    } catch (error) {
+      if (process.env.OCR_REMOTE_FALLBACK !== "true") throw error;
+    }
+  }
+  const rawText = await extractTextRemotely(buffer, mimetype);
+  return { proposal: await parseReceiptTextRemotely(rawText), rawText };
 }
 
 /**

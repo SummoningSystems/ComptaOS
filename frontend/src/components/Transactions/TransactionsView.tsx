@@ -594,7 +594,7 @@ export function TransactionsView() {
       const uploadedMb = (compression.uploadedBytes / 1024 / 1024).toFixed(1);
       setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée.` : "Pièce justificative enregistrée." });
       if (ocr.status === "success" && ocr.proposal) setOcrReview({ transaction, proposal: ocr.proposal });
-      else if (ocr.status === "unavailable") setAttachmentMessage({ type: "success", text: "Pièce enregistrée. OCR non configuré : la saisie manuelle reste disponible." });
+      else if (ocr.status === "unavailable") setAttachmentMessage({ type: "success", text: "Pièce enregistrée. OCR local indisponible : la saisie manuelle reste disponible." });
       else if (ocr.status === "error") setAttachmentMessage({ type: "success", text: "Pièce enregistrée, mais l'analyse OCR a échoué. La saisie manuelle reste disponible." });
     } catch (error) {
       setAttachmentMessage({ type: "error", text: error instanceof Error ? error.message : "Erreur lors de l'envoi de la pièce jointe." });
