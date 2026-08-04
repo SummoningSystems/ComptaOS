@@ -716,7 +716,7 @@ export function TransactionsView() {
 
   async function exportFec() {
     const year = yearFilter || dateFrom.slice(0, 4) || new Date().getFullYear().toString();
-    const { data } = await api.get(`/transactions/fec?year=${year}`, { responseType: "blob" });
+    const { data } = await api.get(`/accounting/fec?year=${year}`, { responseType: "blob" });
     const blob = new Blob([data], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

@@ -10,74 +10,11 @@ import { Transaction, Category } from "../types/index.js";
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 
-const CATEGORY_PCG: Record<Category, [string, string]> = {
-  hosting:      ["616200", "Hébergement web"],
-  software:     ["615600", "Logiciels"],
-  salary:       ["641100", "Salaires"],
-  travel:       ["625100", "Voyages et déplacements"],
-  restaurant:   ["625700", "Réceptions"],
-  food:         ["606000", "Achats non stockés"],
-  taxes:        ["447900", "Impôts et taxes"],
-  equipment:    ["218300", "Matériel informatique"],
-  subscription: ["622600", "Abonnements"],
-  rent:         ["613200", "Loyers"],
-  legal:        ["622200", "Honoraires"],
-  insurance:    ["616000", "Primes d'assurance"],
-  misc:         ["628800", "Charges diverses"],
-};
-
 export async function transactionsRoutes(app: FastifyInstance) {
   // GET /api/transactions
   app.get("/", async (_req, reply) => {
     const txns = await loadAllTransactions();
     return reply.send(txns);
-  });
-
-  // GET /api/transactions/fec?year=2025 — export Fichier des Écritures Comptables
-  app.get<{ Querystring: { year?: string } }>("/fec", async (req, reply) => {
-    const year = req.query.year ?? new Date().getFullYear().toString();
-    const txns = (await loadAllTransactions())
-      .filter((t) => t.date.startsWith(year) && t.status !== "rejected")
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const BANK_NUM = "512100";
-    const BANK_LIB = "Compte bancaire";
-    const REV_NUM  = "706000";
-    const REV_LIB  = "Prestations de services";
-
-    const fmt     = (n: number) => Math.abs(n).toFixed(2);
-    const fmtDate = (d: string) => d.replace(/-/g, "");
-    const esc     = (s: string) => s.replace(/[|\r\n]/g, " ").slice(0, 99);
-
-    const header = "JournalCode|JournalLib|EcritureNum|EcritureDate|CompteNum|CompteLib|CompAuxNum|CompAuxLib|PieceRef|PieceDate|EcritureLib|Debit|Credit|EcritureLet|DateLet|ValidDate|Montantdevise|Idevise";
-    const lines: string[] = [header];
-
-    let num = 1;
-    for (const t of txns) {
-      const date  = fmtDate(t.date);
-      const label = esc(t.label);
-      const ref   = t.invoiceRef ?? t.id;
-      const [catNum, catLib] = CATEGORY_PCG[t.category] ?? ["628800", "Charges diverses"];
-      const abs   = fmt(t.amount_ttc);
-      const n     = String(num).padStart(6, "0");
-
-      if (t.amount_ttc < 0) {
-        // Dépense: débit compte de charge, crédit banque
-        lines.push(`AC|Achats|${n}|${date}|${catNum}|${catLib}|||${ref}|${date}|${label}|${abs}|0.00||||${abs}|EUR`);
-        lines.push(`AC|Achats|${n}|${date}|${BANK_NUM}|${BANK_LIB}|||${ref}|${date}|${label}|0.00|${abs}||||${abs}|EUR`);
-      } else {
-        // Recette: débit banque, crédit produit
-        lines.push(`VT|Ventes|${n}|${date}|${BANK_NUM}|${BANK_LIB}|||${ref}|${date}|${label}|${abs}|0.00||||${abs}|EUR`);
-        lines.push(`VT|Ventes|${n}|${date}|${REV_NUM}|${REV_LIB}|||${ref}|${date}|${label}|0.00|${abs}||||${abs}|EUR`);
-      }
-      num++;
-    }
-
-    const content = lines.join("\r\n") + "\r\n";
-    return reply
-      .header("Content-Type", "text/plain; charset=utf-8")
-      .header("Content-Disposition", `attachment; filename="FEC_${year}.txt"`)
-      .send(content);
   });
 
   // GET /api/transactions/smart-categorize — suggestions par pattern matching (sans LLM)

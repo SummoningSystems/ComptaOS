@@ -170,3 +170,72 @@ export function saveCompanyProfile(profile: CompanyProfile): void {
   ensureDir();
   atomicWriteFileSync(join(getSettingsDir(), "company_profile.json"), JSON.stringify(profile, null, 2));
 }
+
+export interface AccountingAccount {
+  number: string;
+  label: string;
+}
+
+export interface AccountingConfig {
+  bank: AccountingAccount;
+  revenue: AccountingAccount;
+  vatDeductible: AccountingAccount;
+  vatCollected: AccountingAccount;
+  categories: Record<Category, AccountingAccount>;
+}
+
+const DEFAULT_CATEGORY_ACCOUNTS: Record<Category, AccountingAccount> = {
+  hosting: { number: "626000", label: "Frais postaux et télécommunications" },
+  software: { number: "615600", label: "Maintenance et logiciels" },
+  salary: { number: "641000", label: "Rémunérations du personnel" },
+  travel: { number: "625100", label: "Voyages et déplacements" },
+  restaurant: { number: "625700", label: "Réceptions" },
+  food: { number: "625700", label: "Réceptions" },
+  taxes: { number: "635000", label: "Autres impôts et taxes" },
+  equipment: { number: "606300", label: "Petit équipement" },
+  subscription: { number: "628100", label: "Cotisations" },
+  rent: { number: "613200", label: "Locations immobilières" },
+  legal: { number: "622600", label: "Honoraires" },
+  insurance: { number: "616000", label: "Primes d'assurances" },
+  misc: { number: "658000", label: "Charges diverses de gestion courante" },
+};
+
+export function defaultAccountingConfig(): AccountingConfig {
+  return {
+    bank: { number: "512100", label: "Banque" },
+    revenue: { number: "706000", label: "Prestations de services" },
+    vatDeductible: { number: "445660", label: "TVA déductible sur autres biens et services" },
+    vatCollected: { number: "445710", label: "TVA collectée" },
+    categories: structuredClone(DEFAULT_CATEGORY_ACCOUNTS),
+  };
+}
+
+export function loadAccountingConfig(): AccountingConfig {
+  const defaults = defaultAccountingConfig();
+  const file = join(getSettingsDir(), "accounting_config.json");
+  if (!existsSync(file)) return defaults;
+  try {
+    const saved = JSON.parse(readFileSync(file, "utf-8")) as Partial<AccountingConfig>;
+    const mergeAccount = (fallback: AccountingAccount, value: unknown): AccountingAccount => {
+      if (!value || typeof value !== "object") return fallback;
+      const candidate = value as Partial<AccountingAccount>;
+      return { number: typeof candidate.number === "string" ? candidate.number : fallback.number, label: typeof candidate.label === "string" ? candidate.label : fallback.label };
+    };
+    const categories = { ...defaults.categories };
+    for (const category of Object.keys(categories) as Category[]) categories[category] = mergeAccount(defaults.categories[category], saved.categories?.[category]);
+    return {
+      bank: mergeAccount(defaults.bank, saved.bank),
+      revenue: mergeAccount(defaults.revenue, saved.revenue),
+      vatDeductible: mergeAccount(defaults.vatDeductible, saved.vatDeductible),
+      vatCollected: mergeAccount(defaults.vatCollected, saved.vatCollected),
+      categories,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveAccountingConfig(config: AccountingConfig): void {
+  ensureDir();
+  atomicWriteFileSync(join(getSettingsDir(), "accounting_config.json"), JSON.stringify(config, null, 2));
+}

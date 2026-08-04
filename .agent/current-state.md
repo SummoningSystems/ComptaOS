@@ -16,6 +16,7 @@ Le 2026-07-26, CTX a été initialisé avec 180 fichiers indexés. Les six docum
 - 57 tests unitaires backend réussis sur 9 fichiers.
 - 22 tests unitaires frontend réussis.
 - 13 tests E2E Playwright réussis dans un workspace éphémère, dont une recette comptable complète, une ventilation multi-TVA et le rapprochement bancaire guidé.
+- Le 2026-08-04, le dossier expert-comptable a été ajouté : écritures en partie double, lignes HT/TVA/TTC, comptes PCG configurables, balance générale, anomalies bloquantes, FEC contrôlé et archive de justificatifs. Le build complet, 61 tests backend, 22 tests frontend et un smoke test API FEC/ZIP sont réussis ; l'audit backend signale zéro vulnérabilité.
 
 ## Problèmes et risques observés
 
