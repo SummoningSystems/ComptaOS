@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+pdfjs.GlobalWorkerOptions.workerSrc = `${import.meta.env.BASE_URL}assets/pdf.worker.min.js`;
 
 export function PdfPreview({ url, title }: { url: string; title: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
