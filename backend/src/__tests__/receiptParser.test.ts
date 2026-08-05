@@ -19,4 +19,10 @@ describe("analyse comptable locale d'un ticket", () => {
     expect(result).toMatchObject({ supplier: "Scaleaway", invoiceRef: "5419116", amountHt: 72.99, amountTtc: 87.59, confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 20, amountTtc: 87.59 }]);
   });
+
+  it("reconstruit un ticket multi-TVA lu verticalement", () => {
+    const result = parseReceiptTextLocally(`YANKEE GRILL\nHT\nTVA\nTTC\nTVA 10 %\n16,18\n1,62\n17,80\nTVA 20 %\n7,50\n1,50\n9,00\nTOTAL\n26,80\nEUR`);
+    expect(result).toMatchObject({ supplier: "YANKEE GRILL", amountHt: 23.68, amountTtc: 26.8, category: "restaurant", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountTtc: 17.8 }, { rate: 20, amountTtc: 9 }]);
+  });
 });
