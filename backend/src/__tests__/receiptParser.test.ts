@@ -13,4 +13,10 @@ describe("analyse comptable locale d'un ticket", () => {
     expect(result.vatSplits).toEqual([]);
     expect(result.confidence).not.toBe("high");
   });
+
+  it("associe correctement un récapitulatif PDF lu colonne par colonne", () => {
+    const result = parseReceiptTextLocally(`Scaleaway\nBill 5419116\nDesignation\nTotal HT\nTaux TVA\nTotal TVA\nTotal TTC\n72,99 Euros\n20,00 %\n14,60 Euros\n87,59 Euros`);
+    expect(result).toMatchObject({ supplier: "Scaleaway", invoiceRef: "5419116", amountHt: 72.99, amountTtc: 87.59, confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 20, amountTtc: 87.59 }]);
+  });
 });
