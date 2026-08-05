@@ -32,6 +32,7 @@ export interface ReceiptOcrProposal {
   confidence: "high" | "medium" | "low";
 }
 export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; message?: string }
+export interface PendingReceipt { id: string; filename: string; originalName: string; mimetype: string; createdAt: string; ocr: AttachmentOcrResult }
 
 /** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
 export function apiUrl(path: string): string {
@@ -137,6 +138,33 @@ export async function uploadAttachment(
     headers: { "Content-Type": "multipart/form-data" },
   });
   return { ...data, compression };
+}
+
+export async function fetchPendingReceipts(): Promise<PendingReceipt[]> {
+  const { data } = await api.get<PendingReceipt[]>("/attachments/inbox");
+  return data;
+}
+
+export async function uploadPendingReceipt(file: File): Promise<{ receipt: PendingReceipt; compression: CompressionResult }> {
+  let compression: CompressionResult;
+  try {
+    compression = await compressAttachment(file);
+  } catch (error) {
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("Cette photo HEIC ne peut pas être lue par ce navigateur. Choisissez JPEG dans les réglages de l'appareil ou convertissez la photo.");
+    compression = { file, compressed: false, originalBytes: file.size, uploadedBytes: file.size, savedPercent: 0 };
+  }
+  const form = new FormData(); form.append("file", compression.file);
+  const { data } = await api.post<PendingReceipt>("/attachments/inbox", form, { headers: { "Content-Type": "multipart/form-data" } });
+  return { receipt: data, compression };
+}
+
+export async function linkPendingReceipt(receiptId: string, transactionId: string): Promise<{ transaction: Transaction; proposal?: ReceiptOcrProposal }> {
+  const { data } = await api.post<{ transaction: Transaction; proposal?: ReceiptOcrProposal }>(`/attachments/inbox/${receiptId}/link`, { transactionId });
+  return data;
+}
+
+export async function deletePendingReceipt(receiptId: string): Promise<void> {
+  await api.delete(`/attachments/inbox/${receiptId}`);
 }
 
 export async function deleteAttachment(txnId: string, filename: string): Promise<Transaction> {
