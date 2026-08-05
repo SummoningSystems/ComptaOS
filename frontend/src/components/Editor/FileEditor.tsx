@@ -1,25 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
 import { fetchFileContent, saveFileContent } from "../../api/client";
 import { useAppStore } from "../../stores/appStore";
 
 interface FileEditorProps {
   tabId: string;
   path: string;
-}
-
-function detectLanguage(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    yaml: "yaml",
-    yml: "yaml",
-    json: "json",
-    md: "markdown",
-    ts: "typescript",
-    js: "javascript",
-    csv: "plaintext",
-  };
-  return map[ext] ?? "plaintext";
 }
 
 export function FileEditor({ tabId, path }: FileEditorProps) {
@@ -50,10 +35,9 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     return () => { cancelled = true; };
   }, [path]);
 
-  function handleChange(value: string | undefined) {
-    const v = value ?? "";
-    setContent(v);
-    markDirty(tabId, v !== originalRef.current);
+  function handleChange(value: string) {
+    setContent(value);
+    markDirty(tabId, value !== originalRef.current);
   }
 
   async function handleSave() {
@@ -111,25 +95,13 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0">
-        <Editor
-          height="100%"
-          language={detectLanguage(path)}
-          value={content}
-          onChange={handleChange}
-          theme="vs-dark"
-          options={{
-            fontSize: 13,
-            fontFamily: "JetBrains Mono, Consolas, monospace",
-            minimap: { enabled: true },
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            tabSize: 2,
-            renderWhitespace: "selection",
-            bracketPairColorization: { enabled: true },
-          }}
-        />
-      </div>
+      <textarea
+        aria-label={`Contenu de ${path}`}
+        value={content}
+        onChange={(event) => handleChange(event.target.value)}
+        spellCheck={false}
+        className="min-h-0 flex-1 resize-none overflow-auto whitespace-pre border-0 bg-vscode-bg p-3 font-mono text-[13px] leading-5 text-vscode-text outline-none"
+      />
     </div>
   );
 }
