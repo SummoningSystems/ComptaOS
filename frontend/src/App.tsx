@@ -14,6 +14,7 @@ import { SetupView } from "./components/Auth/SetupView";
 import { AcceptInviteView } from "./components/Auth/AcceptInviteView";
 import { fetchAuthStatus, fetchMe, logout, type AuthUser } from "./api/auth";
 import type { TabType } from "./types";
+import { MobileCaptureView } from "./components/Mobile/MobileCaptureView";
 
 const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
@@ -150,6 +151,10 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [showCompanyWizard, setShowCompanyWizard] = useState(false);
   const [wizardCanCancel, setWizardCanCancel] = useState(false);
+  const [showMobileCapture, setShowMobileCapture] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mobile") === "1" || (params.get("desktop") !== "1" && window.matchMedia("(max-width: 767px)").matches);
+  });
   const { tabs, activeTabId, openTab } = useAppStore();
 
   useEffect(() => {
@@ -266,6 +271,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (showMobileCapture) {
+    return <MobileCaptureView onOpenDesktop={() => setShowMobileCapture(false)} onLogout={currentUser ? handleLogout : undefined} />;
   }
 
   return (
