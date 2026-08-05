@@ -11,6 +11,7 @@ vi.mock("../api/client", () => ({
   saveFileContent: (...args: unknown[]) => saveFileContent(...args),
 }));
 vi.mock("../stores/appStore", () => ({ useAppStore: () => ({ markDirty }) }));
+vi.mock("../components/Editor/PdfPreview", () => ({ PdfPreview: ({ url, title }: { url: string; title: string }) => <div data-testid="pdf-preview" data-url={url}>{title}</div> }));
 
 describe("éditeur de fichiers local", () => {
   beforeEach(() => { saveFileContent.mockClear(); markDirty.mockClear(); });
@@ -29,7 +30,7 @@ describe("éditeur de fichiers local", () => {
 
   it("affiche un PDF sans essayer de l'éditer comme du texte", () => {
     render(<FileEditor tabId="receipt" path="attachments/reçu.pdf" />);
-    expect(screen.getByTitle("Aperçu de attachments/reçu.pdf")).toHaveAttribute("src", "/api/files/raw?path=attachments%2Fre%C3%A7u.pdf");
+    expect(screen.getByTestId("pdf-preview")).toHaveAttribute("data-url", "/api/files/raw?path=attachments%2Fre%C3%A7u.pdf");
     expect(screen.queryByRole("button", { name: "Sauvegarder" })).not.toBeInTheDocument();
   });
 });
