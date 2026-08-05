@@ -1,5 +1,16 @@
 import { FastifyInstance } from "fastify";
-import { buildFileTree, readFile, writeFile, deleteFile, createDirectory, renameNode } from "../services/fileSystem.js";
+import fs from "fs";
+import pathModule from "path";
+import { buildFileTree, readFile, writeFile, deleteFile, createDirectory, renameNode, resolveSafe } from "../services/fileSystem.js";
+
+const MIME_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
 
 export async function filesRoutes(app: FastifyInstance) {
   // GET /api/files — arbre complet du workspace
@@ -14,6 +25,19 @@ export async function filesRoutes(app: FastifyInstance) {
     if (!path) return reply.status(400).send({ error: "path requis" });
     const content = await readFile(path);
     return reply.send({ content });
+  });
+
+  // GET /api/files/raw?path=attachments/note.pdf — aperçu/téléchargement binaire.
+  app.get<{ Querystring: { path: string } }>("/raw", async (req, reply) => {
+    const { path } = req.query;
+    if (!path) return reply.status(400).send({ error: "path requis" });
+    const filePath = resolveSafe(path);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return reply.status(404).send({ error: "Fichier introuvable" });
+    const contentType = MIME_TYPES[pathModule.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+    return reply
+      .header("Content-Type", contentType)
+      .header("Content-Disposition", `inline; filename="${pathModule.basename(filePath).replace(/"/g, "")}"`)
+      .send(fs.createReadStream(filePath));
   });
 
   // PUT /api/files/content — sauvegarde un fichier

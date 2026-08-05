@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchFileContent, saveFileContent } from "../../api/client";
+import { fetchFileContent, rawFileUrl, saveFileContent } from "../../api/client";
 import { useAppStore } from "../../stores/appStore";
 
 interface FileEditorProps {
@@ -14,8 +14,11 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const originalRef = useRef<string>("");
+  const extension = path.split(".").pop()?.toLowerCase() ?? "";
+  const previewKind = extension === "pdf" ? "pdf" : ["jpg", "jpeg", "png", "webp", "gif"].includes(extension) ? "image" : null;
 
   useEffect(() => {
+    if (previewKind) { setLoading(false); setError(null); return; }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -33,7 +36,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [path]);
+  }, [path, previewKind]);
 
   function handleChange(value: string) {
     setContent(value);
@@ -64,6 +67,19 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [content]);
+
+  if (previewKind) {
+    const url = rawFileUrl(path);
+    return <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-vscode-border bg-vscode-panel px-3 py-1">
+        <span className="truncate text-xs text-vscode-muted">{path}</span>
+        <a href={url} target="_blank" rel="noreferrer" className="rounded bg-vscode-accent px-2 py-0.5 text-xs text-white">Ouvrir / télécharger</a>
+      </div>
+      {previewKind === "pdf"
+        ? <object data={url} type="application/pdf" aria-label={`Aperçu de ${path}`} className="min-h-0 flex-1"><a href={url}>Télécharger le PDF</a></object>
+        : <div className="min-h-0 flex-1 overflow-auto bg-black/20 p-4"><img src={url} alt={`Aperçu de ${path}`} className="mx-auto max-h-full max-w-full object-contain" /></div>}
+    </div>;
+  }
 
   if (loading) {
     return (

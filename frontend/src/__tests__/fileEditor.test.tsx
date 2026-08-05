@@ -7,6 +7,7 @@ const markDirty = vi.fn();
 
 vi.mock("../api/client", () => ({
   fetchFileContent: vi.fn().mockResolvedValue("name: ComptaOS\n"),
+  rawFileUrl: (path: string) => `/api/files/raw?path=${encodeURIComponent(path)}`,
   saveFileContent: (...args: unknown[]) => saveFileContent(...args),
 }));
 vi.mock("../stores/appStore", () => ({ useAppStore: () => ({ markDirty }) }));
@@ -24,5 +25,11 @@ describe("éditeur de fichiers local", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sauvegarder" }));
 
     await waitFor(() => expect(saveFileContent).toHaveBeenCalledWith("config/settings.yaml", "name: ComptaOS 2\n"));
+  });
+
+  it("affiche un PDF sans essayer de l'éditer comme du texte", () => {
+    render(<FileEditor tabId="receipt" path="attachments/reçu.pdf" />);
+    expect(screen.getByLabelText("Aperçu de attachments/reçu.pdf")).toHaveAttribute("data", "/api/files/raw?path=attachments%2Fre%C3%A7u.pdf");
+    expect(screen.queryByRole("button", { name: "Sauvegarder" })).not.toBeInTheDocument();
   });
 });

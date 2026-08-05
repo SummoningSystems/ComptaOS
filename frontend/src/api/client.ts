@@ -140,6 +140,10 @@ export async function uploadAttachment(
   return { ...data, compression };
 }
 
+export function rawFileUrl(path: string): string {
+  return `${apiUrl("files/raw")}?path=${encodeURIComponent(path)}`;
+}
+
 export async function fetchPendingReceipts(): Promise<PendingReceipt[]> {
   const { data } = await api.get<PendingReceipt[]>("/attachments/inbox");
   return data;
