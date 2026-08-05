@@ -60,7 +60,6 @@ const STANDARD_VAT_RATES = [0, 2.1, 5.5, 10, 20];
 
 export function validateVatSplits(amountTtc: number, splits: Transaction["vat_splits"]): string | null {
   if (splits === undefined || splits.length === 0) return null;
-  if (splits.length < 2) return "Une ventilation TVA doit contenir au moins deux lignes";
 
   const sign = Math.sign(amountTtc);
   for (const split of splits) {

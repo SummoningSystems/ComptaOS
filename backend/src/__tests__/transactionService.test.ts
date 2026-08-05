@@ -96,6 +96,12 @@ describe("transactionService persistence", () => {
     ])).toContain("total TTC");
   });
 
+  it("accepte la proposition OCR avec un seul taux lorsque le TTC correspond", () => {
+    expect(validateVatSplits(-87.59, [
+      { rate: 20, amount_ttc: -87.59 },
+    ])).toBeNull();
+  });
+
   it("met a jour une transaction PSD2 dont le nom de fichier contient la date", async () => {
     const directory = path.join(workspace.root, "transactions");
     await fs.mkdir(directory, { recursive: true });
