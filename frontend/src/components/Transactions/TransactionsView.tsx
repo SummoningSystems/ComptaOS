@@ -4,6 +4,7 @@ import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTra
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
+import { PendingReceiptsPanel } from "./PendingReceiptsPanel";
 import { aiCategorize } from "../../api/ai";
 import { fetchAllTags } from "../../api/search";
 
@@ -802,6 +803,14 @@ export function TransactionsView() {
           onClose={() => setSmartSuggestions(null)}
         />
       )}
+      <PendingReceiptsPanel
+        transactions={transactions}
+        onLinked={(transaction, proposal) => {
+          setTransactions((current) => current.map((item) => item.id === transaction.id ? transaction : item));
+          setAttachmentMessage({ type: "success", text: "Justificatif en attente associé à la transaction." });
+          if (proposal) setOcrReview({ transaction, proposal });
+        }}
+      />
       {/* Toolbar row 1 */}
       <div className="flex items-center gap-3 px-4 py-2 bg-vscode-panel border-b border-vscode-border shrink-0 flex-wrap">
         <span className="text-vscode-muted text-xs">

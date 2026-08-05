@@ -10,11 +10,12 @@ vi.mock("../api/client", () => ({
 
 describe("parcours mobile des justificatifs", () => {
   it("permet la photo directe ou sa conservation avant synchronisation", async () => {
-    render(<MobileCaptureView onOpenDesktop={vi.fn()} />);
+    const { container } = render(<MobileCaptureView onOpenDesktop={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Bistro")).toBeVisible());
     expect(screen.getByRole("button", { name: "📷 Photographier pour la transaction choisie" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "📥 Photographier maintenant, associer plus tard" })).toBeEnabled();
     expect(screen.getByLabelText("Prendre une photo du justificatif")).toHaveAttribute("capture", "environment");
     expect(screen.getByLabelText("Photographier pour associer plus tard")).toHaveAttribute("capture", "environment");
+    expect(container.firstElementChild).toHaveClass("overflow-y-auto", "touch-pan-y", "h-[100dvh]");
   });
 });
