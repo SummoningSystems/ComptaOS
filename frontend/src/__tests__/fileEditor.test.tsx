@@ -29,7 +29,7 @@ describe("éditeur de fichiers local", () => {
 
   it("affiche un PDF sans essayer de l'éditer comme du texte", () => {
     render(<FileEditor tabId="receipt" path="attachments/reçu.pdf" />);
-    expect(screen.getByLabelText("Aperçu de attachments/reçu.pdf")).toHaveAttribute("data", "/api/files/raw?path=attachments%2Fre%C3%A7u.pdf");
+    expect(screen.getByTitle("Aperçu de attachments/reçu.pdf")).toHaveAttribute("src", "/api/files/raw?path=attachments%2Fre%C3%A7u.pdf");
     expect(screen.queryByRole("button", { name: "Sauvegarder" })).not.toBeInTheDocument();
   });
 });

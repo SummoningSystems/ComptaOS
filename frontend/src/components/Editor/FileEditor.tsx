@@ -76,7 +76,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         <a href={url} target="_blank" rel="noreferrer" className="rounded bg-vscode-accent px-2 py-0.5 text-xs text-white">Ouvrir / télécharger</a>
       </div>
       {previewKind === "pdf"
-        ? <object data={url} type="application/pdf" aria-label={`Aperçu de ${path}`} className="min-h-0 flex-1"><a href={url}>Télécharger le PDF</a></object>
+        ? <iframe src={url} title={`Aperçu de ${path}`} className="min-h-0 flex-1 border-0 bg-white" />
         : <div className="min-h-0 flex-1 overflow-auto bg-black/20 p-4"><img src={url} alt={`Aperçu de ${path}`} className="mx-auto max-h-full max-w-full object-contain" /></div>}
     </div>;
   }
