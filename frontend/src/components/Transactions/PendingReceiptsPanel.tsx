@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   attachmentUrl,
-  analyzePendingReceipt,
   deletePendingReceipt,
   fetchPendingReceipts,
+  fetchPendingReceiptBatchOcr,
   linkPendingReceipt,
+  startPendingReceiptBatchOcr,
   uploadPendingReceipt,
   type PendingReceipt,
   type ReceiptOcrProposal,
+  type BatchOcrProgress,
 } from "../../api/client";
 import type { Transaction } from "../../types";
 
 interface Props { transactions: Transaction[]; onLinked: (transaction: Transaction, proposal?: ReceiptOcrProposal) => void }
 export interface ReceiptMatch { transactionId: string; score: number; confidence: "high" | "medium" | "low" }
 const euros = (value: number) => `${value.toFixed(2)} €`;
+const transactionLabel = (transaction: Transaction) => `${transaction.date} · ${transaction.label} · ${Math.abs(transaction.amount_ttc).toFixed(2)} €`;
 
 function words(value: string): Set<string> {
   return new Set(value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 3));
+}
+
+export function filterTransactions(transactions: Transaction[], query: string): Transaction[] {
+  const normalized = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(",", ".");
+  if (!normalized) return transactions.slice(0, 8);
+  return transactions.filter((transaction) => `${transaction.date} ${transaction.label} ${Math.abs(transaction.amount_ttc).toFixed(2)}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(normalized)).slice(0, 8);
 }
 
 function daysBetween(left: string, right: string): number {
@@ -50,23 +59,35 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [receipts, setReceipts] = useState<PendingReceipt[]>([]);
   const [targetByReceipt, setTargetByReceipt] = useState<Record<string, string>>({});
+  const [searchByReceipt, setSearchByReceipt] = useState<Record<string, string>>({});
+  const [focusedSearch, setFocusedSearch] = useState("");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
-  const [importProgress, setImportProgress] = useState<{ phase: "stockage" | "ocr"; done: number; total: number } | null>(null);
+  const [importProgress, setImportProgress] = useState<({ phase: "stockage"; done: number; total: number } | ({ phase: "ocr" } & BatchOcrProgress)) | null>(null);
+  const [lastBatch, setLastBatch] = useState<BatchOcrProgress | null>(null);
   const expenses = useMemo(() => transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected").sort((a, b) => b.date.localeCompare(a.date)), [transactions]);
   const suggestions = useMemo(() => suggestReceiptMatches(receipts, transactions), [receipts, transactions]);
 
-  useEffect(() => { fetchPendingReceipts().then(setReceipts).catch(() => setError("Impossible de charger les justificatifs en attente.")); }, []);
+  useEffect(() => {
+    Promise.all([fetchPendingReceipts(), fetchPendingReceiptBatchOcr()]).then(([items, progress]) => { setReceipts(items); if (progress.running) void monitorBatch(progress); }).catch(() => setError("Impossible de charger les justificatifs en attente."));
+  }, []);
+
+  async function monitorBatch(initial: BatchOcrProgress) {
+    let progress = initial; let refreshedAt = -1;
+    while (true) {
+      setImportProgress({ phase: "ocr", ...progress });
+      if (progress.done !== refreshedAt) { refreshedAt = progress.done; setReceipts(await fetchPendingReceipts()); }
+      if (!progress.running) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      progress = await fetchPendingReceiptBatchOcr();
+    }
+    setLastBatch(progress); setImportProgress(null);
+  }
 
   async function analyzeReceipts(items: PendingReceipt[]) {
-    setImportProgress({ phase: "ocr", done: 0, total: items.length });
-    let done = 0;
-    for (const receipt of items) {
-      try { const analyzed = await analyzePendingReceipt(receipt.id); setReceipts((current) => current.map((item) => item.id === analyzed.id ? analyzed : item)); }
-      catch { /* La carte reste disponible pour une nouvelle tentative. */ }
-      finally { done += 1; setImportProgress({ phase: "ocr", done, total: items.length }); }
-    }
-    setImportProgress(null);
+    if (!items.length) return;
+    setLastBatch(null);
+    await monitorBatch(await startPendingReceiptBatchOcr(items.map((item) => item.id)));
   }
 
   async function importFiles(files: FileList | null) {
@@ -122,6 +143,8 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
       {receipts.some((receipt) => receipt.ocr.status !== "success") && <button disabled={Boolean(importProgress)} onClick={() => void retryIncompleteOcr()} className="ml-auto rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-300 disabled:opacity-50">Relancer les OCR incomplets</button>}
       <button disabled={Boolean(importProgress)} onClick={() => inputRef.current?.click()} className={`${receipts.some((receipt) => receipt.ocr.status !== "success") ? "" : "ml-auto"} rounded bg-vscode-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50`}>{importProgress ? `${importProgress.phase === "stockage" ? "Stockage" : "OCR"} ${importProgress.done}/${importProgress.total}…` : "＋ Importer plusieurs fichiers"}</button>
     </div>
+    {importProgress && <div className="mb-3 rounded border border-vscode-border bg-vscode-panel p-2"><div className="mb-1 flex justify-between gap-3 text-[10px] text-vscode-muted"><span className="truncate">{importProgress.phase === "ocr" ? `OCR : ${importProgress.currentName || "préparation…"}` : "Compression et stockage des fichiers"}</span><span className="shrink-0">{importProgress.done}/{importProgress.total}{importProgress.phase === "ocr" ? ` · ${importProgress.succeeded} réussi(s) · ${importProgress.failed} échec(s)` : ""}</span></div><div className="h-2 overflow-hidden rounded-full bg-vscode-bg"><div className="h-full bg-vscode-accent transition-all duration-500" style={{ width: `${importProgress.total ? Math.round(importProgress.done / importProgress.total * 100) : 0}%` }} /></div>{importProgress.phase === "ocr" && <p className="mt-1 text-[10px] text-vscode-muted">Certains PDF peuvent prendre jusqu’à une minute. Le traitement continue côté serveur même si tu changes d’onglet.</p>}</div>}
+    {!importProgress && lastBatch && lastBatch.total > 0 && <p className="mb-2 text-[10px] text-vscode-muted">Dernière relance terminée : {lastBatch.succeeded} réussi(s), {lastBatch.failed} échec(s) sur {lastBatch.total}.</p>}
     {error && <p role="alert" className="mb-2 text-xs text-red-400">{error}</p>}
     {receipts.length === 0 ? <p className="py-2 text-xs text-vscode-muted">Aucun justificatif en attente. Tu peux importer toutes tes pièces en une seule sélection.</p> : <div className="grid max-h-[30rem] grid-cols-1 gap-3 overflow-y-auto pb-1 2xl:grid-cols-2">
       {receipts.map((receipt) => {
@@ -129,6 +152,9 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
         const suggestedTransaction = suggestion ? transactions.find((item) => item.id === suggestion.transactionId) : undefined;
         const target = targetByReceipt[receipt.id] ?? suggestion?.transactionId ?? "";
         const amountVat = proposal ? proposal.amountVat ?? Math.max(0, proposal.amountTtc - proposal.amountHt) : 0;
+        const selectedTransaction = target ? transactions.find((item) => item.id === target) : undefined;
+        const searchValue = searchByReceipt[receipt.id] ?? (selectedTransaction ? transactionLabel(selectedTransaction) : "");
+        const searchResults = filterTransactions(expenses, searchValue);
         return <article key={receipt.id} className="flex min-w-0 gap-3 rounded-lg border border-amber-800/60 bg-vscode-panel p-3">
           <a href={attachmentUrl(receipt.filename)} target="_blank" rel="noreferrer" className="flex h-24 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-vscode-border bg-vscode-bg" title="Ouvrir le justificatif">{receipt.mimetype.startsWith("image/") ? <img src={attachmentUrl(receipt.filename)} alt={`Aperçu de ${receipt.originalName}`} className="h-full w-full object-cover" /> : <span className="text-xs text-vscode-muted">PDF</span>}</a>
           <div className="min-w-0 flex-1">
@@ -137,7 +163,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
             {proposal && <div className="mt-1.5 rounded bg-vscode-bg/60 px-2 py-1.5 text-[10px] text-vscode-muted"><p>HT {euros(proposal.amountHt)} · TVA {euros(amountVat)} · TTC {euros(proposal.amountTtc)}</p>{proposal.vatSplits.map((split, index) => { const splitHt = split.amountHt ?? split.amountTtc / (1 + split.rate / 100); const splitVat = split.amountVat ?? split.amountTtc - splitHt; return <p key={`${split.rate}-${index}`} className="mt-0.5 text-vscode-text">TVA {split.rate} % : HT {euros(splitHt)} · TVA {euros(splitVat)} · TTC {euros(split.amountTtc)}</p>; })}</div>}
             {suggestedTransaction && <div className="mt-2 flex items-center gap-2 rounded border border-green-800/60 bg-green-950/20 px-2 py-1.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] text-green-300">Proposition {suggestion.confidence} : {suggestedTransaction.date} · {suggestedTransaction.label} · {Math.abs(suggestedTransaction.amount_ttc).toFixed(2)} €</p></div><button disabled={busyId === receipt.id} onClick={() => void link(receipt, suggestedTransaction.id)} className="shrink-0 rounded bg-green-700 px-2 py-1 text-[10px] text-white disabled:opacity-40">Valider</button></div>}
             {proposal?.amountTtc && !suggestedTransaction && <p className="mt-2 rounded border border-vscode-border bg-vscode-bg/50 px-2 py-1.5 text-[10px] text-vscode-muted">Aucune transaction du même montant.</p>}
-            <div className="mt-2 flex gap-2"><select aria-label={`Transaction pour ${receipt.originalName}`} value={target} onChange={(event) => setTargetByReceipt((current) => ({ ...current, [receipt.id]: event.target.value }))} className="min-w-0 flex-1 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs"><option value="">Choisir manuellement…</option>{expenses.map((transaction) => <option key={transaction.id} value={transaction.id}>{transaction.date} · {transaction.label} · {Math.abs(transaction.amount_ttc).toFixed(2)} €</option>)}</select><button disabled={!target || busyId === receipt.id} onClick={() => void link(receipt, target)} className="rounded bg-amber-700 px-3 py-1 text-xs text-white disabled:opacity-40">Associer</button></div>
+            <div className="mt-2 flex gap-2"><div className="relative min-w-0 flex-1"><input aria-label={`Rechercher une transaction pour ${receipt.originalName}`} value={searchValue} onFocus={() => setFocusedSearch(receipt.id)} onBlur={() => window.setTimeout(() => setFocusedSearch((current) => current === receipt.id ? "" : current), 120)} onChange={(event) => { setSearchByReceipt((current) => ({ ...current, [receipt.id]: event.target.value })); setTargetByReceipt((current) => ({ ...current, [receipt.id]: "" })); }} placeholder="Rechercher par nom, montant ou date…" className="w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs" />{focusedSearch === receipt.id && <div className="absolute bottom-full z-30 mb-1 max-h-48 w-full overflow-y-auto rounded border border-vscode-border bg-vscode-panel shadow-xl">{searchResults.length ? searchResults.map((transaction) => <button key={transaction.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTargetByReceipt((current) => ({ ...current, [receipt.id]: transaction.id })); setSearchByReceipt((current) => ({ ...current, [receipt.id]: transactionLabel(transaction) })); setFocusedSearch(""); }} className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-vscode-border">{transactionLabel(transaction)}</button>) : <p className="px-2 py-2 text-xs text-vscode-muted">Aucune transaction trouvée</p>}</div>}</div><button disabled={!target || busyId === receipt.id} onClick={() => void link(receipt, target)} className="rounded bg-amber-700 px-3 py-1 text-xs text-white disabled:opacity-40">Associer</button></div>
           </div>
         </article>;
       })}

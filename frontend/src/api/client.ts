@@ -175,6 +175,16 @@ export async function analyzePendingReceipt(receiptId: string): Promise<PendingR
   return data;
 }
 
+export interface BatchOcrProgress { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string }
+export async function startPendingReceiptBatchOcr(ids?: string[]): Promise<BatchOcrProgress> {
+  const { data } = await api.post<BatchOcrProgress>("/attachments/inbox/analyze-batch", ids ? { ids } : {});
+  return data;
+}
+export async function fetchPendingReceiptBatchOcr(): Promise<BatchOcrProgress> {
+  const { data } = await api.get<BatchOcrProgress>("/attachments/inbox/analyze-batch");
+  return data;
+}
+
 export async function linkPendingReceipt(receiptId: string, transactionId: string): Promise<{ transaction: Transaction; proposal?: ReceiptOcrProposal }> {
   const { data } = await api.post<{ transaction: Transaction; proposal?: ReceiptOcrProposal }>(`/attachments/inbox/${receiptId}/link`, { transactionId });
   return data;

@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { PendingReceiptsPanel, suggestReceiptMatches } from "../components/Transactions/PendingReceiptsPanel";
+import { filterTransactions, PendingReceiptsPanel, suggestReceiptMatches } from "../components/Transactions/PendingReceiptsPanel";
 
 vi.mock("../api/client", () => ({
   attachmentUrl: (filename: string) => `/api/attachments/file/${filename}`,
@@ -13,6 +13,8 @@ vi.mock("../api/client", () => ({
     createdAt: "2026-08-05T12:26:14.945Z",
     ocr: { status: "success", proposal: { supplier: "Fournisseur Test", invoiceRef: "FAC-42", amountHt: 16.54, amountVat: 3.31, amountTtc: 19.85, category: "misc", confidence: "high", vatSplits: [{ rate: 20, amountHt: 16.54, amountVat: 3.31, amountTtc: 19.85 }] } },
   }]),
+  fetchPendingReceiptBatchOcr: vi.fn().mockResolvedValue({ running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" }),
+  startPendingReceiptBatchOcr: vi.fn(),
   linkPendingReceipt: vi.fn(),
   deletePendingReceipt: vi.fn(),
   uploadPendingReceipt: vi.fn(),
@@ -24,7 +26,8 @@ describe("justificatifs en attente sur ordinateur", () => {
 
     await waitFor(() => expect(screen.getByText("Justificatifs en attente")).toBeVisible());
     expect(screen.getByAltText("Aperçu de photo-mobile.jpg")).toHaveAttribute("src", "/api/attachments/file/receipt_phone.jpg");
-    expect(screen.getByRole("option", { name: "2026-08-05 · Restaurant · 20.00 €" })).toBeVisible();
+    fireEvent.focus(screen.getByLabelText("Rechercher une transaction pour photo-mobile.jpg"));
+    expect(screen.getByRole("button", { name: "2026-08-05 · Restaurant · 20.00 €" })).toBeVisible();
     expect(screen.getByText("Aucune transaction du même montant.")).toBeVisible();
     expect(screen.getByText("Référence : FAC-42")).toBeVisible();
     expect(screen.getByText("TVA 20 % : HT 16.54 € · TVA 3.31 € · TTC 19.85 €")).toBeVisible();
@@ -43,5 +46,15 @@ describe("justificatifs en attente sur ordinateur", () => {
     const receipt = { id: "ambiguous", filename: "ticket.jpg", originalName: "ticket.jpg", mimetype: "image/jpeg", createdAt: "2026-08-05T12:00:00Z", ocr: { status: "success" as const, proposal: { supplier: "Inconnu", amountHt: 10, amountTtc: 12, category: "misc" as const, vatSplits: [], confidence: "low" as const } } };
     const makeTransaction = (id: string) => ({ id, date: "2026-08-03", label: id, amount_ht: -12, vat: 0, amount_ttc: -12, currency: "EUR", category: "misc" as const, account: "main", status: "pending" as const });
     expect(suggestReceiptMatches([receipt], [makeTransaction("one"), makeTransaction("two")]).ambiguous).toMatchObject({ transactionId: "one", confidence: "low" });
+  });
+
+  it("recherche une transaction par libellé, montant ou date", () => {
+    const transactions = [
+      { id: "ikea", date: "2026-03-07", label: "IKEA", amount_ht: -36.99, vat: 0, amount_ttc: -36.99, currency: "EUR", category: "equipment" as const, account: "main", status: "pending" as const },
+      { id: "bread", date: "2026-08-05", label: "MARIE BLACHERE", amount_ht: -5.15, vat: 0, amount_ttc: -5.15, currency: "EUR", category: "food" as const, account: "main", status: "pending" as const },
+    ];
+    expect(filterTransactions(transactions, "ikea").map((item) => item.id)).toEqual(["ikea"]);
+    expect(filterTransactions(transactions, "36,99").map((item) => item.id)).toEqual(["ikea"]);
+    expect(filterTransactions(transactions, "2026-08-05").map((item) => item.id)).toEqual(["bread"]);
   });
 });

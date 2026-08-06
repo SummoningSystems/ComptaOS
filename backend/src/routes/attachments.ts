@@ -22,7 +22,36 @@ const ALLOWED_MIMES = new Set([
 export async function attachmentsRoutes(app: FastifyInstance) {
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } }); // 20 MB
 
+  let batchOcr = { running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" };
+  async function analyzeInboxReceipt(receipt: PendingReceipt): Promise<PendingReceipt> {
+    const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
+    if (!fsSync.existsSync(filePath)) throw new Error("Fichier justificatif introuvable");
+    try { receipt.ocr = { status: "success", proposal: (await extractReceiptFromDocument(await fs.readFile(filePath), receipt.mimetype)).proposal }; }
+    catch (error) { receipt.ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
+    await updatePendingReceipt(receipt);
+    return receipt;
+  }
+
   app.get("/inbox", async (_req, reply) => reply.send(await loadPendingReceipts()));
+
+  app.get("/inbox/analyze-batch", async (_req, reply) => reply.send(batchOcr));
+
+  app.post<{ Body: { ids?: string[] } }>("/inbox/analyze-batch", async (req, reply) => {
+    if (batchOcr.running) return reply.status(202).send(batchOcr);
+    const requestedIds = new Set(Array.isArray(req.body?.ids) ? req.body.ids : []);
+    const receipts = (await loadPendingReceipts()).filter((receipt) => requestedIds.size ? requestedIds.has(receipt.id) : receipt.ocr.status !== "success");
+    batchOcr = { running: receipts.length > 0, done: 0, total: receipts.length, succeeded: 0, failed: 0, currentName: receipts[0]?.originalName ?? "" };
+    if (receipts.length > 0) void (async () => {
+      for (const receipt of receipts) {
+        batchOcr.currentName = receipt.originalName;
+        try { const analyzed = await analyzeInboxReceipt(receipt); analyzed.ocr.status === "success" ? batchOcr.succeeded += 1 : batchOcr.failed += 1; }
+        catch { batchOcr.failed += 1; }
+        batchOcr.done += 1;
+      }
+      batchOcr.running = false; batchOcr.currentName = "";
+    })();
+    return reply.status(202).send(batchOcr);
+  });
 
   app.post<{ Querystring: { skipOcr?: string } }>("/inbox", async (req, reply) => {
     const data = await req.file();
@@ -52,12 +81,8 @@ export async function attachmentsRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/inbox/:id/analyze", async (req, reply) => {
     const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
     if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
-    const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
-    if (!fsSync.existsSync(filePath)) return reply.status(404).send({ error: "Fichier justificatif introuvable" });
-    try { receipt.ocr = { status: "success", proposal: (await extractReceiptFromDocument(await fs.readFile(filePath), receipt.mimetype)).proposal }; }
-    catch (error) { receipt.ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
-    await updatePendingReceipt(receipt);
-    return reply.send(receipt);
+    try { return reply.send(await analyzeInboxReceipt(receipt)); }
+    catch (error) { return reply.status(404).send({ error: error instanceof Error ? error.message : "Analyse impossible" }); }
   });
 
   app.post<{ Params: { id: string }; Body: { transactionId: string } }>("/inbox/:id/link", async (req, reply) => {
