@@ -4,16 +4,16 @@ import { useAppStore } from "../stores/appStore";
 describe("gestion des onglets", () => {
   beforeEach(() => useAppStore.setState({ tabs: [{ id: "dashboard", title: "Dashboard", type: "dashboard" }], activeTabId: "dashboard" }));
 
-  it("réutilise un seul onglet pour les sections de navigation", () => {
+  it("conserve un onglet par section de navigation", () => {
     useAppStore.getState().openTab({ id: "transactions", title: "Transactions", type: "transactions" });
     useAppStore.getState().openTab({ id: "vat", title: "TVA", type: "vat" });
-    expect(useAppStore.getState().tabs).toEqual([{ id: "vat", title: "TVA", type: "vat" }]);
+    expect(useAppStore.getState().tabs.map((tab) => tab.id)).toEqual(["dashboard", "transactions", "vat"]);
   });
 
   it("conserve les fichiers ouverts pendant la navigation", () => {
     useAppStore.getState().openTab({ id: "file:note.pdf", title: "note.pdf", type: "editor", path: "attachments/note.pdf" });
     useAppStore.getState().openTab({ id: "transactions", title: "Transactions", type: "transactions" });
-    expect(useAppStore.getState().tabs.map((tab) => tab.id)).toEqual(["transactions", "file:note.pdf"]);
+    expect(useAppStore.getState().tabs.map((tab) => tab.id)).toEqual(["dashboard", "file:note.pdf", "transactions"]);
   });
 
   it("ferme plusieurs onglets en conservant un onglet actif valide", () => {

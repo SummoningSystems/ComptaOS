@@ -32,14 +32,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ activeTabId: tab.id });
       return;
     }
-    if (tab.type === "editor") {
-      set({ tabs: [...tabs, tab], activeTabId: tab.id });
-      return;
-    }
-    const navigationIndex = tabs.findIndex((item) => item.type !== "editor");
-    const next = tabs.filter((item) => item.type === "editor");
-    next.splice(navigationIndex < 0 ? 0 : Math.min(navigationIndex, next.length), 0, tab);
-    set({ tabs: next, activeTabId: tab.id });
+    set({ tabs: [...tabs, tab], activeTabId: tab.id });
   },
 
   closeTab: (id) => {
