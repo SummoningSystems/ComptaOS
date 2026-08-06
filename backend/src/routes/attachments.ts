@@ -75,7 +75,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
    * Multipart field "file" → PDF ou image
    * Sauvegarde dans workspace/attachments/, met à jour transaction.attachment
    */
-  app.post<{ Params: { txnId: string } }>(
+  app.post<{ Params: { txnId: string }; Querystring: { skipOcr?: string } }>(
     "/upload/:txnId",
     async (req, reply) => {
       const { txnId } = req.params;
@@ -108,6 +108,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
       }
 
       let ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; message?: string } = { status: "unavailable", message: "OCR non configuré" };
+      if (req.query.skipOcr === "true") return reply.status(201).send({ filename, transaction: updated, ocr: { status: "unavailable", message: "OCR différé" } });
       const aiConfig = loadAiConfig();
       const hasRemoteOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY) && Boolean(aiConfig?.apiKey);
       if (localOcrUrl() || hasRemoteOcr) {
@@ -122,6 +123,25 @@ export async function attachmentsRoutes(app: FastifyInstance) {
       return reply.status(201).send({ filename, transaction: updated, ocr });
     }
   );
+
+  /** Analyse à la demande une pièce déjà enregistrée. */
+  app.post<{ Params: { txnId: string } }>("/analyze/:txnId", async (req, reply) => {
+    const transaction = (await loadAllTransactions()).find((item) => item.id === req.params.txnId);
+    if (!transaction?.attachment) return reply.status(404).send({ error: "Aucune pièce jointe à analyser" });
+    const safe = path.basename(transaction.attachment);
+    const filePath = path.join(getWorkspaceRoot(), "attachments", safe);
+    if (!fsSync.existsSync(filePath)) return reply.status(404).send({ error: "Fichier joint introuvable" });
+    const ext = path.extname(safe).toLowerCase();
+    const mimeMap: Record<string, string> = { ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
+    const mimetype = mimeMap[ext];
+    if (!mimetype) return reply.status(400).send({ error: "Format non compatible avec l’OCR" });
+    try {
+      const result = await extractReceiptFromDocument(await fs.readFile(filePath), mimetype);
+      return reply.send({ transaction, ocr: { status: "success", proposal: result.proposal } });
+    } catch (error) {
+      return reply.send({ transaction, ocr: { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" } });
+    }
+  });
 
   /**
    * DELETE /api/attachments/:txnId

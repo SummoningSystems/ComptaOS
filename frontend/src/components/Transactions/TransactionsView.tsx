@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit } from "../../types";
-import { api, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
+import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
@@ -436,6 +436,8 @@ export function TransactionsView() {
   const [invoiceRefInput, setInvoiceRefInput] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState<string | null>(null);
+  const [ocrAnalyzingAttachment, setOcrAnalyzingAttachment] = useState<string | null>(null);
+  const ocrAbortRef = useRef<AbortController | null>(null);
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[] | null>(null);
   const [smartApplying, setSmartApplying] = useState(false);
   const [smartSelected, setSmartSelected] = useState<Set<string>>(new Set());
@@ -590,18 +592,31 @@ export function TransactionsView() {
     setUploadingAttachment(txnId);
     setAttachmentMessage(null);
     try {
-      const { transaction, compression, ocr } = await uploadAttachment(txnId, file);
+      const { transaction, compression } = await uploadAttachment(txnId, file, { skipOcr: true });
       setTransactions((prev) => prev.map((t) => (t.id === txnId ? transaction : t)));
       const uploadedMb = (compression.uploadedBytes / 1024 / 1024).toFixed(1);
-      setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée.` : "Pièce justificative enregistrée." });
+      setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée. Analyse OCR en cours…` : "Pièce justificative enregistrée. Analyse OCR en cours…" });
+      const controller = new AbortController();
+      ocrAbortRef.current = controller;
+      setOcrAnalyzingAttachment(txnId);
+      const { ocr } = await analyzeAttachment(txnId, controller.signal);
       if (ocr.status === "success" && ocr.proposal) setOcrReview({ transaction, proposal: ocr.proposal });
       else if (ocr.status === "unavailable") setAttachmentMessage({ type: "success", text: "Pièce enregistrée. OCR local indisponible : la saisie manuelle reste disponible." });
       else if (ocr.status === "error") setAttachmentMessage({ type: "success", text: "Pièce enregistrée, mais l'analyse OCR a échoué. La saisie manuelle reste disponible." });
     } catch (error) {
-      setAttachmentMessage({ type: "error", text: error instanceof Error ? error.message : "Erreur lors de l'envoi de la pièce jointe." });
+      const cancelled = error && typeof error === "object" && ("code" in error && error.code === "ERR_CANCELED" || "name" in error && error.name === "CanceledError");
+      setAttachmentMessage(cancelled
+        ? { type: "success", text: "Analyse OCR arrêtée. La pièce justificative est bien conservée." }
+        : { type: "error", text: error instanceof Error ? error.message : "Erreur lors de l'envoi de la pièce jointe." });
     } finally {
+      ocrAbortRef.current = null;
+      setOcrAnalyzingAttachment(null);
       setUploadingAttachment(null);
     }
+  }
+
+  function cancelAttachmentOcr() {
+    ocrAbortRef.current?.abort();
   }
 
   async function handleAttachmentDelete(txnId: string, filename: string) {
@@ -1196,6 +1211,7 @@ export function TransactionsView() {
                                   {/* Pièce jointe */}
                                   {txn.attachment ? (
                                     <div className="flex items-center gap-0.5">
+                                      {ocrAnalyzingAttachment === txn.id && <button onClick={cancelAttachmentOcr} className="flex h-6 w-6 animate-pulse items-center justify-center rounded text-base text-amber-400 hover:bg-amber-900/30 hover:text-amber-300" title="Arrêter l’OCR et conserver la pièce" aria-label="Arrêter l’OCR et conserver la pièce">⏳</button>}
                                       <a
                                         href={attachmentUrl(txn.attachment)}
                                         target="_blank"

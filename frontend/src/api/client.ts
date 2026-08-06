@@ -123,7 +123,8 @@ export async function createTransaction(txn: Omit<Transaction, "id">): Promise<T
 
 export async function uploadAttachment(
   txnId: string,
-  file: File
+  file: File,
+  options?: { skipOcr?: boolean; signal?: AbortSignal },
 ): Promise<{ filename: string; transaction: Transaction; compression: CompressionResult; ocr: AttachmentOcrResult }> {
   let compression: CompressionResult;
   try {
@@ -136,8 +137,15 @@ export async function uploadAttachment(
   form.append("file", compression.file);
   const { data } = await api.post(`/attachments/upload/${txnId}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
+    params: options?.skipOcr ? { skipOcr: "true" } : undefined,
+    signal: options?.signal,
   });
   return { ...data, compression };
+}
+
+export async function analyzeAttachment(txnId: string, signal?: AbortSignal): Promise<{ transaction: Transaction; ocr: AttachmentOcrResult }> {
+  const { data } = await api.post(`/attachments/analyze/${txnId}`, undefined, { signal });
+  return data;
 }
 
 export function rawFileUrl(path: string): string {
