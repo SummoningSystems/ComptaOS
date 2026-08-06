@@ -17,6 +17,11 @@ export interface Transaction {
   account: string;
   status: "validated" | "pending" | "rejected";
   attachment?: string;
+  attachments?: string[];
+  attachment_details?: Array<{
+    filename: string; originalName?: string; amount_ht?: number; vat?: number;
+    amount_ttc?: number; invoiceRef?: string; vat_splits?: VatSplit[];
+  }>;
   notes?: string;
   tags?: string[];
   justified?: boolean;

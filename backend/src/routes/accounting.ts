@@ -58,10 +58,12 @@ export async function accountingRoutes(app: FastifyInstance) {
     for (const item of preview.lines) {
       if (added.has(item.transactionId)) continue; added.add(item.transactionId);
       const transaction = transactions.find((entry) => entry.id === item.transactionId);
-      if (!transaction?.attachment) continue;
-      const safeName = basename(transaction.attachment);
-      const path = join(getWorkspaceRoot(), "attachments", safeName);
-      if (existsSync(path)) archive.append(createReadStream(path), { name: `justificatifs/${transaction.id}-${safeName.replace(/[^a-zA-Z0-9._-]/g, "_")}` });
+      if (!transaction) continue;
+      const attachments = [...new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])])];
+      for (const filename of attachments) {
+        const safeName = basename(filename); const path = join(getWorkspaceRoot(), "attachments", safeName);
+        if (existsSync(path)) archive.append(createReadStream(path), { name: `justificatifs/${transaction.id}-${safeName.replace(/[^a-zA-Z0-9._-]/g, "_")}` });
+      }
     }
     void archive.finalize();
     return reply.send(archive);

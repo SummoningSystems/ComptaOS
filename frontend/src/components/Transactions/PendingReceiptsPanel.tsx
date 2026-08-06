@@ -16,7 +16,7 @@ import type { Transaction } from "../../types";
 interface Props { transactions: Transaction[]; onLinked: (transaction: Transaction, proposal?: ReceiptOcrProposal) => void }
 export interface ReceiptMatch { transactionId: string; score: number; confidence: "high" | "medium" | "low" }
 const euros = (value: number) => `${value.toFixed(2)} €`;
-const transactionLabel = (transaction: Transaction) => `${transaction.date} · ${transaction.label} · ${Math.abs(transaction.amount_ttc).toFixed(2)} €`;
+const transactionLabel = (transaction: Transaction) => `${transaction.date} · ${transaction.label} · ${Math.abs(transaction.amount_ttc).toFixed(2)} €${(transaction.attachments?.length ?? (transaction.attachment ? 1 : 0)) ? ` · ${transaction.attachments?.length ?? 1} pièce(s)` : ""}`;
 
 function words(value: string): Set<string> {
   return new Set(value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 3));
@@ -33,13 +33,17 @@ function daysBetween(left: string, right: string): number {
 }
 
 export function suggestReceiptMatches(receipts: PendingReceipt[], transactions: Transaction[]): Record<string, ReceiptMatch> {
-  const expenses = transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected" && !item.attachment);
+  const expenses = transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected");
   const matches: Record<string, ReceiptMatch> = {};
   for (const receipt of receipts) {
     const proposal = receipt.ocr.proposal;
     if (!proposal?.amountTtc) continue;
     const supplierWords = words(proposal.supplier ?? "");
-    const candidates = expenses.filter((transaction) => Math.abs(Math.abs(transaction.amount_ttc) - proposal.amountTtc) <= 0.05).map((transaction) => {
+    const candidates = expenses.filter((transaction) => {
+      const documented = transaction.attachment_details?.reduce((sum, item) => sum + Math.abs(item.amount_ttc ?? 0), 0) ?? 0;
+      const remaining = Math.max(0, Math.abs(transaction.amount_ttc) - documented);
+      return remaining > 0 && Math.abs(remaining - proposal.amountTtc) <= 0.05;
+    }).map((transaction) => {
       let score = 70;
       score += 5;
       const days = proposal.date ? daysBetween(proposal.date, transaction.date) : Number.POSITIVE_INFINITY;

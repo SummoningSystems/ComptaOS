@@ -1209,25 +1209,10 @@ export function TransactionsView() {
                                     {txn.justified ? "✓" : "○"}
                                   </button>
                                   {/* Pièce jointe */}
-                                  {txn.attachment ? (
+                                  {(txn.attachments?.length || txn.attachment) ? (
                                     <div className="flex items-center gap-0.5">
                                       {ocrAnalyzingAttachment === txn.id && <button onClick={cancelAttachmentOcr} className="flex h-6 w-6 animate-pulse items-center justify-center rounded text-base text-amber-400 hover:bg-amber-900/30 hover:text-amber-300" title="Arrêter l’OCR et conserver la pièce" aria-label="Arrêter l’OCR et conserver la pièce">⏳</button>}
-                                      <a
-                                        href={attachmentUrl(txn.attachment)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="w-6 h-6 flex items-center justify-center rounded text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors text-base"
-                                        title={`Voir la pièce jointe : ${txn.attachment}`}
-                                      >
-                                        📎
-                                      </a>
-                                      <button
-                                        onClick={() => handleAttachmentDelete(txn.id, txn.attachment!)}
-                                        className="w-4 h-4 flex items-center justify-center rounded text-xs text-vscode-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
-                                        title="Supprimer la pièce jointe"
-                                      >
-                                        ×
-                                      </button>
+                                      {[...new Set([...(txn.attachments ?? []), ...(txn.attachment ? [txn.attachment] : [])])].map((filename, index) => <span key={filename} className="flex items-center gap-0.5"><a href={attachmentUrl(filename)} target="_blank" rel="noopener noreferrer" className="flex h-6 min-w-6 items-center justify-center rounded px-1 text-sm text-blue-400 transition-colors hover:bg-blue-900/30 hover:text-blue-300" title={`Voir la pièce jointe : ${filename}`}>📎{index === 0 && (txn.attachments?.length ?? 1) > 1 ? <small className="ml-0.5 text-[9px]">{txn.attachments?.length}</small> : null}</a><button onClick={() => handleAttachmentDelete(txn.id, filename)} className="flex h-4 w-4 items-center justify-center rounded text-xs text-vscode-muted transition-colors hover:bg-red-900/20 hover:text-red-400" title={`Supprimer ${filename}`}>×</button></span>)}
                                     </div>
                                   ) : (
                                     <AttachmentDropZone

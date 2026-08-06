@@ -91,12 +91,31 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
     const current = (await loadAllTransactions()).find((item) => item.id === req.body?.transactionId);
     if (!current) return reply.status(404).send({ error: "Transaction introuvable" });
-    const transaction = await updateTransaction(current.id, { attachment: receipt.filename, justified: true });
+    const filenames = [...new Set([...(current.attachments ?? []), ...(current.attachment ? [current.attachment] : []), receipt.filename])];
+    const proposal = receipt.ocr.proposal;
+    const details = [...(current.attachment_details ?? []).filter((item) => item.filename !== receipt.filename), {
+      filename: receipt.filename, originalName: receipt.originalName,
+      amount_ht: proposal?.amountHt, vat: proposal?.amountVat, amount_ttc: proposal?.amountTtc,
+      invoiceRef: proposal?.invoiceRef,
+      vat_splits: proposal?.vatSplits.map((split) => ({ rate: split.rate, amount_ttc: split.amountTtc })),
+    }];
+    const transaction = await updateTransaction(current.id, { attachment: filenames[0], attachments: filenames, attachment_details: details, justified: true });
     await removePendingReceipt(receipt.id);
-    if (current.attachment && current.attachment !== receipt.filename) {
-      try { await fs.unlink(path.join(getWorkspaceRoot(), "attachments", path.basename(current.attachment))); } catch { /* ancien fichier absent */ }
-    }
-    return reply.send({ transaction, proposal: receipt.ocr.proposal });
+    const analyzed = details.filter((item) => Number.isFinite(item.amount_ttc));
+    const aggregateProposal = analyzed.length ? {
+      supplier: analyzed.length > 1 ? `${analyzed.length} justificatifs` : proposal?.supplier ?? receipt.originalName,
+      invoiceRef: analyzed.map((item) => item.invoiceRef).filter(Boolean).join(" + ") || undefined,
+      amountHt: analyzed.reduce((sum, item) => sum + (item.amount_ht ?? 0), 0),
+      amountVat: analyzed.reduce((sum, item) => sum + (item.vat ?? 0), 0),
+      amountTtc: analyzed.reduce((sum, item) => sum + (item.amount_ttc ?? 0), 0),
+      category: proposal?.category ?? current.category, confidence: "high" as const,
+      vatSplits: analyzed.flatMap((item) => item.vat_splits ?? []).reduce<Array<{ rate: number; amountTtc: number }>>((items, split) => {
+        const existing = items.find((item) => item.rate === split.rate);
+        if (existing) existing.amountTtc += Math.abs(split.amount_ttc); else items.push({ rate: split.rate, amountTtc: Math.abs(split.amount_ttc) });
+        return items;
+      }, []),
+    } : proposal;
+    return reply.send({ transaction, proposal: aggregateProposal });
   });
 
   app.delete<{ Params: { id: string } }>("/inbox/:id", async (req, reply) => {
@@ -115,7 +134,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     "/upload/:txnId",
     async (req, reply) => {
       const { txnId } = req.params;
-      const previousAttachment = (await loadAllTransactions()).find((transaction) => transaction.id === txnId)?.attachment;
+      const current = (await loadAllTransactions()).find((transaction) => transaction.id === txnId);
 
       const data = await req.file();
       if (!data) {
@@ -138,10 +157,8 @@ export async function attachmentsRoutes(app: FastifyInstance) {
       await fs.writeFile(path.join(attachmentsDir, filename), buffer);
 
       // Attacher d'abord la pièce : une indisponibilité OCR ne doit jamais faire perdre l'upload.
-      const updated = await updateTransaction(txnId, { attachment: filename, justified: true });
-      if (previousAttachment && previousAttachment !== filename) {
-        try { await fs.unlink(path.join(attachmentsDir, path.basename(previousAttachment))); } catch { /* ancien fichier déjà absent */ }
-      }
+      const filenames = [...new Set([...(current?.attachments ?? []), ...(current?.attachment ? [current.attachment] : []), filename])];
+      const updated = await updateTransaction(txnId, { attachment: filenames[0], attachments: filenames, justified: true });
 
       let ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; message?: string } = { status: "unavailable", message: "OCR non configuré" };
       if (req.query.skipOcr === "true") return reply.status(201).send({ filename, transaction: updated, ocr: { status: "unavailable", message: "OCR différé" } });
@@ -194,7 +211,9 @@ export async function attachmentsRoutes(app: FastifyInstance) {
         try { await fs.unlink(filePath); } catch { /* ignore si déjà absent */ }
       }
 
-      const updated = await updateTransaction(txnId, { attachment: undefined });
+      const transaction = (await loadAllTransactions()).find((item) => item.id === txnId);
+      const remaining = [...new Set([...(transaction?.attachments ?? []), ...(transaction?.attachment ? [transaction.attachment] : [])])].filter((item) => item !== filename);
+      const updated = await updateTransaction(txnId, { attachment: remaining[0], attachments: remaining, attachment_details: transaction?.attachment_details?.filter((item) => item.filename !== filename), justified: remaining.length > 0 });
       return reply.send({ ok: true, transaction: updated });
     }
   );

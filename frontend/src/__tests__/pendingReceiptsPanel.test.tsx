@@ -48,6 +48,12 @@ describe("justificatifs en attente sur ordinateur", () => {
     expect(suggestReceiptMatches([receipt], [makeTransaction("one"), makeTransaction("two")]).ambiguous).toMatchObject({ transactionId: "one", confidence: "low" });
   });
 
+  it("propose une facture sur le montant restant d'un paiement groupé", () => {
+    const receipt = { id: "amazon_2", filename: "amazon-2.pdf", originalName: "amazon-2.pdf", mimetype: "application/pdf", createdAt: "2026-08-05T12:00:00Z", ocr: { status: "success" as const, proposal: { supplier: "Amazon", amountHt: 25, amountTtc: 30, category: "equipment" as const, vatSplits: [{ rate: 20, amountTtc: 30 }], confidence: "high" as const } } };
+    const payment = { id: "payment", date: "2026-08-05", label: "AMAZON", amount_ht: -75, vat: 0, amount_ttc: -90, currency: "EUR", category: "equipment" as const, account: "main", status: "pending" as const, attachment: "amazon-1.pdf", attachments: ["amazon-1.pdf"], attachment_details: [{ filename: "amazon-1.pdf", amount_ttc: 60 }] };
+    expect(suggestReceiptMatches([receipt], [payment]).amazon_2).toMatchObject({ transactionId: "payment" });
+  });
+
   it("recherche une transaction par libellé, montant ou date", () => {
     const transactions = [
       { id: "ikea", date: "2026-03-07", label: "IKEA", amount_ht: -36.99, vat: 0, amount_ttc: -36.99, currency: "EUR", category: "equipment" as const, account: "main", status: "pending" as const },
@@ -56,5 +62,10 @@ describe("justificatifs en attente sur ordinateur", () => {
     expect(filterTransactions(transactions, "ikea").map((item) => item.id)).toEqual(["ikea"]);
     expect(filterTransactions(transactions, "36,99").map((item) => item.id)).toEqual(["ikea"]);
     expect(filterTransactions(transactions, "2026-08-05").map((item) => item.id)).toEqual(["bread"]);
+  });
+
+  it("conserve dans la recherche une transaction qui possède déjà une facture", () => {
+    const transaction = { id: "amazon", date: "2026-08-05", label: "AMAZON", amount_ht: -50, vat: 0, amount_ttc: -50, currency: "EUR", category: "equipment" as const, account: "main", status: "pending" as const, attachment: "facture-1.pdf", attachments: ["facture-1.pdf"] };
+    expect(filterTransactions([transaction], "amazon")).toEqual([transaction]);
   });
 });
