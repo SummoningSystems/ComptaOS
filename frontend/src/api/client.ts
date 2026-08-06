@@ -157,7 +157,7 @@ export async function fetchPendingReceipts(): Promise<PendingReceipt[]> {
   return data;
 }
 
-export async function uploadPendingReceipt(file: File): Promise<{ receipt: PendingReceipt; compression: CompressionResult }> {
+export async function uploadPendingReceipt(file: File, options?: { skipOcr?: boolean }): Promise<{ receipt: PendingReceipt; compression: CompressionResult }> {
   let compression: CompressionResult;
   try {
     compression = await compressAttachment(file);
@@ -166,8 +166,13 @@ export async function uploadPendingReceipt(file: File): Promise<{ receipt: Pendi
     compression = { file, compressed: false, originalBytes: file.size, uploadedBytes: file.size, savedPercent: 0 };
   }
   const form = new FormData(); form.append("file", compression.file);
-  const { data } = await api.post<PendingReceipt>("/attachments/inbox", form, { headers: { "Content-Type": "multipart/form-data" } });
+  const { data } = await api.post<PendingReceipt>("/attachments/inbox", form, { headers: { "Content-Type": "multipart/form-data" }, params: options?.skipOcr ? { skipOcr: "true" } : undefined });
   return { receipt: data, compression };
+}
+
+export async function analyzePendingReceipt(receiptId: string): Promise<PendingReceipt> {
+  const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/analyze`);
+  return data;
 }
 
 export async function linkPendingReceipt(receiptId: string, transactionId: string): Promise<{ transaction: Transaction; proposal?: ReceiptOcrProposal }> {

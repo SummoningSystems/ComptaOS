@@ -9,7 +9,7 @@ import { extractReceiptFromDocument, type ReceiptProposal } from "../services/oc
 import { loadAiConfig } from "../services/settingsService.js";
 import { localOcrUrl } from "../services/localOcrService.js";
 import { nanoid } from "../utils/id.js";
-import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
+import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, updatePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -24,7 +24,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
 
   app.get("/inbox", async (_req, reply) => reply.send(await loadPendingReceipts()));
 
-  app.post("/inbox", async (req, reply) => {
+  app.post<{ Querystring: { skipOcr?: string } }>("/inbox", async (req, reply) => {
     const data = await req.file();
     if (!data) return reply.status(400).send({ error: "Aucun fichier reçu" });
     if (!ALLOWED_MIMES.has(data.mimetype)) return reply.status(400).send({ error: "Type de fichier non accepté. Formats acceptés : PDF, JPEG, PNG, WEBP, GIF." });
@@ -40,13 +40,24 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     let ocr: PendingReceipt["ocr"] = { status: "unavailable", message: "OCR non configuré" };
     const aiConfig = loadAiConfig();
     const hasRemoteOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY) && Boolean(aiConfig?.apiKey);
-    if (localOcrUrl() || hasRemoteOcr) {
+    if (req.query.skipOcr !== "true" && (localOcrUrl() || hasRemoteOcr)) {
       try { ocr = { status: "success", proposal: (await extractReceiptFromDocument(buffer, data.mimetype)).proposal }; }
       catch (error) { ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
     }
     const receipt: PendingReceipt = { id, filename, originalName: path.basename(data.filename), mimetype: data.mimetype, createdAt: new Date().toISOString(), ocr };
     await addPendingReceipt(receipt);
     return reply.status(201).send(receipt);
+  });
+
+  app.post<{ Params: { id: string } }>("/inbox/:id/analyze", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
+    if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
+    const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
+    if (!fsSync.existsSync(filePath)) return reply.status(404).send({ error: "Fichier justificatif introuvable" });
+    try { receipt.ocr = { status: "success", proposal: (await extractReceiptFromDocument(await fs.readFile(filePath), receipt.mimetype)).proposal }; }
+    catch (error) { receipt.ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
+    await updatePendingReceipt(receipt);
+    return reply.send(receipt);
   });
 
   app.post<{ Params: { id: string }; Body: { transactionId: string } }>("/inbox/:id/link", async (req, reply) => {

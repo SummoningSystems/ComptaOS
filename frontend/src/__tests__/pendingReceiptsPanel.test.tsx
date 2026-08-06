@@ -4,6 +4,7 @@ import { PendingReceiptsPanel, suggestReceiptMatches } from "../components/Trans
 
 vi.mock("../api/client", () => ({
   attachmentUrl: (filename: string) => `/api/attachments/file/${filename}`,
+  analyzePendingReceipt: vi.fn(),
   fetchPendingReceipts: vi.fn().mockResolvedValue([{
     id: "receipt_phone",
     filename: "receipt_phone.jpg",
@@ -35,9 +36,9 @@ describe("justificatifs en attente sur ordinateur", () => {
     expect(suggestReceiptMatches([receipt], transactions).receipt_yankee).toMatchObject({ transactionId: "right", confidence: "high" });
   });
 
-  it("ne propose rien lorsque deux transactions sont aussi plausibles", () => {
+  it("propose au moins une transaction lorsque le montant est identique malgré une ambiguïté", () => {
     const receipt = { id: "ambiguous", filename: "ticket.jpg", originalName: "ticket.jpg", mimetype: "image/jpeg", createdAt: "2026-08-05T12:00:00Z", ocr: { status: "success" as const, proposal: { supplier: "Inconnu", amountHt: 10, amountTtc: 12, category: "misc" as const, vatSplits: [], confidence: "low" as const } } };
     const makeTransaction = (id: string) => ({ id, date: "2026-08-03", label: id, amount_ht: -12, vat: 0, amount_ttc: -12, currency: "EUR", category: "misc" as const, account: "main", status: "pending" as const });
-    expect(suggestReceiptMatches([receipt], [makeTransaction("one"), makeTransaction("two")])).toEqual({});
+    expect(suggestReceiptMatches([receipt], [makeTransaction("one"), makeTransaction("two")]).ambiguous).toMatchObject({ transactionId: "one", confidence: "low" });
   });
 });

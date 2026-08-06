@@ -14,6 +14,13 @@ export interface PendingReceipt {
 }
 
 function inboxPath(): string { return path.join(getWorkspaceRoot(), "receipt-inbox.json"); }
+let mutationQueue: Promise<void> = Promise.resolve();
+
+async function mutate<T>(operation: () => Promise<T>): Promise<T> {
+  const result = mutationQueue.then(operation, operation);
+  mutationQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 export async function loadPendingReceipts(): Promise<PendingReceipt[]> {
   try {
@@ -30,13 +37,24 @@ async function savePendingReceipts(receipts: PendingReceipt[]): Promise<void> {
 }
 
 export async function addPendingReceipt(receipt: PendingReceipt): Promise<void> {
-  const receipts = await loadPendingReceipts();
-  await savePendingReceipts([receipt, ...receipts.filter((item) => item.id !== receipt.id)]);
+  await mutate(async () => {
+    const receipts = await loadPendingReceipts();
+    await savePendingReceipts([receipt, ...receipts.filter((item) => item.id !== receipt.id)]);
+  });
+}
+
+export async function updatePendingReceipt(receipt: PendingReceipt): Promise<void> {
+  await mutate(async () => {
+    const receipts = await loadPendingReceipts();
+    await savePendingReceipts(receipts.map((item) => item.id === receipt.id ? receipt : item));
+  });
 }
 
 export async function removePendingReceipt(id: string): Promise<PendingReceipt | undefined> {
-  const receipts = await loadPendingReceipts();
-  const receipt = receipts.find((item) => item.id === id);
-  if (receipt) await savePendingReceipts(receipts.filter((item) => item.id !== id));
-  return receipt;
+  return mutate(async () => {
+    const receipts = await loadPendingReceipts();
+    const receipt = receipts.find((item) => item.id === id);
+    if (receipt) await savePendingReceipts(receipts.filter((item) => item.id !== id));
+    return receipt;
+  });
 }
