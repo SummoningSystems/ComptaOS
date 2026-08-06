@@ -27,8 +27,8 @@ export function buildApiUrl(basePath: string, path = ""): string {
 export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
 
 export interface ReceiptOcrProposal {
-  supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountTtc: number;
-  category: Transaction["category"]; vatSplits: Array<{ rate: number; amountTtc: number }>;
+  supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountVat?: number; amountTtc: number;
+  category: Transaction["category"]; vatSplits: Array<{ rate: number; amountHt?: number; amountVat?: number; amountTtc: number }>;
   confidence: "high" | "medium" | "low";
 }
 export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; message?: string }

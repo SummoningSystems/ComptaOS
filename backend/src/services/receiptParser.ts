@@ -121,5 +121,6 @@ export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   const splitTotal = round2(vatSplits.reduce((sum, split) => sum + split.amountTtc, 0));
   const coherent = amountTtc > 0 && (!vatSplits.length || Math.abs(splitTotal - amountTtc) < 0.06);
   const fields = [amountTtc > 0, amountHt > 0, Boolean(detectDate(text)), vatSplits.length > 0].filter(Boolean).length;
-  return { supplier: detectSupplier(text), date: detectDate(text), invoiceRef: detectInvoiceRef(text), amountHt, amountTtc, category: detectCategory(text), vatSplits: coherent ? vatSplits : [], confidence: coherent && fields >= 3 ? "high" : fields >= 2 ? "medium" : "low" };
+  const enrichedSplits = coherent ? vatSplits.map((split) => { const splitHt = round2(split.amountTtc / (1 + split.rate / 100)); return { ...split, amountHt: splitHt, amountVat: round2(split.amountTtc - splitHt) }; }) : [];
+  return { supplier: detectSupplier(text), date: detectDate(text), invoiceRef: detectInvoiceRef(text), amountHt, amountVat: round2(Math.max(0, amountTtc - amountHt)), amountTtc, category: detectCategory(text), vatSplits: enrichedSplits, confidence: coherent && fields >= 3 ? "high" : fields >= 2 ? "medium" : "low" };
 }

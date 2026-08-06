@@ -11,7 +11,7 @@ vi.mock("../api/client", () => ({
     originalName: "photo-mobile.jpg",
     mimetype: "image/jpeg",
     createdAt: "2026-08-05T12:26:14.945Z",
-    ocr: { status: "error", message: "OCR temporairement indisponible" },
+    ocr: { status: "success", proposal: { supplier: "Fournisseur Test", invoiceRef: "FAC-42", amountHt: 16.54, amountVat: 3.31, amountTtc: 19.85, category: "misc", confidence: "high", vatSplits: [{ rate: 20, amountHt: 16.54, amountVat: 3.31, amountTtc: 19.85 }] } },
   }]),
   linkPendingReceipt: vi.fn(),
   deletePendingReceipt: vi.fn(),
@@ -25,6 +25,9 @@ describe("justificatifs en attente sur ordinateur", () => {
     await waitFor(() => expect(screen.getByText("Justificatifs en attente")).toBeVisible());
     expect(screen.getByAltText("Aperçu de photo-mobile.jpg")).toHaveAttribute("src", "/api/attachments/file/receipt_phone.jpg");
     expect(screen.getByRole("option", { name: "2026-08-05 · Restaurant · 20.00 €" })).toBeVisible();
+    expect(screen.getByText("Aucune transaction du même montant.")).toBeVisible();
+    expect(screen.getByText("Référence : FAC-42")).toBeVisible();
+    expect(screen.getByText("TVA 20 % : HT 16.54 € · TVA 3.31 € · TTC 19.85 €")).toBeVisible();
   });
 
   it("propose un rapprochement unique à partir du montant, de la date et du fournisseur", () => {

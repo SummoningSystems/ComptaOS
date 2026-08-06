@@ -21,9 +21,10 @@ export interface ReceiptProposal {
   date?: string;
   invoiceRef?: string;
   amountHt: number;
+  amountVat?: number;
   amountTtc: number;
   category: Category;
-  vatSplits: Array<{ rate: number; amountTtc: number }>;
+  vatSplits: Array<{ rate: number; amountHt?: number; amountVat?: number; amountTtc: number }>;
   confidence: "high" | "medium" | "low";
 }
 
@@ -37,11 +38,16 @@ export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
   const vatSplits = rawSplits.flatMap((split) => {
     if (!split || typeof split !== "object") return [];
     const row = split as Record<string, unknown>; const rate = Number(row.rate); const splitTtc = Number(row.amount_ttc);
-    return Number.isFinite(rate) && rate >= 0 && Number.isFinite(splitTtc) && splitTtc > 0 ? [{ rate: round2(rate), amountTtc: round2(splitTtc) }] : [];
+    if (!Number.isFinite(rate) || rate < 0 || !Number.isFinite(splitTtc) || splitTtc <= 0) return [];
+    const providedHt = Number(row.amount_ht); const splitHt = Number.isFinite(providedHt) && providedHt >= 0 ? providedHt : splitTtc / (1 + rate / 100);
+    const providedVat = Number(row.amount_vat); const splitVat = Number.isFinite(providedVat) && providedVat >= 0 ? providedVat : splitTtc - splitHt;
+    return [{ rate: round2(rate), amountHt: round2(splitHt), amountVat: round2(splitVat), amountTtc: round2(splitTtc) }];
   });
   const category = CATEGORIES.includes(input.category as Category) ? input.category as Category : "misc";
   const confidence = ["high", "medium", "low"].includes(String(input.confidence)) ? input.confidence as ReceiptProposal["confidence"] : "low";
-  return { supplier: typeof input.supplier === "string" ? input.supplier.trim() : "Inconnu", date: typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : undefined, invoiceRef: typeof input.invoice_ref === "string" ? input.invoice_ref.trim() : undefined, amountHt: Number.isFinite(amountHt) ? round2(Math.abs(amountHt)) : 0, amountTtc: Number.isFinite(amountTtc) ? round2(Math.abs(amountTtc)) : 0, category, vatSplits, confidence };
+  const normalizedHt = Number.isFinite(amountHt) ? round2(Math.abs(amountHt)) : 0; const normalizedTtc = Number.isFinite(amountTtc) ? round2(Math.abs(amountTtc)) : 0;
+  const providedVat = Number(input.amount_vat); const amountVat = Number.isFinite(providedVat) ? round2(Math.abs(providedVat)) : round2(Math.max(0, normalizedTtc - normalizedHt));
+  return { supplier: typeof input.supplier === "string" ? input.supplier.trim() : "Inconnu", date: typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : undefined, invoiceRef: typeof input.invoice_ref === "string" ? input.invoice_ref.trim() : undefined, amountHt: normalizedHt, amountVat, amountTtc: normalizedTtc, category, vatSplits, confidence };
 }
 
 async function extractTextRemotely(buffer: Buffer, mimetype: string): Promise<string> {
