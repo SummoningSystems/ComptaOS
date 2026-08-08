@@ -10,6 +10,7 @@ docker build -f "$REPO/deployment/backend.Dockerfile" -t "$NODE_IMAGE" "$REPO"
 host_uid=$(id -u)
 host_gid=$(id -g)
 docker run --rm -v "$REPO/workspace:/workspace" alpine:3.20 chown -R "$host_uid:$host_gid" /workspace
+docker run --rm -v "$REPO/backend:/app" alpine:3.20 sh -c "test ! -d /app/dist || chown -R $host_uid:$host_gid /app/dist"
 
 env_file=$(mktemp /tmp/comptaos-env.XXXXXX)
 chmod 600 "$env_file"
