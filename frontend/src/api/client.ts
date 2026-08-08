@@ -380,6 +380,7 @@ export interface GitSyncStatus {
   hasToken: boolean;
   ahead: number;
   behind: number;
+  local: { ready: boolean; error?: string; uncommitted: number; lastCommit?: string; lastAutoCommitAt?: string };
 }
 
 export interface GitSyncConfig {

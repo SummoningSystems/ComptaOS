@@ -36,9 +36,8 @@ import { authRoutes, COOKIE_NAME } from "./routes/auth.js";
 import { hasUsers, getJwtSecret } from "./services/authService.js";
 import jwt from "jsonwebtoken";
 import staticPlugin from "@fastify/static";
-import { ensureDefaultCompany } from "./services/companiesService.js";
-import { initRepo } from "./services/gitService.js";
-import { getWorkspaceRoot } from "./services/fileSystem.js";
+import { ensureDefaultCompany, getCompaniesRoot } from "./services/companiesService.js";
+import { initRepo, startGitAutoCommitScheduler } from "./services/gitService.js";
 
 const app = Fastify({ logger: true });
 
@@ -144,7 +143,8 @@ ensureDefaultCompany();
 
 // Initialisation du dépôt Git du workspace actif
 try {
-  await initRepo(getWorkspaceRoot());
+  await initRepo(getCompaniesRoot());
+  startGitAutoCommitScheduler(getCompaniesRoot());
 } catch (err) {
   console.warn("[git] init ignoré:", (err as Error).message?.slice(0, 120));
 }

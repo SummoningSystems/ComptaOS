@@ -6,6 +6,17 @@ import { atomicWriteFile } from "./atomicFile.js";
 
 const execFile = promisify(_execFile);
 
+export interface LocalGitStatus {
+  ready: boolean;
+  error?: string;
+  uncommitted: number;
+  lastCommit?: string;
+  lastAutoCommitAt?: string;
+}
+
+let localGitStatus: LocalGitStatus = { ready: false, error: "Git n'est pas encore initialisé", uncommitted: 0 };
+let commitQueue: Promise<void> = Promise.resolve();
+
 export const WORKSPACE_GITIGNORE_ENTRIES = [
   "attachments/",
   "*.tmp",
@@ -70,21 +81,49 @@ export async function initRepo(workspacePath: string): Promise<void> {
       // Le dossier peut être vide — on ignore
     }
   }
+  await refreshLocalGitStatus(workspacePath);
 }
 
 /**
  * Ajoute tous les fichiers modifiés et crée un commit.
  * Ne plante jamais (les erreurs git ne doivent pas bloquer l'API).
  */
-export async function autoCommit(workspacePath: string, message: string): Promise<void> {
+async function runAutoCommit(workspacePath: string, message: string): Promise<void> {
   try {
     await git(["add", "-A"], workspacePath);
     const status = await git(["status", "--porcelain"], workspacePath);
-    if (!status) return; // Rien à commiter
+    if (!status) { await refreshLocalGitStatus(workspacePath); return; }
     await git(["commit", "-m", message], workspacePath);
+    localGitStatus.lastAutoCommitAt = new Date().toISOString();
+    await refreshLocalGitStatus(workspacePath);
   } catch (err) {
-    console.warn("[git] autoCommit ignoré:", (err as Error).message?.slice(0, 120));
+    const error = (err as Error).message?.slice(0, 240) || "Erreur Git inconnue";
+    localGitStatus = { ...localGitStatus, ready: false, error };
+    console.warn("[git] autoCommit échoué:", error);
   }
+}
+
+export function autoCommit(workspacePath: string, message: string): Promise<void> {
+  const next = commitQueue.then(() => runAutoCommit(workspacePath, message));
+  commitQueue = next.catch(() => {});
+  return next;
+}
+
+export async function refreshLocalGitStatus(workspacePath: string): Promise<LocalGitStatus> {
+  try {
+    const status = await git(["status", "--porcelain"], workspacePath);
+    const lastCommit = await git(["log", "-1", "--pretty=%h %s"], workspacePath).catch(() => undefined);
+    localGitStatus = { ...localGitStatus, ready: true, error: undefined, uncommitted: status ? status.split("\n").length : 0, lastCommit };
+  } catch (err) {
+    localGitStatus = { ...localGitStatus, ready: false, error: (err as Error).message?.slice(0, 240) || "Git indisponible", uncommitted: 0 };
+  }
+  return { ...localGitStatus };
+}
+
+export function startGitAutoCommitScheduler(workspacePath: string, intervalMs = 60_000): () => void {
+  const timer = setInterval(() => { void autoCommit(workspacePath, "sauvegarde automatique du workspace"); }, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 export interface GitCommit {
@@ -184,6 +223,7 @@ export interface GitSyncStatus {
   ahead: number;
   behind: number;
   lastSync?: string;
+  local: LocalGitStatus;
 }
 
 /** Chemin du fichier de config sync (dans le dossier .git — jamais commité). */
@@ -203,7 +243,9 @@ export async function readSyncConfig(workspacePath: string): Promise<GitSyncConf
 
 /** Écrit la config de synchronisation distante. */
 export async function writeSyncConfig(workspacePath: string, config: GitSyncConfig): Promise<void> {
-  await fs.writeFile(syncConfigPath(workspacePath), JSON.stringify(config, null, 2), "utf-8");
+  const configPath = syncConfigPath(workspacePath);
+  await fs.writeFile(configPath, JSON.stringify(config, null, 2), { encoding: "utf-8", mode: 0o600 });
+  await fs.chmod(configPath, 0o600);
 }
 
 /** Supprime la config de synchronisation (déconnexion). */
@@ -249,9 +291,10 @@ export async function testRemoteConnection(workspacePath: string, config: GitSyn
 /** Retourne le statut de synchronisation (ahead/behind). */
 export async function getSyncStatus(workspacePath: string): Promise<GitSyncStatus> {
   const config = await readSyncConfig(workspacePath);
+  const local = await refreshLocalGitStatus(workspacePath);
 
   if (!config) {
-    return { configured: false, hasToken: false, ahead: 0, behind: 0 };
+    return { configured: false, hasToken: false, ahead: 0, behind: 0, local };
   }
 
   let ahead = 0;
@@ -280,6 +323,7 @@ export async function getSyncStatus(workspacePath: string): Promise<GitSyncStatu
     hasToken: !!config.token,
     ahead,
     behind,
+    local,
   };
 }
 

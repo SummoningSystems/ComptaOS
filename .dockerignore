@@ -1,0 +1,8 @@
+workspace/
+**/node_modules/
+**/dist/
+.git/
+.ctx/
+.research-trail/
+coverage/
+*.log

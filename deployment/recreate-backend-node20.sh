@@ -2,16 +2,14 @@
 set -euo pipefail
 
 CONTAINER=comptaos-backend
-NODE_IMAGE=node:20.19.5-alpine
+NODE_IMAGE=comptaos-backend:node20-git
 REPO="$HOME/apps/comptaos"
 
-current_image=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER")
-has_local_ocr=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | grep -c '^OCR_LOCAL_URL=http://comptaos-ocr:8000$' || true)
-if [ "$current_image" = "$NODE_IMAGE" ] && [ "$has_local_ocr" -eq 1 ]; then
-  docker restart "$CONTAINER" >/dev/null
-  echo "$CONTAINER redémarré avec OCR local actif"
-  exit 0
-fi
+docker build -f "$REPO/deployment/backend.Dockerfile" -t "$NODE_IMAGE" "$REPO"
+
+host_uid=$(id -u)
+host_gid=$(id -g)
+docker run --rm -v "$REPO/workspace:/workspace" alpine:3.20 chown -R "$host_uid:$host_gid" /workspace
 
 env_file=$(mktemp /tmp/comptaos-env.XXXXXX)
 chmod 600 "$env_file"
@@ -40,6 +38,7 @@ docker run -d \
   -e OCR_REMOTE_FALLBACK=false \
   -v "$REPO/backend:/app" \
   -v "$REPO/workspace:/workspace" \
+  --user "$host_uid:$host_gid" \
   -w /app \
   "$NODE_IMAGE" \
   node dist/index.js >/dev/null

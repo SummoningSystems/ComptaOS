@@ -97,6 +97,10 @@ export function GitSyncPanel() {
   useEffect(() => { load(); }, []);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider)!;
+  const localStatusCard = status?.local && <div className={`rounded-lg border p-3 text-xs ${status.local.ready ? "border-green-500/30 bg-green-500/10" : "border-red-500/40 bg-red-500/10"}`}>
+    <div className={`font-semibold ${status.local.ready ? "text-green-400" : "text-red-400"}`}>{status.local.ready ? "✓ Historique local opérationnel" : "✕ Historique local indisponible"}</div>
+    {status.local.ready ? <div className="mt-1 space-y-0.5 text-[11px] text-vscode-muted"><p>{status.local.uncommitted ? `${status.local.uncommitted} modification(s) en attente du prochain commit automatique` : "Toutes les données versionnables sont enregistrées"}</p>{status.local.lastCommit && <p>Dernier commit : <span className="text-vscode-text">{status.local.lastCommit}</span></p>}<p>Les photos et PDF restent hors de Git ; leur chemin est conservé dans les données de transaction.</p></div> : <p className="mt-1 break-words text-[11px] text-red-300">{status.local.error || "Git ne peut pas enregistrer le workspace."}</p>}
+  </div>;
 
   async function handleTest() {
     setTesting(true);
@@ -157,6 +161,7 @@ export function GitSyncPanel() {
   if (status?.configured) {
     return (
       <div className="space-y-4">
+        {localStatusCard}
         {/* En-tête statut */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30">
           <span className="text-xl">{PROVIDERS.find((p) => p.id === status.provider)?.icon ?? "🔧"}</span>
@@ -223,6 +228,7 @@ export function GitSyncPanel() {
   // ── Vue : assistant de configuration ─────────────────────────────────────
   return (
     <div className="space-y-5">
+      {localStatusCard}
       {/* Intro */}
       <div className="p-3 rounded-lg bg-vscode-accent/10 border border-vscode-accent/30 text-xs text-vscode-text leading-relaxed">
         <p className="font-semibold text-vscode-accent mb-1">🔒 Vos données restent chez vous</p>
