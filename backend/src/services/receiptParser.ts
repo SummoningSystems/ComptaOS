@@ -18,7 +18,7 @@ function detectCategory(text: string): Category {
   const normalized = text.toLowerCase();
   if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
-  if (/logiciel|software|licence|abonnement/.test(normalized)) return "software";
+  if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
   if (/assurance/.test(normalized)) return "insurance";
   if (/loyer|location immobili/.test(normalized)) return "rent";
   if (/materiel|matériel|equipement|équipement/.test(normalized)) return "equipment";
@@ -27,18 +27,26 @@ function detectCategory(text: string): Category {
 
 function detectDate(text: string): string | undefined {
   const match = text.match(/\b(0?[1-9]|[12]\d|3[01])[/.-](0?[1-9]|1[0-2])[/.-](20\d{2}|\d{2})\b/);
-  if (!match) return undefined;
-  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
-  return `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  if (match) {
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  }
+  const english = text.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(0?[1-9]|[12]\d|3[01]),?\s+(20\d{2})\b/i);
+  if (!english) return undefined;
+  const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+  return `${english[3]}-${String(months.indexOf(english[1].toLowerCase()) + 1).padStart(2, "0")}-${english[2].padStart(2, "0")}`;
 }
 
 function detectSupplier(text: string): string {
+  const known = text.match(/\b(Unity Technologies(?:\s+SF)?|Unity Asset Store)\b/i)?.[1];
+  if (known) return known;
   const ignored = /ticket|facture|note|duplicata|client|adresse|telephone|tél[.:]|siret|tva|bill\s+\d/i;
   return text.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 3 && line.length <= 60 && /[a-zà-ÿ]{3}/i.test(line) && !ignored.test(line)) ?? "Inconnu";
 }
 
 function detectInvoiceRef(text: string): string | undefined {
-  return text.match(/(?:bill|facture|ticket|note|reçu|réf(?:érence)?)[ \t#:n°-]*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1];
+  return text.match(/invoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1]
+    ?? text.match(/(?:bill|facture|ticket|note|reçu|réf(?:érence)?)[ \t#:n°-]*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1];
 }
 
 interface VatSummary { amountHt: number; amountTtc: number; vatSplits: Array<{ rate: number; amountTtc: number }> }
@@ -115,9 +123,15 @@ export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
+    new RegExp(`total\\s*incl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim"),
   ]);
-  const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim")]);
-  const vatSplits = summary?.vatSplits ?? detectVatSplits(text);
+  const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  let vatSplits = summary?.vatSplits ?? detectVatSplits(text);
+  const explicitVat = findLastAmount(text, [new RegExp(`total\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  if (!vatSplits.length && amountHt > 0 && amountTtc > 0 && explicitVat > 0 && Math.abs(amountHt + explicitVat - amountTtc) < 0.06) {
+    const rate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10|20)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
+    if (rate !== undefined && Math.abs(amountHt * rate / 100 - explicitVat) < 0.08) vatSplits = [{ rate, amountTtc }];
+  }
   const splitTotal = round2(vatSplits.reduce((sum, split) => sum + split.amountTtc, 0));
   const coherent = amountTtc > 0 && (!vatSplits.length || Math.abs(splitTotal - amountTtc) < 0.06);
   const fields = [amountTtc > 0, amountHt > 0, Boolean(detectDate(text)), vatSplits.length > 0].filter(Boolean).length;

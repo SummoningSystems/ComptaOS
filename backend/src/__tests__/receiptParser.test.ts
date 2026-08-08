@@ -25,4 +25,26 @@ describe("analyse comptable locale d'un ticket", () => {
     expect(result).toMatchObject({ supplier: "YANKEE GRILL", amountHt: 23.68, amountTtc: 26.8, category: "restaurant", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 16.18, amountVat: 1.62, amountTtc: 17.8 }, { rate: 20, amountHt: 7.5, amountVat: 1.5, amountTtc: 9 }]);
   });
+
+  it("analyse une facture numérique Unity en anglais", () => {
+    const result = parseReceiptTextLocally(`Unity Technologies SF
+Invoice
+Invoice No.
+IN010102957943
+Date
+August 07, 2026
+Salesperson Unity Asset Store
+Tower Defense Pack Orcs - Low Poly 3D Art
+1
+20%
+€ 36.79
+Total Excl. TAX*
+€ 36.79
+Total TAX*
+€ 7.36
+Total Incl. TAX*
+€ 44.15`);
+    expect(result).toMatchObject({ supplier: "Unity Technologies SF", invoiceRef: "IN010102957943", date: "2026-08-07", amountHt: 36.79, amountVat: 7.36, amountTtc: 44.15, category: "software", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 36.79, amountVat: 7.36, amountTtc: 44.15 }]);
+  });
 });

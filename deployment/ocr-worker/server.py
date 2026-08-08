@@ -6,6 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pypdfium2 as pdfium
+from pypdf import PdfReader
 from PIL import Image
 from paddleocr import PaddleOCR
 
@@ -39,6 +40,16 @@ def images_from_document(data, mimetype):
     return [Image.open(io.BytesIO(data)).convert("RGB")]
 
 
+def native_pdf_text(data):
+    """Préfère le texte embarqué, plus fiable et moins coûteux que l'OCR visuel."""
+    try:
+        pages = [(page.extract_text() or "").strip() for page in PdfReader(io.BytesIO(data)).pages]
+        text = "\n\n".join(page for page in pages if page)
+        return text if len(text) >= 40 else ""
+    except Exception:
+        return ""
+
+
 def result_text(result):
     payload = getattr(result, "json", None)
     if callable(payload):
@@ -52,6 +63,10 @@ def result_text(result):
 
 
 def recognize(data, mimetype):
+    if mimetype == "application/pdf":
+        text = native_pdf_text(data)
+        if text:
+            return text
     texts = []
     with OCR_LOCK:
         for image in images_from_document(data, mimetype):
