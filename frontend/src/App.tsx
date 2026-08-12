@@ -64,7 +64,7 @@ const TAB_LABELS: Record<TabType, string> = {
   spreadsheets: "Tableaux",
   history:      "Historique",
   journal:      "Journal",
-  alerts:       "Alertes",
+  alerts:       "À traiter",
   templates:    "Modèles",
   reconcile:    "Rapprochement",
   treasury:     "Trésorerie",

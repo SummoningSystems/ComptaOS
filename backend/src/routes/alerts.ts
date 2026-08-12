@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { getTransactionLoadIssues, loadAllTransactions } from "../services/transactionService.js";
 import { loadBudgets } from "../services/settingsService.js";
+import { loadPendingReceipts } from "../services/receiptInboxService.js";
 
 export interface SystemAlert {
   id: string;
@@ -8,13 +9,14 @@ export interface SystemAlert {
   category: string;
   message: string;
   count?: number;
+  action?: { label: string; tab: "transactions" | "reconcile" | "vat" | "treasury" | "budgets" | "export" };
 }
 
 export async function alertsRoutes(app: FastifyInstance) {
   /** GET /api/alerts — liste toutes les alertes actives */
   app.get("/", async (_req, reply) => {
     const alerts: SystemAlert[] = [];
-    const transactions = await loadAllTransactions();
+    const [transactions, pendingReceipts] = await Promise.all([loadAllTransactions(), loadPendingReceipts()]);
     const loadIssues = getTransactionLoadIssues();
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -40,6 +42,7 @@ export async function alertsRoutes(app: FastifyInstance) {
         category: "Justificatifs",
         message: `${unjustified.length} transaction${unjustified.length > 1 ? "s" : ""} sans justificatif`,
         count: unjustified.length,
+        action: { label: "Ajouter les justificatifs", tab: "transactions" },
       });
     }
 
@@ -52,8 +55,26 @@ export async function alertsRoutes(app: FastifyInstance) {
         category: "Catégorisation",
         message: `${uncategorized.length} transaction${uncategorized.length > 1 ? "s" : ""} en catégorie "misc" — utilisez Smart Catégoriser`,
         count: uncategorized.length,
+        action: { label: "Catégoriser", tab: "transactions" },
       });
     }
+
+    if (pendingReceipts.length > 0) {
+      alerts.push({ id: "pending_receipts", level: "warn", category: "Justificatifs", message: `${pendingReceipts.length} justificatif${pendingReceipts.length > 1 ? "s" : ""} en attente de rapprochement`, count: pendingReceipts.length, action: { label: "Rapprocher", tab: "transactions" } });
+      const ocrFailures = pendingReceipts.filter((receipt) => receipt.ocr.status !== "success");
+      if (ocrFailures.length > 0) alerts.push({ id: "ocr_review", level: "warn", category: "OCR", message: `${ocrFailures.length} justificatif${ocrFailures.length > 1 ? "s" : ""} à relire ou saisir manuellement`, count: ocrFailures.length, action: { label: "Vérifier", tab: "transactions" } });
+    }
+
+    const vatMissing = validTxns.filter((transaction) => transaction.amount_ttc < 0 && transaction.vat === 0 && transaction.category !== "salary" && transaction.category !== "taxes");
+    if (vatMissing.length > 0) alerts.push({ id: "vat_missing", level: "warn", category: "TVA", message: `${vatMissing.length} dépense${vatMissing.length > 1 ? "s" : ""} sans TVA renseignée`, count: vatMissing.length, action: { label: "Contrôler la TVA", tab: "vat" } });
+
+    const duplicateKeys = new Map<string, number>();
+    for (const transaction of validTxns) {
+      const key = `${transaction.date}|${transaction.label.trim().toLowerCase()}|${transaction.amount_ttc.toFixed(2)}`;
+      duplicateKeys.set(key, (duplicateKeys.get(key) ?? 0) + 1);
+    }
+    const duplicateCount = Array.from(duplicateKeys.values()).filter((count) => count > 1).reduce((sum, count) => sum + count, 0);
+    if (duplicateCount > 0) alerts.push({ id: "duplicates", level: "error", category: "Doublons", message: `${duplicateCount} transactions potentiellement en doublon`, count: duplicateCount, action: { label: "Examiner", tab: "transactions" } });
 
     // 3. Budgets dépassés ce mois-ci
     const budgets = await Promise.resolve(loadBudgets()).catch(() => [] as { category: string; monthlyLimit: number }[]);
@@ -114,6 +135,7 @@ export async function alertsRoutes(app: FastifyInstance) {
         category: "Rapprochement",
         message: `${unreconciled.length} transactions non réconciliées avec le relevé bancaire`,
         count: unreconciled.length,
+        action: { label: "Rapprocher", tab: "reconcile" },
       });
     }
 

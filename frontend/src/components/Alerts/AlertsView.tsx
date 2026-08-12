@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useAppStore } from "../../stores/appStore";
+import type { TabType } from "../../types";
 
 interface SystemAlert {
   id: string;
@@ -7,6 +9,7 @@ interface SystemAlert {
   category: string;
   message: string;
   count?: number;
+  action?: { label: string; tab: TabType };
 }
 
 const LEVEL_STYLES: Record<SystemAlert["level"], { bg: string; border: string; icon: string; dot: string }> = {
@@ -15,19 +18,14 @@ const LEVEL_STYLES: Record<SystemAlert["level"], { bg: string; border: string; i
   info:  { bg: "bg-blue-900/20",   border: "border-blue-700",   icon: "🔵", dot: "bg-blue-400"   },
 };
 
-const CAT_LABELS: Record<string, string> = {
-  unjustified:    "Non justifiées",
-  uncategorized:  "Non catégorisées",
-  budget:         "Budget",
-  treasury:       "Trésorerie",
-  vat:            "TVA",
-  reconciliation: "Rapprochement",
-};
+const CATEGORY_ORDER = ["Intégrité des données", "Doublons", "Justificatifs", "OCR", "TVA", "Catégorisation", "Rapprochement", "Budgets", "Trésorerie"];
+const TAB_TITLES: Partial<Record<TabType, string>> = { transactions: "Transactions", reconcile: "Rapprochement", vat: "TVA", treasury: "Trésorerie", budgets: "Budgets", export: "Export" };
 
 export function AlertsView() {
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SystemAlert["level"] | "all">("all");
+  const openTab = useAppStore((state) => state.openTab);
 
   async function load() {
     setLoading(true);
@@ -50,7 +48,7 @@ export function AlertsView() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-vscode-border shrink-0 bg-vscode-panel flex-wrap">
-        <span className="text-xs font-semibold text-vscode-text">🔔 Alertes système</span>
+        <div><span className="text-xs font-semibold text-vscode-text">✅ À traiter</span><p className="text-[10px] text-vscode-muted">Une file unique pour terminer la préparation comptable.</p></div>
 
         {/* Filtres niveau */}
         {(["all", "error", "warn", "info"] as const).map((l) => (
@@ -89,12 +87,12 @@ export function AlertsView() {
 
       {!loading && filtered.length > 0 && (
         <div className="flex-1 overflow-auto p-4 space-y-3">
-          {Object.entries(CAT_LABELS).map(([ cat, catLabel]) => {
-            const items = filtered.filter((a) => a.category === cat);
+          {CATEGORY_ORDER.map((category) => {
+            const items = filtered.filter((a) => a.category === category);
             if (items.length === 0) return null;
             return (
-              <div key={cat}>
-                <p className="text-[10px] uppercase tracking-wider text-vscode-muted mb-2">{catLabel}</p>
+              <div key={category}>
+                <p className="text-[10px] uppercase tracking-wider text-vscode-muted mb-2">{category}</p>
                 <div className="space-y-2">
                   {items.map((a) => {
                     const s = LEVEL_STYLES[a.level];
@@ -107,6 +105,7 @@ export function AlertsView() {
                             <span className="text-[10px] text-vscode-muted mt-0.5 block">{a.count} élément{a.count > 1 ? "s" : ""} concerné{a.count > 1 ? "s" : ""}</span>
                           )}
                         </div>
+                        {a.action && <button onClick={() => openTab({ id: a.action!.tab, type: a.action!.tab, title: TAB_TITLES[a.action!.tab] ?? a.action!.label })} className="shrink-0 rounded bg-vscode-accent px-2.5 py-1 text-[10px] text-white">{a.action.label} →</button>}
                       </div>
                     );
                   })}
@@ -115,7 +114,7 @@ export function AlertsView() {
             );
           })}
           {/* Catégories inconnues */}
-          {filtered.filter((a) => !Object.keys(CAT_LABELS).includes(a.category)).map((a) => {
+          {filtered.filter((a) => !CATEGORY_ORDER.includes(a.category)).map((a) => {
             const s = LEVEL_STYLES[a.level];
             return (
               <div key={a.id} className={`flex items-start gap-3 p-3 rounded-lg border ${s.bg} ${s.border}`}>
