@@ -28,6 +28,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "💳",
     title: "Comptabilité",
     items: [
+      { icon: "✅", label: "À traiter",        tab: { id: "alerts",       title: "À traiter",         type: "alerts" } },
       { icon: "📋", label: "Transactions",     tab: { id: "transactions", title: "Transactions",      type: "transactions" } },
       { icon: "📒", label: "Journal",          tab: { id: "journal",      title: "Journal",           type: "journal" } },
       { icon: "🔗", label: "Rapprochement",    tab: { id: "reconcile",    title: "Rapprochement",     type: "reconcile" } },
@@ -83,7 +84,6 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: "🧩", label: "Plugins",     tab: { id: "plugins",  title: "Plugins",         type: "plugins" } },
       { icon: "⭐", label: "Plans",       tab: { id: "pricing",  title: "Plans & Licence", type: "pricing" } },
       { icon: "🕐", label: "Historique",  tab: { id: "history",  title: "Historique",      type: "history" } },
-      { icon: "🔔", label: "Alertes",     tab: { id: "alerts",   title: "Alertes",         type: "alerts" } },
     ],
   },
 ];
