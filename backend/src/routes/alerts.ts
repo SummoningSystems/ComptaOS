@@ -9,7 +9,7 @@ export interface SystemAlert {
   category: string;
   message: string;
   count?: number;
-  action?: { label: string; tab: "transactions" | "reconcile" | "vat" | "treasury" | "budgets" | "export" };
+  action?: { label: string; tab: "transactions" | "reconcile" | "vat" | "treasury" | "budgets" | "export"; filter?: "unjustified" | "misc" | "duplicates" | "receipt-inbox" };
 }
 
 export async function alertsRoutes(app: FastifyInstance) {
@@ -42,7 +42,7 @@ export async function alertsRoutes(app: FastifyInstance) {
         category: "Justificatifs",
         message: `${unjustified.length} transaction${unjustified.length > 1 ? "s" : ""} sans justificatif`,
         count: unjustified.length,
-        action: { label: "Ajouter les justificatifs", tab: "transactions" },
+        action: { label: "Ajouter les justificatifs", tab: "transactions", filter: "unjustified" },
       });
     }
 
@@ -55,12 +55,12 @@ export async function alertsRoutes(app: FastifyInstance) {
         category: "Catégorisation",
         message: `${uncategorized.length} transaction${uncategorized.length > 1 ? "s" : ""} en catégorie "misc" — utilisez Smart Catégoriser`,
         count: uncategorized.length,
-        action: { label: "Catégoriser", tab: "transactions" },
+        action: { label: "Catégoriser", tab: "transactions", filter: "misc" },
       });
     }
 
     if (pendingReceipts.length > 0) {
-      alerts.push({ id: "pending_receipts", level: "warn", category: "Justificatifs", message: `${pendingReceipts.length} justificatif${pendingReceipts.length > 1 ? "s" : ""} en attente de rapprochement`, count: pendingReceipts.length, action: { label: "Rapprocher", tab: "transactions" } });
+      alerts.push({ id: "pending_receipts", level: "warn", category: "Justificatifs", message: `${pendingReceipts.length} justificatif${pendingReceipts.length > 1 ? "s" : ""} en attente de rapprochement`, count: pendingReceipts.length, action: { label: "Rapprocher", tab: "transactions", filter: "receipt-inbox" } });
       const ocrFailures = pendingReceipts.filter((receipt) => receipt.ocr.status !== "success");
       if (ocrFailures.length > 0) alerts.push({ id: "ocr_review", level: "warn", category: "OCR", message: `${ocrFailures.length} justificatif${ocrFailures.length > 1 ? "s" : ""} à relire ou saisir manuellement`, count: ocrFailures.length, action: { label: "Vérifier", tab: "transactions" } });
     }
@@ -74,7 +74,7 @@ export async function alertsRoutes(app: FastifyInstance) {
       duplicateKeys.set(key, (duplicateKeys.get(key) ?? 0) + 1);
     }
     const duplicateCount = Array.from(duplicateKeys.values()).filter((count) => count > 1).reduce((sum, count) => sum + count, 0);
-    if (duplicateCount > 0) alerts.push({ id: "duplicates", level: "error", category: "Doublons", message: `${duplicateCount} transactions potentiellement en doublon`, count: duplicateCount, action: { label: "Examiner", tab: "transactions" } });
+    if (duplicateCount > 0) alerts.push({ id: "duplicates", level: "error", category: "Doublons", message: `${duplicateCount} transactions potentiellement en doublon`, count: duplicateCount, action: { label: "Examiner", tab: "transactions", filter: "duplicates" } });
 
     // 3. Budgets dépassés ce mois-ci
     const budgets = await Promise.resolve(loadBudgets()).catch(() => [] as { category: string; monthlyLimit: number }[]);

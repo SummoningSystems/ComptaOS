@@ -9,7 +9,7 @@ interface SystemAlert {
   category: string;
   message: string;
   count?: number;
-  action?: { label: string; tab: TabType };
+  action?: { label: string; tab: TabType; filter?: "unjustified" | "misc" | "duplicates" | "receipt-inbox" };
 }
 
 const LEVEL_STYLES: Record<SystemAlert["level"], { bg: string; border: string; icon: string; dot: string }> = {
@@ -105,7 +105,7 @@ export function AlertsView() {
                             <span className="text-[10px] text-vscode-muted mt-0.5 block">{a.count} élément{a.count > 1 ? "s" : ""} concerné{a.count > 1 ? "s" : ""}</span>
                           )}
                         </div>
-                        {a.action && <button onClick={() => openTab({ id: a.action!.tab, type: a.action!.tab, title: TAB_TITLES[a.action!.tab] ?? a.action!.label })} className="shrink-0 rounded bg-vscode-accent px-2.5 py-1 text-[10px] text-white">{a.action.label} →</button>}
+                        {a.action && <button onClick={() => openTab({ id: a.action!.filter ? `${a.action!.tab}-${a.action!.filter}` : a.action!.tab, type: a.action!.tab, title: a.action!.filter ? `${TAB_TITLES[a.action!.tab] ?? a.action!.label} — ${a.action!.label}` : TAB_TITLES[a.action!.tab] ?? a.action!.label, path: a.action!.filter })} className="shrink-0 rounded bg-vscode-accent px-2.5 py-1 text-[10px] text-white">{a.action.label} →</button>}
                       </div>
                     );
                   })}

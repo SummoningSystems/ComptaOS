@@ -108,7 +108,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
-      {type === "transactions" && <TransactionsView />}
+      {type === "transactions" && <TransactionsView workFilter={path as "unjustified" | "misc" | "duplicates" | "receipt-inbox" | undefined} />}
       {type === "reports"      && <ReportsView />}
       {type === "recurring"    && <RecurringView />}
       {type === "invoices"     && <InvoicesView />}

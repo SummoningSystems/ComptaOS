@@ -405,7 +405,10 @@ const CATEGORY_COLORS: Record<Category, string> = {
   misc: "bg-gray-700 text-gray-300",
 };
 
-export function TransactionsView() {
+type WorkFilter = "unjustified" | "misc" | "duplicates" | "receipt-inbox";
+const WORK_FILTER_LABELS: Record<WorkFilter, string> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
+
+export function TransactionsView({ workFilter }: { workFilter?: WorkFilter }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -422,11 +425,11 @@ export function TransactionsView() {
     reasoning: string;
     confidence: string;
   } | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<Category | "">("")
+  const [categoryFilter, setCategoryFilter] = useState<Category | "">(workFilter === "misc" ? "misc" : "")
   const [statusFilter, setStatusFilter] = useState<"" | "pending" | "validated" | "rejected">("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
-  const [showUnjustified, setShowUnjustified] = useState(false);
+  const [showUnjustified, setShowUnjustified] = useState(workFilter === "unjustified");
   const [hideRejected, setHideRejected] = useState(true);
   const [typeFilter, setTypeFilter] = useState("");
   const [holderFilter, setHolderFilter] = useState("");
@@ -709,7 +712,7 @@ export function TransactionsView() {
   const balance = balanceIn - balanceOut;
 
   // Détection de doublons : même date + libellé norm. + montant (hors rejected)
-  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(workFilter === "duplicates");
   const duplicateIds = (() => {
     const seen = new Map<string, string[]>();
     for (const t of transactions) {
@@ -826,6 +829,13 @@ export function TransactionsView() {
           if (proposal) setOcrReview({ transaction, proposal });
         }}
       />
+      {workFilter && (
+        <div className="flex items-center gap-3 border-b border-blue-700 bg-blue-900/25 px-4 py-2 text-xs text-blue-200 shrink-0">
+          <strong>{WORK_FILTER_LABELS[workFilter]}</strong>
+          <span>{workFilter === "receipt-inbox" ? "La boîte de justificatifs est affichée ci-dessus." : `${displayedFiltered.length} transaction${displayedFiltered.length > 1 ? "s" : ""} affichée${displayedFiltered.length > 1 ? "s" : ""}.`}</span>
+          {workFilter !== "receipt-inbox" && <button onClick={() => { setCategoryFilter(""); setShowUnjustified(false); setShowDuplicatesOnly(false); }} className="ml-auto rounded border border-blue-600 px-2 py-0.5 hover:bg-blue-800">Afficher toutes les transactions</button>}
+        </div>
+      )}
       {/* Toolbar row 1 */}
       <div className="flex items-center gap-3 px-4 py-2 bg-vscode-panel border-b border-vscode-border shrink-0 flex-wrap">
         <span className="text-vscode-muted text-xs">
