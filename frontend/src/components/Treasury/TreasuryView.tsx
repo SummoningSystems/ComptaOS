@@ -129,13 +129,27 @@ export function TreasuryView() {
 
   return (
     <div className="flex flex-col h-full overflow-auto p-6 gap-6">
-      <h2 className="text-vscode-text text-sm font-semibold">Trésorerie temps réel</h2>
+      <div>
+        <h2 className="text-vscode-text text-sm font-semibold">Trésorerie</h2>
+        <p className="text-[10px] text-vscode-muted mt-1">
+          {data.bank_balance_updated_at
+            ? `Solde Powens actualisé le ${new Date(data.bank_balance_updated_at).toLocaleString("fr-FR")}.`
+            : "Aucun solde bancaire disponible : les valeurs reposent sur les mouvements importés."}
+        </p>
+      </div>
+
+      {data.bank_balance !== undefined && (
+        <div className="rounded border border-blue-800 bg-blue-900/20 px-3 py-2 text-xs text-blue-200">
+          Les transactions importées représentent une variation de {fmt(data.transaction_flow)}. Le solde bancaire de {fmt(data.bank_balance)} sert de référence aux projections ; l'écart de {fmt(data.balance_difference ?? 0)} correspond notamment au solde antérieur au début de l'historique importé.
+        </div>
+      )}
 
       {/* ── KPIs principaux ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Solde actuel"
+          label={data.bank_balance !== undefined ? "Solde bancaire" : "Variation importée"}
           value={fmt(data.treasury)}
+          sub={data.bank_balance !== undefined ? "dernier solde Powens connu" : "depuis la première transaction"}
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
         />
         <KpiCard

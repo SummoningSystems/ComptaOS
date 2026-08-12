@@ -1,13 +1,15 @@
 import { loadAllTransactions } from "./transactionService.js";
 import { loadManualRecurring } from "./manualRecurringService.js";
 import { DashboardData } from "../types/index.js";
+import { getConnections } from "./bankingService.js";
 
 /** Construit les données agrégées pour le dashboard. */
 export async function computeDashboard(): Promise<DashboardData> {
   let recurring: ReturnType<typeof loadManualRecurring> = [];
   try { recurring = loadManualRecurring(); } catch { /* ignore */ }
-  const [transactions] = await Promise.all([
+  const [transactions, connections] = await Promise.all([
     loadAllTransactions(),
+    getConnections().catch(() => []),
   ]);
   const currentYear = new Date().getFullYear().toString();
 
@@ -15,7 +17,7 @@ export async function computeDashboard(): Promise<DashboardData> {
   const categoryMap: Record<string, number> = {};
   const accountSet = new Set<string>();
   let vatEstimate = 0;
-  let treasury = 0;
+  let transactionFlow = 0;
 
   for (const txn of transactions) {
     if (txn.status === "rejected") continue;
@@ -35,7 +37,7 @@ export async function computeDashboard(): Promise<DashboardData> {
       vatEstimate += txn.vat;
     }
 
-    treasury += txn.amount_ttc;
+    transactionFlow += txn.amount_ttc;
     if (txn.account) accountSet.add(txn.account);
   }
 
@@ -46,6 +48,27 @@ export async function computeDashboard(): Promise<DashboardData> {
   const isEstimate = netResult > 0 ? netResult * 0.25 : 0;
 
   // Runway : trésorerie / moyenne dépenses 3 derniers mois
+  const bankAccounts = connections.flatMap((connection) => connection.accounts)
+    .filter((account): account is typeof account & { balance: number } =>
+      typeof account.balance === "number" && Number.isFinite(account.balance)
+    )
+    .map((account) => ({
+      id: String(account.id),
+      name: account.name ?? `Compte ${account.id}`,
+      currency: account.currency ?? "EUR",
+      balance: parseFloat(account.balance.toFixed(2)),
+      updated_at: account.balanceUpdatedAt,
+    }));
+  const bankBalance = bankAccounts.length > 0
+    ? bankAccounts.reduce((sum, account) => sum + account.balance, 0)
+    : undefined;
+  const treasury = bankBalance ?? transactionFlow;
+  const bankBalanceUpdatedAt = bankAccounts
+    .map((account) => account.updated_at)
+    .filter((date): date is string => !!date)
+    .sort()
+    .at(-1);
+
   const recentMonths = months.slice(-3);
   const avgMonthlyExpenses = recentMonths.length > 0
     ? recentMonths.reduce((s, m) => s + monthlyMap[m].expenses, 0) / recentMonths.length
@@ -65,7 +88,7 @@ export async function computeDashboard(): Promise<DashboardData> {
   ).length;
 
   // ── Solde cumulé par mois ──────────────────────────────────────────────────
-  let cumulative = 0;
+  let cumulative = treasury - transactionFlow;
   const monthly_balance = months.map((m) => {
     cumulative += monthlyMap[m].revenue - monthlyMap[m].expenses;
     return { month: m, amount: parseFloat(cumulative.toFixed(2)) };
@@ -99,6 +122,11 @@ export async function computeDashboard(): Promise<DashboardData> {
     monthly_expenses: months.map((m) => ({ month: m, amount: parseFloat(monthlyMap[m].expenses.toFixed(2)) })),
     vat_estimate:     parseFloat(vatEstimate.toFixed(2)),
     treasury:         parseFloat(treasury.toFixed(2)),
+    transaction_flow: parseFloat(transactionFlow.toFixed(2)),
+    bank_balance: bankBalance === undefined ? undefined : parseFloat(bankBalance.toFixed(2)),
+    bank_balance_updated_at: bankBalanceUpdatedAt,
+    balance_difference: bankBalance === undefined ? undefined : parseFloat((bankBalance - transactionFlow).toFixed(2)),
+    bank_accounts: bankAccounts,
     top_categories:   Object.entries(categoryMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)

@@ -7,6 +7,7 @@ interface BankAccount {
   name?: string;
   currency?: string;
   balance?: number;
+  balanceUpdatedAt?: string;
   lastSyncAt?: string;
   importedCount?: number;
 }
@@ -377,7 +378,10 @@ export function BankingView() {
                         </div>
                         <div className="flex items-center gap-4 text-vscode-muted">
                           {acc.balance !== undefined && (
-                            <span className={acc.balance >= 0 ? "text-green-400 font-mono" : "text-red-400 font-mono"}>
+                            <span
+                              title={acc.balanceUpdatedAt ? `Solde actualisé le ${new Date(acc.balanceUpdatedAt).toLocaleString("fr-FR")}` : "Dernier solde bancaire connu"}
+                              className={acc.balance >= 0 ? "text-green-400 font-mono" : "text-red-400 font-mono"}
+                            >
                               {acc.balance.toLocaleString("fr-FR", { style: "currency", currency: acc.currency ?? "EUR" })}
                             </span>
                           )}

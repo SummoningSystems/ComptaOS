@@ -60,6 +60,11 @@ export interface DashboardData {
   monthly_expenses: { month: string; amount: number }[];
   vat_estimate: number;
   treasury: number;
+  transaction_flow: number;
+  bank_balance?: number;
+  bank_balance_updated_at?: string;
+  balance_difference?: number;
+  bank_accounts: { id: string; name: string; currency: string; balance: number; updated_at?: string }[];
   top_categories: { category: string; amount: number }[];
   // ── Nouveaux KPIs ──────────────────────────────────────────
   net_result: number;

@@ -86,7 +86,14 @@ export async function bankingRoutes(app: FastifyInstance) {
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
 
     const connectionId = parseInt((req.params as { connectionId: string }).connectionId, 10);
-    const connections = await getConnections();
+    let connections;
+    try {
+      // Une synchronisation met a jour les mouvements et le solde bancaire.
+      connections = await refreshConnections(config);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erreur";
+      return reply.status(502).send({ error: `Actualisation du solde impossible : ${msg}` });
+    }
     const conn = connections.find((c) => c.connectionId === connectionId);
     if (!conn) return reply.status(404).send({ error: "Connexion introuvable" });
 

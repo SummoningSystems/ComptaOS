@@ -82,6 +82,7 @@ export interface BankAccount {
   name?: string;
   currency?: string;
   balance?: number;
+  balanceUpdatedAt?: string;
   lastSyncAt?: string;
   importedCount?: number;
 }
@@ -284,6 +285,7 @@ export async function refreshConnections(config: BankingConfig): Promise<BankCon
 
   const existing = await getConnections();
 
+  const refreshedAt = new Date().toISOString();
   const connections: BankConnection[] = connData.connections.map((conn) => {
     const existingConn = existing.find((c) => c.connectionId === conn.id);
     const accounts: BankAccount[] = accData.accounts
@@ -296,6 +298,7 @@ export async function refreshConnections(config: BankingConfig): Promise<BankCon
           name: a.name,
           currency: a.currency?.id ?? "EUR",
           balance: a.balance,
+          balanceUpdatedAt: refreshedAt,
           lastSyncAt: existingAcc?.lastSyncAt,
           importedCount: existingAcc?.importedCount,
         };

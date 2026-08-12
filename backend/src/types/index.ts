@@ -79,6 +79,19 @@ export interface DashboardData {
   monthly_expenses: { month: string; amount: number }[];
   vat_estimate: number;
   treasury: number;
+  /** Somme des mouvements non rejetes; ce n'est pas un solde bancaire. */
+  transaction_flow: number;
+  /** Somme des derniers soldes remontes par les connexions bancaires. */
+  bank_balance?: number;
+  bank_balance_updated_at?: string;
+  balance_difference?: number;
+  bank_accounts: {
+    id: string;
+    name: string;
+    currency: string;
+    balance: number;
+    updated_at?: string;
+  }[];
   top_categories: { category: string; amount: number }[];
   // ── Nouveaux KPIs ──────────────────────────────────────────
   net_result: number;        // CA - charges (cumul)

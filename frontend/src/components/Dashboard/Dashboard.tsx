@@ -161,8 +161,11 @@ export function Dashboard() {
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Trésorerie"
+          label={data.bank_balance !== undefined ? "Solde bancaire" : "Variation importée"}
           value={`${data.treasury.toFixed(2)} €`}
+          sub={data.bank_balance_updated_at
+            ? `Powens, actualisé le ${new Date(data.bank_balance_updated_at).toLocaleString("fr-FR")}`
+            : "aucun solde bancaire synchronisé"}
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
         />
         <KpiCard
@@ -278,7 +281,12 @@ export function Dashboard() {
       {/* ── Solde cumulé par mois ───────────────────────────────────────── */}
       {(data.monthly_balance ?? []).length > 0 && (
         <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">
-          <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-4">Solde cumulé (trésorerie)</h3>
+          <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-1">Historique de trésorerie</h3>
+          <p className="text-[10px] text-vscode-muted mb-4">
+            {data.bank_balance !== undefined
+              ? "Courbe recalée sur le dernier solde bancaire connu."
+              : "Variation cumulée depuis la première transaction importée."}
+          </p>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={(data.monthly_balance ?? []).map((d) => ({ ...d, month: formatMonth(d.month) }))}>
               <defs>
@@ -334,16 +342,18 @@ export function Dashboard() {
       )}
 
       {/* ── Répartition par compte ──────────────────────────────────────── */}
-      {(data.accounts ?? []).length > 1 && (() => {
-        const accountData = (data.accounts ?? []).map((acc) => {
+      {((data.bank_accounts ?? []).length > 0 || (data.accounts ?? []).length > 1) && (() => {
+        const accountData = (data.bank_accounts ?? []).length > 0
+          ? data.bank_accounts.map((account) => ({ account: account.name, balance: account.balance, actual: true }))
+          : (data.accounts ?? []).map((acc) => {
           const balance = transactions
             .filter((t) => t.account === acc && t.status !== "rejected")
             .reduce((s, t) => s + t.amount_ttc, 0);
-          return { account: acc || "Inconnu", balance: parseFloat(balance.toFixed(2)) };
+          return { account: acc || "Inconnu", balance: parseFloat(balance.toFixed(2)), actual: false };
         });
         return (
           <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">
-            <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-4">Solde par compte</h3>
+            <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-4">{accountData[0]?.actual ? "Soldes bancaires par compte" : "Variations importées par compte"}</h3>
             <div className="flex flex-wrap gap-3">
               {accountData.map((a) => (
                 <div key={a.account} className="flex-1 min-w-[150px] bg-vscode-panel border border-vscode-border rounded p-3">
