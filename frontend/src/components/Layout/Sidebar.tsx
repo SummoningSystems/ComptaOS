@@ -29,6 +29,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Comptabilité",
     items: [
       { icon: "✅", label: "À traiter",        tab: { id: "alerts",       title: "À traiter",         type: "alerts" } },
+      { icon: "🗓️", label: "Clôture mensuelle", tab: { id: "closing",      title: "Clôture mensuelle", type: "closing" } },
       { icon: "📋", label: "Transactions",     tab: { id: "transactions", title: "Transactions",      type: "transactions" } },
       { icon: "📒", label: "Journal",          tab: { id: "journal",      title: "Journal",           type: "journal" } },
       { icon: "🔗", label: "Rapprochement",    tab: { id: "reconcile",    title: "Rapprochement",     type: "reconcile" } },
