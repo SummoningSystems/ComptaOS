@@ -92,9 +92,13 @@ export interface DashboardData {
     balance: number;
     updated_at?: string;
   }[];
+  accounting_result: number;
+  accounting_revenue: number;
+  accounting_expenses: number;
+  available_years: string[];
   top_categories: { category: string; amount: number }[];
   // ── Nouveaux KPIs ──────────────────────────────────────────
-  net_result: number;        // CA - charges (cumul)
+  net_result: number;        // alias historique de accounting_result
   is_estimate: number;       // IS 25% si bénéfice
   runway_months: number;     // trésorerie / dépenses moy. 3 derniers mois
   misc_count: number;        // transactions non catégorisées

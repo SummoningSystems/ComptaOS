@@ -22,7 +22,7 @@ import { computeDashboard } from "../services/dashboardService.js";
 describe("dashboard bank balance", () => {
   beforeEach(() => {
     state.transactions = [{
-      id: "txn_1", date: "2026-08-01", label: "Achat", amount_ttc: -50,
+      id: "txn_1", date: "2026-08-01", label: "Achat", amount_ht: -50, amount_ttc: -50,
       vat: 0, category: "misc", status: "pending", account: "7",
     }];
     state.connections = [];
@@ -33,6 +33,7 @@ describe("dashboard bank balance", () => {
 
     expect(dashboard.treasury).toBe(-50);
     expect(dashboard.transaction_flow).toBe(-50);
+    expect(dashboard.accounting_result).toBe(-50);
     expect(dashboard.bank_balance).toBeUndefined();
     expect(dashboard.monthly_balance.at(-1)?.amount).toBe(-50);
   });

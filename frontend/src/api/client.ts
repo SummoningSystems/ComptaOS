@@ -225,8 +225,8 @@ export async function importCsv(
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export async function fetchDashboard(): Promise<DashboardData> {
-  const { data } = await api.get<DashboardData>("/dashboard");
+export async function fetchDashboard(year?: string): Promise<DashboardData> {
+  const { data } = await api.get<DashboardData>("/dashboard", { params: year ? { year } : undefined });
   return data;
 }
 

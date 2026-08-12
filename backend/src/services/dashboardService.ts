@@ -4,30 +4,42 @@ import { DashboardData } from "../types/index.js";
 import { getConnections } from "./bankingService.js";
 
 /** Construit les données agrégées pour le dashboard. */
-export async function computeDashboard(): Promise<DashboardData> {
+export async function computeDashboard(requestedYear?: string): Promise<DashboardData> {
   let recurring: ReturnType<typeof loadManualRecurring> = [];
   try { recurring = loadManualRecurring(); } catch { /* ignore */ }
   const [transactions, connections] = await Promise.all([
     loadAllTransactions(),
     getConnections().catch(() => []),
   ]);
-  const currentYear = new Date().getFullYear().toString();
+  const availableYears = Array.from(new Set(transactions
+    .filter((transaction) => transaction.status !== "rejected")
+    .map((transaction) => transaction.date.slice(0, 4))))
+    .filter((year) => /^\d{4}$/.test(year))
+    .sort((a, b) => b.localeCompare(a));
+  const currentYear = requestedYear ?? availableYears[0] ?? new Date().getFullYear().toString();
 
   const monthlyMap: Record<string, { revenue: number; expenses: number }> = {};
   const categoryMap: Record<string, number> = {};
   const accountSet = new Set<string>();
   let vatEstimate = 0;
   let transactionFlow = 0;
+  let accountingRevenue = 0;
+  let accountingExpenses = 0;
 
   for (const txn of transactions) {
     if (txn.status === "rejected") continue;
+    transactionFlow += txn.amount_ttc;
+    if (txn.account) accountSet.add(txn.account);
+    if (!txn.date.startsWith(currentYear)) continue;
     const month = txn.date.slice(0, 7); // YYYY-MM
     if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
 
     if (txn.amount_ttc >= 0) {
       monthlyMap[month].revenue += txn.amount_ttc;
+      accountingRevenue += txn.amount_ht;
     } else {
       monthlyMap[month].expenses += Math.abs(txn.amount_ttc);
+      accountingExpenses += Math.abs(txn.amount_ht);
     }
 
     if (txn.amount_ttc < 0) {
@@ -37,14 +49,12 @@ export async function computeDashboard(): Promise<DashboardData> {
       vatEstimate += txn.vat;
     }
 
-    transactionFlow += txn.amount_ttc;
-    if (txn.account) accountSet.add(txn.account);
   }
 
   const months = Object.keys(monthlyMap).sort();
   const totalRevenue  = months.reduce((s, m) => s + monthlyMap[m].revenue,  0);
   const totalExpenses = months.reduce((s, m) => s + monthlyMap[m].expenses, 0);
-  const netResult = totalRevenue - totalExpenses;
+  const netResult = accountingRevenue - accountingExpenses;
   const isEstimate = netResult > 0 ? netResult * 0.25 : 0;
 
   // Runway : trésorerie / moyenne dépenses 3 derniers mois
@@ -81,14 +91,15 @@ export async function computeDashboard(): Promise<DashboardData> {
     : 999;
 
   const miscCount = transactions.filter(
-    (t) => t.category === "misc" && t.status !== "rejected"
+    (t) => t.date.startsWith(currentYear) && t.category === "misc" && t.status !== "rejected"
   ).length;
   const unjustifiedCount = transactions.filter(
-    (t) => t.justified === false && t.status !== "rejected"
+    (t) => t.date.startsWith(currentYear) && t.justified === false && t.status !== "rejected"
   ).length;
 
   // ── Solde cumulé par mois ──────────────────────────────────────────────────
-  let cumulative = treasury - transactionFlow;
+  const yearFlow = totalRevenue - totalExpenses;
+  let cumulative = treasury - yearFlow;
   const monthly_balance = months.map((m) => {
     cumulative += monthlyMap[m].revenue - monthlyMap[m].expenses;
     return { month: m, amount: parseFloat(cumulative.toFixed(2)) };
@@ -127,6 +138,10 @@ export async function computeDashboard(): Promise<DashboardData> {
     bank_balance_updated_at: bankBalanceUpdatedAt,
     balance_difference: bankBalance === undefined ? undefined : parseFloat((bankBalance - transactionFlow).toFixed(2)),
     bank_accounts: bankAccounts,
+    accounting_result: parseFloat(netResult.toFixed(2)),
+    accounting_revenue: parseFloat(accountingRevenue.toFixed(2)),
+    accounting_expenses: parseFloat(accountingExpenses.toFixed(2)),
+    available_years: availableYears,
     top_categories:   Object.entries(categoryMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)

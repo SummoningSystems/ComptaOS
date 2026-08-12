@@ -21,10 +21,10 @@ function fmtMonth(m: string) {
   catch { return m; }
 }
 
-function KpiCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function KpiCard({ label, value, sub, accent, help }: { label: string; value: string; sub?: string; accent?: string; help?: string }) {
   return (
     <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4 flex flex-col gap-1">
-      <span className="text-vscode-muted text-[11px] uppercase tracking-wider">{label}</span>
+      <span className="text-vscode-muted text-[11px] uppercase tracking-wider" title={help}>{label}{help ? " ⓘ" : ""}</span>
       <span className={`text-2xl font-semibold font-mono ${accent ?? "text-vscode-text"}`}>{value}</span>
       {sub && <span className="text-vscode-muted text-xs">{sub}</span>}
     </div>
@@ -152,6 +152,7 @@ export function TreasuryView() {
           label={data.bank_balance !== undefined ? "Solde bancaire" : "Variation importée"}
           value={fmt(data.treasury)}
           sub={data.bank_balance !== undefined ? "dernier solde Powens connu" : "depuis la première transaction"}
+          help="Argent disponible selon la dernière synchronisation bancaire."
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
         />
         <KpiCard
@@ -186,8 +187,10 @@ export function TreasuryView() {
           accent="text-red-400"
         />
         <KpiCard
-          label="Résultat net"
+          label={`Flux net TTC ${data.current_year}`}
           value={(totalRev - totalExp >= 0 ? "+" : "") + fmt(totalRev - totalExp)}
+          sub="encaissements − décaissements"
+          help="Variation produite par les transactions de l'exercice. Ce n'est ni le solde bancaire ni le résultat comptable HT."
           accent={(totalRev - totalExp) >= 0 ? "text-green-400" : "text-red-400"}
         />
         <KpiCard

@@ -27,10 +27,10 @@ function formatMonth(m: string) {
   }
 }
 
-function KpiCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function KpiCard({ label, value, sub, accent, help }: { label: string; value: string; sub?: string; accent?: string; help?: string }) {
   return (
     <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4 flex flex-col gap-1">
-      <span className="text-vscode-muted text-[11px] uppercase tracking-wider">{label}</span>
+      <span className="text-vscode-muted text-[11px] uppercase tracking-wider" title={help}>{label}{help ? " ⓘ" : ""}</span>
       <span className={`text-2xl font-semibold font-mono ${accent ?? "text-vscode-text"}`}>{value}</span>
       {sub && <span className="text-vscode-muted text-xs">{sub}</span>}
     </div>
@@ -43,13 +43,15 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [year, setYear] = useState<string>();
 
   useEffect(() => {
-    Promise.all([fetchDashboard(), fetchTransactions()])
+    setLoading(true);
+    Promise.all([fetchDashboard(year), fetchTransactions()])
       .then(([dash, txns]) => { setData(dash); setTransactions(txns); })
       .catch(() => { /* data reste null → message d'erreur affiché */ })
       .finally(() => setLoading(false));
-  }, []);
+  }, [year]);
 
   if (loading) {
     return (
@@ -110,7 +112,12 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col h-full overflow-auto p-6 gap-6">
-      <h2 className="text-vscode-text text-sm font-semibold">Dashboard financier</h2>
+      <div className="flex items-center justify-between gap-3">
+        <div><h2 className="text-vscode-text text-sm font-semibold">Dashboard financier</h2><p className="text-[10px] text-vscode-muted mt-1">Les indicateurs comptables suivent l'exercice sélectionné ; le solde bancaire est instantané.</p></div>
+        <select aria-label="Exercice comptable" value={year ?? data.current_year} onChange={(event) => setYear(event.target.value)} className="rounded border border-vscode-border bg-vscode-panel px-2 py-1 text-xs text-vscode-text">
+          {(data.available_years.length ? data.available_years : [data.current_year]).map((value) => <option key={value} value={value}>Exercice {value}</option>)}
+        </select>
+      </div>
 
       {/* ── Alertes ──────────────────────────────────────────────────────── */}
       {alerts.length > 0 && (
@@ -169,6 +176,7 @@ export function Dashboard() {
               ? "dernier solde Powens connu — synchronisez la banque pour l'actualiser"
               : "aucun solde bancaire synchronisé"}
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
+          help="Dernier solde transmis par la banque. Il représente l'argent disponible sur les comptes synchronisés."
         />
         <KpiCard
           label="TVA estimée à reverser"
@@ -177,24 +185,27 @@ export function Dashboard() {
           accent={data.vat_estimate >= 0 ? "text-yellow-400" : "text-green-400"}
         />
         <KpiCard
-          label="Revenus (cumul)"
-          value={`${totalRevenue.toFixed(2)} €`}
+          label={`Produits HT ${data.current_year}`}
+          value={`${data.accounting_revenue.toFixed(2)} €`}
           accent="text-green-400"
+          help="Somme HT des opérations positives non rejetées pendant l'exercice sélectionné."
         />
         <KpiCard
-          label="Dépenses (cumul)"
-          value={`${totalExpenses.toFixed(2)} €`}
+          label={`Charges HT ${data.current_year}`}
+          value={`${data.accounting_expenses.toFixed(2)} €`}
           accent="text-red-400"
+          help="Somme HT des opérations négatives non rejetées pendant l'exercice sélectionné."
         />
       </div>
 
       {/* KPI row — résultat & pilotage */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Résultat net (cumul)"
-          value={`${(data.net_result ?? 0) >= 0 ? "+" : ""}${(data.net_result ?? 0).toFixed(2)} €`}
-          sub="CA − charges"
-          accent={(data.net_result ?? 0) >= 0 ? "text-green-400" : "text-red-400"}
+          label={`Résultat comptable HT ${data.current_year}`}
+          value={`${data.accounting_result >= 0 ? "+" : ""}${data.accounting_result.toFixed(2)} €`}
+          sub="produits HT − charges HT"
+          accent={data.accounting_result >= 0 ? "text-green-400" : "text-red-400"}
+          help="Résultat provisoire de l'exercice, calculé à partir des transactions présentes dans ComptaOS. Ce n'est pas le solde bancaire."
         />
         <KpiCard
           label="IS estimé à provisionner"

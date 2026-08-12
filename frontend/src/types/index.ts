@@ -65,6 +65,10 @@ export interface DashboardData {
   bank_balance_updated_at?: string;
   balance_difference?: number;
   bank_accounts: { id: string; name: string; currency: string; balance: number; updated_at?: string }[];
+  accounting_result: number;
+  accounting_revenue: number;
+  accounting_expenses: number;
+  available_years: string[];
   top_categories: { category: string; amount: number }[];
   // ── Nouveaux KPIs ──────────────────────────────────────────
   net_result: number;
