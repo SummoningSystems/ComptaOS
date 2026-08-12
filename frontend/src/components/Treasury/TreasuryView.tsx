@@ -134,7 +134,9 @@ export function TreasuryView() {
         <p className="text-[10px] text-vscode-muted mt-1">
           {data.bank_balance_updated_at
             ? `Solde Powens actualisé le ${new Date(data.bank_balance_updated_at).toLocaleString("fr-FR")}.`
-            : "Aucun solde bancaire disponible : les valeurs reposent sur les mouvements importés."}
+            : data.bank_balance !== undefined
+              ? "Dernier solde Powens connu sans date d'actualisation : synchronisez la banque."
+              : "Aucun solde bancaire disponible : les valeurs reposent sur les mouvements importés."}
         </p>
       </div>
 

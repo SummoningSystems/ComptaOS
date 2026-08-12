@@ -165,7 +165,9 @@ export function Dashboard() {
           value={`${data.treasury.toFixed(2)} €`}
           sub={data.bank_balance_updated_at
             ? `Powens, actualisé le ${new Date(data.bank_balance_updated_at).toLocaleString("fr-FR")}`
-            : "aucun solde bancaire synchronisé"}
+            : data.bank_balance !== undefined
+              ? "dernier solde Powens connu — synchronisez la banque pour l'actualiser"
+              : "aucun solde bancaire synchronisé"}
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
         />
         <KpiCard
