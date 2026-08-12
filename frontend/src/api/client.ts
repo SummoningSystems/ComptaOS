@@ -370,7 +370,7 @@ export async function fetchSmartSuggestions(): Promise<{ suggestions: SmartSugge
 
 // ── Synchronisation git distante ──────────────────────────────────────────────
 
-export type GitProvider = "github" | "gitlab" | "gitea" | "custom";
+export type GitProvider = "github" | "gitlab" | "gitea" | "custom" | "local";
 
 export interface GitSyncStatus {
   configured: boolean;
@@ -381,12 +381,13 @@ export interface GitSyncStatus {
   ahead: number;
   behind: number;
   local: { ready: boolean; error?: string; uncommitted: number; lastCommit?: string; lastAutoCommitAt?: string };
+  localDestinationAllowed: boolean;
 }
 
 export interface GitSyncConfig {
   provider: GitProvider;
   remoteUrl: string;
-  token: string;
+  token?: string;
   branch: string;
 }
 

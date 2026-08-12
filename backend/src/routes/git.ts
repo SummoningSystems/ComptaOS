@@ -8,6 +8,8 @@ import {
 import { getCompaniesRoot } from "../services/companiesService.js";
 
 export async function gitRoutes(app: FastifyInstance) {
+  const providers = new Set(["github", "gitlab", "gitea", "custom", "local"]);
+  const validBranch = (branch: string) => /^(?![-/.])(?!.*\.\.)(?!.*[~^:?*\[\\])[^\s]+$/.test(branch);
   /**
    * GET /api/git/log
    * Retourne les N derniers commits du workspace actif.
@@ -45,11 +47,11 @@ export async function gitRoutes(app: FastifyInstance) {
   /** POST /api/git/sync/configure — Enregistre la config et teste la connexion */
   app.post<{ Body: GitSyncConfig }>("/sync/configure", async (req, reply) => {
     const { provider, remoteUrl, token, branch } = req.body;
-    if (!provider || !remoteUrl || !token || !branch) {
-      return reply.status(400).send({ error: "Champs requis : provider, remoteUrl, token, branch" });
+    if (!providers.has(provider) || !validBranch(branch ?? "")) return reply.status(400).send({ error: "Fournisseur ou branche Git invalide" });
+    if (!provider || !remoteUrl || !branch || (provider !== "local" && !token)) {
+      return reply.status(400).send({ error: provider === "local" ? "Champs requis : chemin et branche" : "Champs requis : provider, remoteUrl, token, branch" });
     }
-    // Valider l'URL
-    try { new URL(remoteUrl); } catch {
+    if (provider !== "local") try { new URL(remoteUrl); } catch {
       return reply.status(400).send({ error: "URL invalide" });
     }
     // Tester la connexion avant de sauvegarder
@@ -57,17 +59,19 @@ export async function gitRoutes(app: FastifyInstance) {
     if (!test.ok) {
       return reply.status(422).send({ error: `Connexion échouée : ${test.error}` });
     }
-    await writeSyncConfig(getCompaniesRoot(), { provider, remoteUrl, token, branch });
+    await writeSyncConfig(getCompaniesRoot(), { provider, remoteUrl, token: provider === "local" ? undefined : token, branch });
     return reply.send({ ok: true });
   });
 
   /** POST /api/git/sync/test — Teste la connexion sans sauvegarder */
   app.post<{ Body: GitSyncConfig }>("/sync/test", async (req, reply) => {
     const { provider, remoteUrl, token, branch } = req.body;
-    if (!remoteUrl || !token) {
-      return reply.status(400).send({ error: "remoteUrl et token requis" });
+    if (provider && !providers.has(provider)) return reply.status(400).send({ error: "Fournisseur Git invalide" });
+    if (branch && !validBranch(branch)) return reply.status(400).send({ error: "Branche Git invalide" });
+    if (!remoteUrl || (provider !== "local" && !token)) {
+      return reply.status(400).send({ error: provider === "local" ? "Chemin local requis" : "remoteUrl et token requis" });
     }
-    try { new URL(remoteUrl); } catch {
+    if (provider !== "local") try { new URL(remoteUrl); } catch {
       return reply.status(400).send({ error: "URL invalide" });
     }
     const result = await testRemoteConnection(getCompaniesRoot(), {

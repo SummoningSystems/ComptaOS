@@ -2,6 +2,7 @@ import { execFile as _execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import fs from "fs/promises";
+import { fileURLToPath } from "url";
 import { atomicWriteFile } from "./atomicFile.js";
 
 const execFile = promisify(_execFile);
@@ -205,12 +206,12 @@ export async function hasRepo(workspacePath: string): Promise<boolean> {
 
 // ── Synchronisation distante ──────────────────────────────────────────────────
 
-export type GitProvider = "github" | "gitlab" | "gitea" | "custom";
+export type GitProvider = "github" | "gitlab" | "gitea" | "custom" | "local";
 
 export interface GitSyncConfig {
   provider: GitProvider;
   remoteUrl: string;   // URL sans token (ex: https://github.com/user/repo.git)
-  token: string;       // Token d'accès personnel (stocké localement, non commité)
+  token?: string;      // Absent pour un dépôt local
   branch: string;      // Branche cible (ex: main)
 }
 
@@ -224,6 +225,37 @@ export interface GitSyncStatus {
   behind: number;
   lastSync?: string;
   local: LocalGitStatus;
+  localDestinationAllowed: boolean;
+}
+
+export function localGitDestinationAllowed(): boolean {
+  return process.env.ALLOW_LOCAL_GIT_SYNC === "true" || process.env.NODE_ENV !== "production";
+}
+
+export function resolveLocalGitPath(value: string, workspacePath: string): string {
+  if (!value.startsWith("file:") && !path.isAbsolute(value)) throw new Error("Le chemin du dépôt local doit être absolu");
+  const destination = value.startsWith("file:") ? fileURLToPath(value) : path.resolve(value);
+  const relative = path.relative(path.resolve(workspacePath), destination);
+  if (!relative || (!relative.startsWith("..") && !path.isAbsolute(relative))) throw new Error("Le dépôt de sauvegarde ne peut pas être placé dans le workspace ComptaOS");
+  return destination;
+}
+
+export async function prepareLocalRepository(workspacePath: string, configuredPath: string): Promise<string> {
+  if (!localGitDestinationAllowed()) throw new Error("Le mode dépôt local est désactivé sur cette installation");
+  const destination = resolveLocalGitPath(configuredPath, workspacePath);
+  await fs.mkdir(destination, { recursive: true });
+  const realDestination = await fs.realpath(destination); const realWorkspace = await fs.realpath(workspacePath);
+  const relative = path.relative(realWorkspace, realDestination);
+  if (!relative || (!relative.startsWith("..") && !path.isAbsolute(relative))) throw new Error("Le dépôt de sauvegarde ne peut pas être placé dans le workspace ComptaOS");
+  try {
+    const bare = await git(["rev-parse", "--is-bare-repository"], destination);
+    if (bare !== "true") throw new Error("Le dossier sélectionné contient un dépôt Git qui n'est pas bare");
+  } catch (error) {
+    const entries = await fs.readdir(destination);
+    if (entries.length) throw error;
+    await git(["init", "--bare"], destination);
+  }
+  return realDestination;
 }
 
 /** Chemin du fichier de config sync (dans le dossier .git — jamais commité). */
@@ -266,6 +298,12 @@ function buildAuthUrl(remoteUrl: string, token: string): string {
   return url.toString();
 }
 
+async function syncTarget(workspacePath: string, config: GitSyncConfig): Promise<string> {
+  if (config.provider === "local") return resolveLocalGitPath(config.remoteUrl, workspacePath);
+  if (!config.token) throw new Error("Token d'accès requis");
+  return buildAuthUrl(config.remoteUrl, config.token);
+}
+
 /** Configure le remote dans git (sans token dans l'URL stockée). */
 async function ensureRemote(workspacePath: string, remoteUrl: string): Promise<void> {
   try {
@@ -280,8 +318,8 @@ async function ensureRemote(workspacePath: string, remoteUrl: string): Promise<v
 /** Teste la connexion sans modifier l'état local. */
 export async function testRemoteConnection(workspacePath: string, config: GitSyncConfig): Promise<{ ok: boolean; error?: string }> {
   try {
-    const authUrl = buildAuthUrl(config.remoteUrl, config.token);
-    await git(["ls-remote", "--heads", authUrl], workspacePath);
+    const target = config.provider === "local" ? await prepareLocalRepository(workspacePath, config.remoteUrl) : await syncTarget(workspacePath, config);
+    await git(["ls-remote", "--heads", target], workspacePath);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: (err as Error).message?.slice(0, 200) };
@@ -294,7 +332,7 @@ export async function getSyncStatus(workspacePath: string): Promise<GitSyncStatu
   const local = await refreshLocalGitStatus(workspacePath);
 
   if (!config) {
-    return { configured: false, hasToken: false, ahead: 0, behind: 0, local };
+    return { configured: false, hasToken: false, ahead: 0, behind: 0, local, localDestinationAllowed: localGitDestinationAllowed() };
   }
 
   let ahead = 0;
@@ -302,8 +340,8 @@ export async function getSyncStatus(workspacePath: string): Promise<GitSyncStatu
 
   try {
     await ensureRemote(workspacePath, config.remoteUrl);
-    const authUrl = buildAuthUrl(config.remoteUrl, config.token);
-    await git(["fetch", authUrl, "--quiet"], workspacePath);
+    const target = await syncTarget(workspacePath, config);
+    await git(["fetch", target, `${config.branch}:refs/remotes/origin/${config.branch}`, "--quiet"], workspacePath);
 
     const rev = await git(
       ["rev-list", "--left-right", "--count", `origin/${config.branch}...HEAD`],
@@ -320,10 +358,11 @@ export async function getSyncStatus(workspacePath: string): Promise<GitSyncStatu
     provider: config.provider,
     remoteUrl: config.remoteUrl,
     branch: config.branch,
-    hasToken: !!config.token,
+    hasToken: config.provider === "local" || !!config.token,
     ahead,
     behind,
     local,
+    localDestinationAllowed: localGitDestinationAllowed(),
   };
 }
 
@@ -334,8 +373,8 @@ export async function syncPush(workspacePath: string): Promise<{ ok: boolean; me
 
   try {
     await ensureRemote(workspacePath, config.remoteUrl);
-    const authUrl = buildAuthUrl(config.remoteUrl, config.token);
-    const result = await git(["push", authUrl, `HEAD:${config.branch}`], workspacePath);
+    const target = await syncTarget(workspacePath, config);
+    const result = await git(["push", target, `HEAD:${config.branch}`], workspacePath);
     return { ok: true, message: result || "Push effectué" };
   } catch (err) {
     return { ok: false, message: (err as Error).message?.slice(0, 300) ?? "Erreur inconnue" };
@@ -349,8 +388,8 @@ export async function syncPull(workspacePath: string): Promise<{ ok: boolean; me
 
   try {
     await ensureRemote(workspacePath, config.remoteUrl);
-    const authUrl = buildAuthUrl(config.remoteUrl, config.token);
-    const result = await git(["pull", "--rebase", authUrl, config.branch], workspacePath);
+    const target = await syncTarget(workspacePath, config);
+    const result = await git(["pull", "--rebase", target, config.branch], workspacePath);
     return { ok: true, message: result || "Pull effectué" };
   } catch (err) {
     return { ok: false, message: (err as Error).message?.slice(0, 300) ?? "Erreur inconnue" };

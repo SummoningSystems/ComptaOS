@@ -15,6 +15,13 @@ import {
 
 const PROVIDERS: { id: GitProvider; label: string; icon: string; urlHint: string; tokenUrl: string }[] = [
   {
+    id: "local",
+    label: "Dépôt local",
+    icon: "💾",
+    urlHint: "D:\\Sauvegardes\\ComptaOS.git",
+    tokenUrl: "",
+  },
+  {
     id: "github",
     label: "GitHub",
     icon: "🐙",
@@ -97,6 +104,7 @@ export function GitSyncPanel() {
   useEffect(() => { load(); }, []);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider)!;
+  const isLocal = provider === "local";
   const localStatusCard = status?.local && <div className={`rounded-lg border p-3 text-xs ${status.local.ready ? "border-green-500/30 bg-green-500/10" : "border-red-500/40 bg-red-500/10"}`}>
     <div className={`font-semibold ${status.local.ready ? "text-green-400" : "text-red-400"}`}>{status.local.ready ? "✓ Historique local opérationnel" : "✕ Historique local indisponible"}</div>
     {status.local.ready ? <div className="mt-1 space-y-0.5 text-[11px] text-vscode-muted"><p>{status.local.uncommitted ? `${status.local.uncommitted} modification(s) en attente du prochain commit automatique` : "Toutes les données versionnables sont enregistrées"}</p>{status.local.lastCommit && <p>Dernier commit : <span className="text-vscode-text">{status.local.lastCommit}</span></p>}<p>Les photos et PDF restent hors de Git ; leur chemin est conservé dans les données de transaction.</p></div> : <p className="mt-1 break-words text-[11px] text-red-300">{status.local.error || "Git ne peut pas enregistrer le workspace."}</p>}
@@ -106,7 +114,7 @@ export function GitSyncPanel() {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await testGitSync({ provider, remoteUrl, token, branch });
+      const r = await testGitSync({ provider, remoteUrl, token: isLocal ? undefined : token, branch });
       setTestResult(r);
       if (r.ok) setStep(3);
     } finally {
@@ -118,7 +126,7 @@ export function GitSyncPanel() {
     setSaving(true);
     setSyncMsg(null);
     try {
-      await configureGitSync({ provider, remoteUrl, token, branch });
+      await configureGitSync({ provider, remoteUrl, token: isLocal ? undefined : token, branch });
       await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Erreur";
@@ -252,7 +260,7 @@ export function GitSyncPanel() {
         <div className="space-y-2">
           <p className="text-xs text-vscode-muted">Où souhaitez-vous stocker la sauvegarde ?</p>
           <div className="grid grid-cols-2 gap-2">
-            {PROVIDERS.map((p) => (
+            {PROVIDERS.filter((p) => p.id !== "local" || status?.localDestinationAllowed).map((p) => (
               <button
                 key={p.id}
                 onClick={() => { setProvider(p.id); setStep(2); }}
@@ -280,21 +288,21 @@ export function GitSyncPanel() {
 
           {/* URL du dépôt */}
           <div className="space-y-1">
-            <label className="text-xs text-vscode-muted">URL du dépôt (HTTPS)</label>
+            <label className="text-xs text-vscode-muted">{isLocal ? "Chemin du dépôt local" : "URL du dépôt (HTTPS)"}</label>
             <input
-              type="url"
+              type="text"
               value={remoteUrl}
               onChange={(e) => setRemoteUrl(e.target.value)}
               placeholder={selectedProvider.urlHint}
               className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-xs text-vscode-text placeholder:text-vscode-muted focus:outline-none focus:border-vscode-accent"
             />
             <p className="text-[10px] text-vscode-muted">
-              Créez d'abord un dépôt <strong>privé vide</strong> chez votre hébergeur, puis collez son URL ici.
+              {isLocal ? "Le dossier sera créé et initialisé automatiquement. Utilisez de préférence un disque externe ou un NAS monté." : <>Créez d'abord un dépôt <strong>privé vide</strong> chez votre hébergeur, puis collez son URL ici.</>}
             </p>
           </div>
 
           {/* Token */}
-          <div className="space-y-1">
+          {!isLocal && <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="text-xs text-vscode-muted">Token d'accès personnel</label>
               {selectedProvider.tokenUrl && (
@@ -327,7 +335,7 @@ export function GitSyncPanel() {
             <p className="text-[10px] text-vscode-muted">
               Le token est stocké uniquement sur votre machine, dans le dossier .git local.
             </p>
-          </div>
+          </div>}
 
           {/* Branche */}
           <div className="space-y-1">
@@ -349,7 +357,7 @@ export function GitSyncPanel() {
 
           <button
             onClick={handleTest}
-            disabled={!remoteUrl || !token || testing}
+            disabled={!remoteUrl || (!isLocal && !token) || testing}
             className="w-full py-1.5 rounded bg-vscode-accent/90 hover:bg-vscode-accent disabled:opacity-40 text-white text-xs font-medium transition-colors"
           >
             {testing ? "⏳ Test en cours…" : "Tester la connexion →"}
@@ -371,7 +379,7 @@ export function GitSyncPanel() {
 
           <p className="text-xs text-vscode-muted leading-relaxed">
             En confirmant, ComptaOS sauvegarde la configuration localement et
-            active la synchronisation automatique après chaque modification.
+            permet d'envoyer ou de récupérer l'historique avec les boutons de synchronisation.
           </p>
 
           {syncMsg && !syncMsg.ok && (

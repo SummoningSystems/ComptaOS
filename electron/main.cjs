@@ -134,6 +134,7 @@ function startBackend() {
       NODE_ENV: "production",
       PORT: String(backendPort),
       WORKSPACE_PATH: path.join(app.getPath("userData"), "workspace"),
+      ALLOW_LOCAL_GIT_SYNC: "true",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

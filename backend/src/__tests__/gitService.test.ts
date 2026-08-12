@@ -11,6 +11,10 @@ import {
   autoCommit,
   initRepo,
   refreshLocalGitStatus,
+  prepareLocalRepository,
+  resolveLocalGitPath,
+  syncPush,
+  writeSyncConfig,
 } from "../services/gitService.js";
 
 const execFile = promisify(execFileCallback);
@@ -60,5 +64,25 @@ describe("workspace .gitignore", () => {
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }
+  });
+
+  it("crée et utilise un dépôt de sauvegarde local sans token", async () => {
+    const root = await mkdtemp(join(tmpdir(), "comptaos-local-sync-"));
+    const workspace = join(root, "workspace"); const backup = join(root, "backup.git");
+    try {
+      await mkdir(workspace); await initRepo(workspace);
+      await writeFile(join(workspace, "settings.json"), "{}\n"); await autoCommit(workspace, "test: données locales");
+      expect(resolveLocalGitPath(backup, workspace)).toBe(backup);
+      expect(await prepareLocalRepository(workspace, backup)).toBe(backup);
+      await writeSyncConfig(workspace, { provider: "local", remoteUrl: backup, branch: "main" });
+      expect(await syncPush(workspace)).toMatchObject({ ok: true });
+      const { stdout } = await execFile("git", ["--git-dir", backup, "ls-tree", "-r", "--name-only", "main"]);
+      expect(stdout).toContain("settings.json");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("refuse de placer la sauvegarde locale dans le workspace", async () => {
+    const workspace = join(tmpdir(), "comptaos-workspace");
+    expect(() => resolveLocalGitPath(join(workspace, "backup.git"), workspace)).toThrow("workspace ComptaOS");
   });
 });
