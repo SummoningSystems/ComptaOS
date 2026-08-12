@@ -358,9 +358,11 @@ export interface SmartSuggestion {
   label: string;
   amount_ttc: number;
   suggestedCategory: string;
+  suggestedVatRate?: number;
   confidenceLevel: "high" | "medium" | "low";
   confidenceScore: number;
   matchedKeyword: string;
+  reason: string;
 }
 
 export async function fetchSmartSuggestions(): Promise<{ suggestions: SmartSuggestion[]; learnedPatterns: number }> {
@@ -442,7 +444,7 @@ export async function downloadInvoicePdf(id: string, number: string): Promise<vo
   URL.revokeObjectURL(url);
 }
 
-export async function applySmartCategories(changes: { id: string; category: string }[]): Promise<{ updated: number }> {
+export async function applySmartCategories(changes: { id: string; category: string; vat_rate?: number }[]): Promise<{ updated: number }> {
   const { data } = await api.post<{ updated: number }>("/transactions/smart-categorize/apply", { changes });
   return data;
 }

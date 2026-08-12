@@ -171,6 +171,48 @@ export function saveCompanyProfile(profile: CompanyProfile): void {
   atomicWriteFileSync(join(getSettingsDir(), "company_profile.json"), JSON.stringify(profile, null, 2));
 }
 
+export interface MerchantRule {
+  id: string;
+  pattern: string;
+  category?: Category;
+  vatRate?: number;
+  learnedAt: string;
+  sourceLabel: string;
+}
+
+export function merchantPattern(label: string): string {
+  return label.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\b(cb|card|payment|paiement|facture|mandat|sepa)\b/g, " ").replace(/\d+/g, " ").replace(/[^a-z\s]/g, " ").split(/\s+/).filter((word) => word.length >= 3).slice(0, 3).join(" ");
+}
+
+export function loadMerchantRules(): MerchantRule[] {
+  const file = join(getSettingsDir(), "merchant_rules.json");
+  if (!existsSync(file)) return [];
+  try { const value = JSON.parse(readFileSync(file, "utf-8")); return Array.isArray(value) ? value as MerchantRule[] : []; } catch { return []; }
+}
+
+export function learnMerchantRule(label: string, patch: { category?: Category; vatRate?: number }): MerchantRule | null {
+  const pattern = merchantPattern(label);
+  if (!pattern || (!patch.category && patch.vatRate === undefined)) return null;
+  const rules = loadMerchantRules();
+  const existing = rules.find((rule) => rule.pattern === pattern);
+  const rule: MerchantRule = {
+    id: existing?.id ?? `merchant_${Buffer.from(pattern).toString("hex").slice(0, 20)}`,
+    pattern,
+    category: patch.category ?? existing?.category,
+    vatRate: patch.vatRate ?? existing?.vatRate,
+    learnedAt: new Date().toISOString(),
+    sourceLabel: label,
+  };
+  ensureDir();
+  saveMerchantRules([rule, ...rules.filter((item) => item.pattern !== pattern)]);
+  return rule;
+}
+
+export function saveMerchantRules(rules: MerchantRule[]): void {
+  ensureDir();
+  atomicWriteFileSync(join(getSettingsDir(), "merchant_rules.json"), JSON.stringify(rules, null, 2));
+}
+
 export interface AccountingAccount {
   number: string;
   label: string;

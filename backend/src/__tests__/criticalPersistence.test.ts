@@ -17,6 +17,8 @@ import {
   loadCategoryRules,
   loadCompanyProfile,
   loadTreasuryAlert,
+  learnMerchantRule,
+  loadMerchantRules,
   saveBudgets,
   saveCategoryRules,
   saveCompanyProfile,
@@ -70,6 +72,8 @@ describe("critical JSON persistence", () => {
     saveTreasuryAlert({ threshold: 2000, enabled: true });
     saveBudgets([{ category: "software", monthlyLimit: 500 }]);
     saveCompanyProfile({ name: "Entreprise test", onboardingDone: true });
+    learnMerchantRule("CB OPENAI 12345", { category: "software", vatRate: 20 });
+    learnMerchantRule("PAIEMENT OPENAI 67890", { category: "subscription" });
 
     expect(loadOutgoingInvoices()[0].id).toBe("inv_1");
     expect(loadQuotes()[0].id).toBe("quote_1");
@@ -78,6 +82,8 @@ describe("critical JSON persistence", () => {
     expect(loadTreasuryAlert()).toEqual({ threshold: 2000, enabled: true });
     expect(loadBudgets()[0]).toEqual({ category: "software", monthlyLimit: 500 });
     expect(loadCompanyProfile()).toMatchObject({ name: "Entreprise test", onboardingDone: true });
+    expect(loadMerchantRules()).toHaveLength(1);
+    expect(loadMerchantRules()[0]).toMatchObject({ pattern: "openai", category: "subscription", vatRate: 20 });
 
     const files = await fs.readdir(path.join(workspace.root, "settings"));
     expect(files.some((file) => file.endsWith(".tmp"))).toBe(false);

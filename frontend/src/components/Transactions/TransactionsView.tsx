@@ -308,9 +308,11 @@ interface SmartSuggestion {
   label: string;
   amount_ttc: number;
   suggestedCategory: string;
+  suggestedVatRate?: number;
   confidenceLevel: "high" | "medium" | "low";
   confidenceScore: number;
   matchedKeyword: string;
+  reason: string;
 }
 
 function SmartCategorizeModal({
@@ -368,9 +370,11 @@ function SmartCategorizeModal({
                 {s.amount_ttc >= 0 ? "+" : ""}{s.amount_ttc.toFixed(2)} €
               </span>
               <span className="text-xs text-vscode-accent shrink-0 w-28 text-right">{s.suggestedCategory}</span>
+              {s.suggestedVatRate !== undefined && <span className="text-[10px] text-purple-300 shrink-0">TVA {s.suggestedVatRate} %</span>}
               <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${CONF_COLORS[s.confidenceLevel]}`}>
                 {s.confidenceLevel}
               </span>
+              <span className="text-[10px] text-vscode-muted max-w-40 truncate" title={s.reason}>ⓘ {s.reason}</span>
             </label>
           ))}
         </div>
@@ -489,7 +493,7 @@ export function TransactionsView({ workFilter }: { workFilter?: WorkFilter }) {
     try {
       const changes = smartSuggestions
         .filter((s) => smartSelected.has(s.id))
-        .map((s) => ({ id: s.id, category: s.suggestedCategory as Category }));
+        .map((s) => ({ id: s.id, category: s.suggestedCategory as Category, vat_rate: s.suggestedVatRate }));
       await applySmartCategories(changes);
       setSmartSuggestions(null);
       await load();
@@ -500,6 +504,7 @@ export function TransactionsView({ workFilter }: { workFilter?: WorkFilter }) {
 
   async function handleCategoryChange(id: string, category: Category) {    const updated = await updateTransaction(id, { category });
     setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    setAttachmentMessage({ type: "success", text: "Catégorie enregistrée. ComptaOS mémorisera ce fournisseur pour les prochaines transactions similaires." });
   }
 
   async function handleStatusChange(id: string, status: Transaction["status"]) {

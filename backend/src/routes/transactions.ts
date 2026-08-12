@@ -9,6 +9,7 @@ import {
 import { Transaction, Category } from "../types/index.js";
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
+import { learnMerchantRule, loadMerchantRules, merchantPattern } from "../services/settingsService.js";
 
 export async function transactionsRoutes(app: FastifyInstance) {
   // GET /api/transactions
@@ -20,6 +21,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
   // GET /api/transactions/smart-categorize — suggestions par pattern matching (sans LLM)
   app.get("/smart-categorize", async (_req, reply) => {
     const txns = await loadAllTransactions();
+    const merchantRules = loadMerchantRules();
 
     /** Tokenise un libellé en mots-clés significatifs */
     function tokenize(label: string): string[] {
@@ -45,13 +47,19 @@ export async function transactionsRoutes(app: FastifyInstance) {
     // 2. Scorer chaque transaction "misc"
     type Suggestion = {
       id: string; label: string; amount_ttc: number;
-      suggestedCategory: string; confidenceLevel: "high" | "medium" | "low";
-      confidenceScore: number; matchedKeyword: string;
+      suggestedCategory: string; suggestedVatRate?: number; confidenceLevel: "high" | "medium" | "low";
+      confidenceScore: number; matchedKeyword: string; reason: string;
     };
     const suggestions: Suggestion[] = [];
 
     for (const t of txns) {
       if (t.category !== "misc" || t.status === "rejected") continue;
+
+      const learned = merchantRules.find((rule) => rule.pattern === merchantPattern(t.label) && rule.category);
+      if (learned?.category) {
+        suggestions.push({ id: t.id, label: t.label, amount_ttc: t.amount_ttc, suggestedCategory: learned.category, suggestedVatRate: learned.vatRate, confidenceLevel: "high", confidenceScore: 1, matchedKeyword: learned.pattern, reason: `Règle apprise après validation de « ${learned.sourceLabel} »` });
+        continue;
+      }
 
       const votes: Record<string, number> = {};
       let bestToken = "";
@@ -81,15 +89,16 @@ export async function transactionsRoutes(app: FastifyInstance) {
         confidenceLevel: score > 0.8 ? "high" : score > 0.5 ? "medium" : "low",
         confidenceScore: parseFloat(score.toFixed(3)),
         matchedKeyword: bestToken,
+        reason: `Mot-clé local déjà catégorisé : ${bestToken}`,
       });
     }
 
     suggestions.sort((a, b) => b.confidenceScore - a.confidenceScore);
-    return reply.send({ suggestions, learnedPatterns: keywordMap.size });
+    return reply.send({ suggestions, learnedPatterns: keywordMap.size + merchantRules.length });
   });
 
   // POST /api/transactions/smart-categorize/apply — applique les suggestions choisies
-  app.post<{ Body: { changes: { id: string; category: Category }[] } }>(
+  app.post<{ Body: { changes: { id: string; category: Category; vat_rate?: number }[] } }>(
     "/smart-categorize/apply",
     async (req, reply) => {
       const { changes } = req.body;
@@ -97,7 +106,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "changes requis" });
       }
       const results = await Promise.all(
-        changes.map(({ id, category }) => updateTransaction(id, { category }))
+        changes.map(({ id, category, vat_rate }) => updateTransaction(id, { category, ...(vat_rate === undefined ? {} : { vat_rate, vat_splits: [] }) }))
       );
       autoCommit(getWorkspaceRoot(), `catégorisation: ${results.length} transaction(s) mises à jour`).catch(() => {});
       return reply.send({ applied: results.length });
@@ -127,8 +136,12 @@ export async function transactionsRoutes(app: FastifyInstance) {
       if (vatError) return reply.status(400).send({ error: vatError });
     }
     const updated = await updateTransaction(req.params.id, req.body);
+    const learned = learnMerchantRule(updated.label, {
+      category: req.body.category && req.body.category !== "misc" ? req.body.category : undefined,
+      vatRate: typeof req.body.vat_rate === "number" ? req.body.vat_rate : undefined,
+    });
     autoCommit(getWorkspaceRoot(), `maj: ${updated.label}`).catch(() => {});
-    return reply.send(updated);
+    return reply.send({ ...updated, learnedRule: learned ? { pattern: learned.pattern, category: learned.category, vatRate: learned.vatRate } : undefined });
   });
 
   // DELETE /api/transactions/:id
