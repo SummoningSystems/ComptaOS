@@ -6,6 +6,7 @@ import { buildAccountingPreview, generateBalanceCsv, generateFec, generateJourna
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAccountingConfig, loadCompanyProfile, saveAccountingConfig, AccountingConfig, defaultAccountingConfig } from "../services/settingsService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
+import { activeClosing } from "../services/closingService.js";
 
 async function context(year: string) {
   const config = loadAccountingConfig();
@@ -67,5 +68,24 @@ export async function accountingRoutes(app: FastifyInstance) {
     }
     void archive.finalize();
     return reply.send(archive);
+  });
+  app.get<{ Querystring: { month?: string } }>("/package-month", async (request, reply) => {
+    const month = request.query.month ?? new Date().toISOString().slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return reply.status(400).send({ error: "Mois invalide" });
+    const transactions = (await loadAllTransactions()).filter((item) => item.date.startsWith(month));
+    const config = loadAccountingConfig(); const preview = buildAccountingPreview(transactions, config, month.slice(0, 4));
+    const blocking = blockers(preview); if (blocking.length) return reply.status(409).send({ error: "Dossier mensuel bloqué par des anomalies comptables.", anomalies: blocking });
+    const closing = await activeClosing(month); const profile = loadCompanyProfile(); const archive = new ZipArchive({ zlib: { level: 9 } });
+    archive.on("error", (error: Error) => reply.raw.destroy(error));
+    reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="dossier-comptable-${month}.zip"`);
+    archive.append(generateJournalCsv(preview), { name: `journal-${month}.csv` });
+    archive.append(generateBalanceCsv(preview), { name: `balance-${month}.csv` });
+    archive.append(JSON.stringify({ generatedAt: new Date().toISOString(), month, company: profile, closing: closing ?? null, controls: { transactionCount: transactions.length, eligibleTransactions: preview.eligibleCount, totalDebit: preview.totalDebit, totalCredit: preview.totalCredit, balanced: preview.balanced }, warnings: preview.anomalies.filter((item) => item.severity === "warning") }, null, 2), { name: `rapport-cloture-${month}.json` });
+    const added = new Set<string>();
+    for (const transaction of transactions) for (const filename of [...new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])])]) {
+      const safeName = basename(filename); const attachmentPath = join(getWorkspaceRoot(), "attachments", safeName); const key = `${transaction.id}-${safeName}`;
+      if (!added.has(key) && existsSync(attachmentPath)) { added.add(key); archive.append(createReadStream(attachmentPath), { name: `justificatifs/${key.replace(/[^a-zA-Z0-9._-]/g, "_")}` }); }
+    }
+    void archive.finalize(); return reply.send(archive);
   });
 }

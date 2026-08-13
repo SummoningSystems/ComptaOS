@@ -23,13 +23,13 @@ const ISSUE_LABELS: Record<ReconciliationIssue, string> = {
 
 const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
-export function ReconcileView() {
+export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
   const [transactions, setTransactions] = useState<ReconcileTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [month, setMonth] = useState(() => {
+  const [month, setMonth] = useState(() => initialMonth ?? (() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  })());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");

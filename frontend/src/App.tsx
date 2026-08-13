@@ -104,13 +104,16 @@ class ViewErrorBoundary extends Component<{ children: ReactNode }, { error: stri
 
 /** Rendu d'une vue par son type (partagé fenêtre principale + popup) */
 function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null }) {
+  const params = new URLSearchParams(path ?? "");
+  const workFilter = params.get("filter") ?? path;
+  const contextMonth = params.get("month") ?? undefined;
   return (
     <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
-      {type === "transactions" && <TransactionsView workFilter={path as "unjustified" | "misc" | "duplicates" | "receipt-inbox" | undefined} />}
+      {type === "transactions" && <TransactionsView workFilter={workFilter as "unjustified" | "misc" | "pending" | "duplicates" | "receipt-inbox" | undefined} month={contextMonth} />}
       {type === "reports"      && <ReportsView />}
       {type === "recurring"    && <RecurringView />}
       {type === "invoices"     && <InvoicesView />}
@@ -125,7 +128,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "alerts"       && <AlertsView />}
       {type === "closing"      && <ClosingView />}
       {type === "templates"    && <TemplatesView />}
-      {type === "reconcile"    && <ReconcileView />}
+      {type === "reconcile"    && <ReconcileView initialMonth={contextMonth} />}
       {type === "treasury"     && <TreasuryView />}
       {type === "export"       && <ExportView />}
       {type === "profitloss"   && <ProfitLossView />}

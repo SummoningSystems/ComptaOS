@@ -5,6 +5,7 @@ import yaml from "yaml";
 import { Transaction } from "../types/index.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
+import { assertMonthOpen } from "./closingService.js";
 
 const TXN_DIR = "transactions";
 
@@ -187,6 +188,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
 
 /** Sauvegarde une transaction dans un fichier YAML. */
 export async function saveTransaction(txn: Transaction): Promise<void> {
+  await assertMonthOpen(txn.date);
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
   const normalized = normalizeTransaction(txn);
@@ -223,6 +225,8 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const filePath = await findTransactionFile(id);
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
+  await assertMonthOpen(txn.date);
+  if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
   const updated = normalizeTransaction({ ...txn, ...patch });
   await atomicWriteFile(filePath, yaml.stringify(updated));
   invalidateCache();
@@ -232,6 +236,8 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
 /** Supprime une transaction. */
 export async function deleteTransaction(id: string): Promise<void> {
   const filePath = await findTransactionFile(id);
+  const txn = yaml.parse(await fs.readFile(filePath, "utf-8")) as Transaction;
+  await assertMonthOpen(txn.date);
   await fs.unlink(filePath);
   invalidateCache();
 }

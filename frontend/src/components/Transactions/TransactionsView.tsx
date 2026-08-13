@@ -409,10 +409,10 @@ const CATEGORY_COLORS: Record<Category, string> = {
   misc: "bg-gray-700 text-gray-300",
 };
 
-type WorkFilter = "unjustified" | "misc" | "duplicates" | "receipt-inbox";
-const WORK_FILTER_LABELS: Record<WorkFilter, string> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
+type WorkFilter = "unjustified" | "misc" | "pending" | "duplicates" | "receipt-inbox";
+const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
 
-export function TransactionsView({ workFilter }: { workFilter?: WorkFilter }) {
+export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilter; month?: string }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -430,9 +430,9 @@ export function TransactionsView({ workFilter }: { workFilter?: WorkFilter }) {
     confidence: string;
   } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<Category | "">(workFilter === "misc" ? "misc" : "")
-  const [statusFilter, setStatusFilter] = useState<"" | "pending" | "validated" | "rejected">("")
-  const [dateFrom, setDateFrom] = useState("")
-  const [dateTo, setDateTo] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"" | "pending" | "validated" | "rejected">(workFilter === "pending" ? "pending" : "")
+  const [dateFrom, setDateFrom] = useState(month ? `${month}-01` : "")
+  const [dateTo, setDateTo] = useState(month ? `${month}-${new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()}` : "")
   const [showUnjustified, setShowUnjustified] = useState(workFilter === "unjustified");
   const [hideRejected, setHideRejected] = useState(true);
   const [typeFilter, setTypeFilter] = useState("");
