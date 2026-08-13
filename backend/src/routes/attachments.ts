@@ -9,7 +9,9 @@ import { extractReceiptFromDocument, normalizeReceiptProposal, type ReceiptPropo
 import { learnMerchantRule, loadAiConfig, loadMerchantRules, merchantPattern } from "../services/settingsService.js";
 import { localOcrUrl, rotateImageLocally, transformImageLocally } from "../services/localOcrService.js";
 import { nanoid } from "../utils/id.js";
-import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, updatePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
+import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, removePendingReceipts, updatePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
+import { recordReconciliation, loadReconciliationHistory } from "../services/reconciliationHistoryService.js";
+import { assertMonthOpen } from "../services/closingService.js";
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -130,37 +132,96 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     await fs.writeFile(filePath, transformed); receipt.mimetype = "image/jpeg"; receipt.ocr = { status: "unavailable", message: `Image préparée ${Date.now()}, OCR à relancer` }; await updatePendingReceipt(receipt); return reply.send(receipt);
   });
 
-  app.post<{ Params: { id: string }; Body: { transactionId: string } }>("/inbox/:id/link", async (req, reply) => {
-    const receipts = await loadPendingReceipts();
-    const receipt = receipts.find((item) => item.id === req.params.id);
+  type LinkBody = { transactionId: string; applyProposal?: boolean; score?: number; reasons?: string[] };
+  const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  function aggregateProposal(receipts: PendingReceipt[]) {
+    const proposals = receipts.map((item) => item.ocr.proposal).filter((item): item is ReceiptProposal => Boolean(item));
+    if (!proposals.length) return undefined;
+    return {
+      supplier: proposals.length > 1 ? `${proposals.length} justificatifs` : proposals[0].supplier,
+      invoiceRef: proposals.map((item) => item.invoiceRef).filter(Boolean).join(" + ") || undefined,
+      amountHt: round(proposals.reduce((sum, item) => sum + item.amountHt, 0)),
+      amountVat: round(proposals.reduce((sum, item) => sum + (item.amountVat ?? item.amountTtc - item.amountHt), 0)),
+      amountTtc: round(proposals.reduce((sum, item) => sum + item.amountTtc, 0)),
+      category: proposals.find((item) => item.category !== "misc")?.category ?? proposals[0].category,
+      confidence: "high" as const,
+      vatSplits: proposals.flatMap((item) => item.vatSplits).reduce<Array<{ rate: number; amountTtc: number }>>((rows, split) => {
+        const row = rows.find((item) => item.rate === split.rate);
+        if (row) row.amountTtc = round(row.amountTtc + Math.abs(split.amountTtc));
+        else rows.push({ rate: split.rate, amountTtc: Math.abs(split.amountTtc) });
+        return rows;
+      }, []),
+    };
+  }
+  function transactionPatch(current: Awaited<ReturnType<typeof loadAllTransactions>>[number], receipts: PendingReceipt[], applyProposal: boolean, ratio = 1) {
+    const filenames = [...new Set([...(current.attachments ?? []), ...(current.attachment ? [current.attachment] : []), ...receipts.map((item) => item.filename)])];
+    const details = [...(current.attachment_details ?? []).filter((item) => !receipts.some((receipt) => receipt.filename === item.filename)), ...receipts.map((receipt) => {
+      const proposal = receipt.ocr.proposal;
+      return { filename: receipt.filename, originalName: receipt.originalName, amount_ht: proposal ? round(proposal.amountHt * ratio) : undefined, vat: proposal ? round((proposal.amountVat ?? proposal.amountTtc - proposal.amountHt) * ratio) : undefined, amount_ttc: proposal ? round(proposal.amountTtc * ratio) : undefined, invoiceRef: proposal?.invoiceRef, vat_splits: proposal?.vatSplits.map((split) => ({ rate: split.rate, amount_ttc: round(split.amountTtc * ratio) })) };
+    })];
+    const proposal = aggregateProposal(receipts);
+    const sign = current.amount_ttc < 0 ? -1 : 1;
+    const accountingSplits = details.flatMap((item) => item.vat_splits ?? []).reduce<Array<{ rate: number; amount_ttc: number }>>((rows, split) => {
+      const row = rows.find((item) => item.rate === split.rate);
+      if (row) row.amount_ttc = round(row.amount_ttc + Math.abs(split.amount_ttc)); else rows.push({ rate: split.rate, amount_ttc: Math.abs(split.amount_ttc) });
+      return rows;
+    }, []);
+    const accounting = applyProposal && proposal ? {
+      amount_ht: round(sign * details.reduce((sum, item) => sum + Math.abs(item.amount_ht ?? 0), 0)),
+      vat: round(sign * details.reduce((sum, item) => sum + Math.abs(item.vat ?? 0), 0)),
+      vat_splits: accountingSplits.map((split) => ({ rate: split.rate, amount_ttc: round(sign * split.amount_ttc) })),
+      category: proposal.category,
+      invoiceRef: details.map((item) => item.invoiceRef).filter(Boolean).join(" + ") || current.invoiceRef,
+    } : {};
+    return { attachment: filenames[0], attachments: filenames, attachment_details: details, justified: true, ...accounting };
+  }
+
+  app.get("/inbox/reconciliation-history", async (_req, reply) => reply.send((await loadReconciliationHistory()).slice(0, 25)));
+
+  app.post<{ Params: { id: string }; Body: LinkBody }>("/inbox/:id/link", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
     if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
     const current = (await loadAllTransactions()).find((item) => item.id === req.body?.transactionId);
     if (!current) return reply.status(404).send({ error: "Transaction introuvable" });
-    const filenames = [...new Set([...(current.attachments ?? []), ...(current.attachment ? [current.attachment] : []), receipt.filename])];
-    const proposal = receipt.ocr.proposal;
-    const details = [...(current.attachment_details ?? []).filter((item) => item.filename !== receipt.filename), {
-      filename: receipt.filename, originalName: receipt.originalName,
-      amount_ht: proposal?.amountHt, vat: proposal?.amountVat, amount_ttc: proposal?.amountTtc,
-      invoiceRef: proposal?.invoiceRef,
-      vat_splits: proposal?.vatSplits.map((split) => ({ rate: split.rate, amount_ttc: split.amountTtc })),
-    }];
-    const transaction = await updateTransaction(current.id, { attachment: filenames[0], attachments: filenames, attachment_details: details, justified: true });
+    const proposal = aggregateProposal([receipt]);
+    const documented = current.attachment_details?.reduce((sum, item) => sum + Math.abs(item.amount_ttc ?? 0), 0) ?? 0;
+    const apply = req.body.applyProposal !== false && Boolean(proposal) && Math.abs(Math.abs(current.amount_ttc) - documented - (proposal?.amountTtc ?? 0)) <= 0.05;
+    const transaction = await updateTransaction(current.id, transactionPatch(current, [receipt], apply));
     await removePendingReceipt(receipt.id);
-    const analyzed = details.filter((item) => Number.isFinite(item.amount_ttc));
-    const aggregateProposal = analyzed.length ? {
-      supplier: analyzed.length > 1 ? `${analyzed.length} justificatifs` : proposal?.supplier ?? receipt.originalName,
-      invoiceRef: analyzed.map((item) => item.invoiceRef).filter(Boolean).join(" + ") || undefined,
-      amountHt: analyzed.reduce((sum, item) => sum + (item.amount_ht ?? 0), 0),
-      amountVat: analyzed.reduce((sum, item) => sum + (item.vat ?? 0), 0),
-      amountTtc: analyzed.reduce((sum, item) => sum + (item.amount_ttc ?? 0), 0),
-      category: proposal?.category ?? current.category, confidence: "high" as const,
-      vatSplits: analyzed.flatMap((item) => item.vat_splits ?? []).reduce<Array<{ rate: number; amountTtc: number }>>((items, split) => {
-        const existing = items.find((item) => item.rate === split.rate);
-        if (existing) existing.amountTtc += Math.abs(split.amount_ttc); else items.push({ rate: split.rate, amountTtc: Math.abs(split.amount_ttc) });
-        return items;
-      }, []),
-    } : proposal;
-    return reply.send({ transaction, proposal: aggregateProposal });
+    await recordReconciliation({ mode: "single", receiptIds: [receipt.id], transactionIds: [current.id], score: req.body.score, reasons: req.body.reasons ?? [], appliedProposal: apply });
+    return reply.send({ transactions: [transaction], transaction, proposal, appliedProposal: apply });
+  });
+
+  app.post<{ Body: { receiptIds: string[]; transactionId: string; score?: number; reasons?: string[] } }>("/inbox/link-group", async (req, reply) => {
+    const wanted = new Set(req.body?.receiptIds ?? []);
+    const receipts = (await loadPendingReceipts()).filter((item) => wanted.has(item.id));
+    if (!wanted.size || receipts.length !== wanted.size) return reply.status(404).send({ error: "Un justificatif en attente est introuvable" });
+    const current = (await loadAllTransactions()).find((item) => item.id === req.body.transactionId);
+    if (!current) return reply.status(404).send({ error: "Transaction introuvable" });
+    const proposal = aggregateProposal(receipts);
+    const documented = current.attachment_details?.reduce((sum, item) => sum + Math.abs(item.amount_ttc ?? 0), 0) ?? 0;
+    const apply = Boolean(proposal) && Math.abs(Math.abs(current.amount_ttc) - documented - (proposal?.amountTtc ?? 0)) <= 0.05;
+    const transaction = await updateTransaction(current.id, transactionPatch(current, receipts, apply));
+    await removePendingReceipts(receipts.map((item) => item.id));
+    await recordReconciliation({ mode: "many-receipts", receiptIds: receipts.map((item) => item.id), transactionIds: [current.id], score: req.body.score, reasons: req.body.reasons ?? [], appliedProposal: apply });
+    return reply.send({ transactions: [transaction], transaction, proposal, appliedProposal: apply });
+  });
+
+  app.post<{ Params: { id: string }; Body: { transactionIds: string[]; score?: number; reasons?: string[] } }>("/inbox/:id/link-many", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
+    if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
+    const wanted = new Set(req.body?.transactionIds ?? []);
+    const transactions = (await loadAllTransactions()).filter((item) => wanted.has(item.id));
+    if (wanted.size < 2 || transactions.length !== wanted.size) return reply.status(404).send({ error: "Une transaction est introuvable" });
+    await Promise.all(transactions.map((item) => assertMonthOpen(item.date)));
+    const total = transactions.reduce((sum, item) => sum + Math.abs(item.amount_ttc), 0);
+    const proposal = aggregateProposal([receipt]);
+    if (!proposal || Math.abs(total - proposal.amountTtc) > 0.05) return reply.status(400).send({ error: "La somme des paiements ne correspond pas au TTC du justificatif" });
+    const updated = [];
+    for (const current of transactions) updated.push(await updateTransaction(current.id, transactionPatch(current, [receipt], true, Math.abs(current.amount_ttc) / total)));
+    await removePendingReceipt(receipt.id);
+    await recordReconciliation({ mode: "split-payment", receiptIds: [receipt.id], transactionIds: transactions.map((item) => item.id), score: req.body.score, reasons: req.body.reasons ?? [], appliedProposal: true });
+    return reply.send({ transactions: updated, transaction: updated[0], proposal, appliedProposal: true });
   });
 
   app.delete<{ Params: { id: string } }>("/inbox/:id", async (req, reply) => {

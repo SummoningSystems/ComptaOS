@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { filterTransactions, PendingReceiptsPanel, suggestReceiptGroups, suggestReceiptMatches } from "../components/Transactions/PendingReceiptsPanel";
+import { filterTransactions, PendingReceiptsPanel, suggestReceiptGroups, suggestReceiptMatches, suggestSplitPaymentMatches } from "../components/Transactions/PendingReceiptsPanel";
 
 vi.mock("../api/client", () => ({
   attachmentUrl: (filename: string) => `/api/attachments/file/${filename}`,
@@ -16,6 +16,8 @@ vi.mock("../api/client", () => ({
   fetchPendingReceiptBatchOcr: vi.fn().mockResolvedValue({ running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" }),
   startPendingReceiptBatchOcr: vi.fn(),
   linkPendingReceipt: vi.fn(),
+  linkPendingReceiptGroup: vi.fn(),
+  linkPendingReceiptToMany: vi.fn(),
   deletePendingReceipt: vi.fn(),
   uploadPendingReceipt: vi.fn(),
   rotatePendingReceipt: vi.fn(),
@@ -63,6 +65,12 @@ describe("justificatifs en attente sur ordinateur", () => {
     const receipt = (id: string, amountTtc: number) => ({ id, filename: `${id}.pdf`, originalName: `${id}.pdf`, mimetype: "application/pdf", createdAt: "2026-08-05T12:00:00Z", ocr: { status: "success" as const, proposal: { supplier: "Amazon", date: "2026-08-04", amountHt: amountTtc, amountTtc, category: "equipment" as const, vatSplits: [], confidence: "high" as const } } });
     const payment = { id: "payment", date: "2026-08-05", label: "AMAZON", amount_ht: -90, vat: 0, amount_ttc: -90, currency: "EUR", category: "equipment" as const, account: "main", status: "pending" as const };
     expect(suggestReceiptGroups([receipt("first", 60), receipt("second", 30)], [payment])[0]).toMatchObject({ receiptIds: ["first", "second"], transactionId: "payment", total: 90 });
+  });
+
+  it("propose une facture réglée par deux transactions", () => {
+    const receipt = { id: "invoice", filename: "invoice.pdf", originalName: "invoice.pdf", mimetype: "application/pdf", createdAt: "2026-08-05T12:00:00Z", ocr: { status: "success" as const, proposal: { supplier: "Unity", date: "2026-08-04", amountHt: 75, amountTtc: 90, category: "software" as const, vatSplits: [{ rate: 20, amountTtc: 90 }], confidence: "high" as const } } };
+    const payment = (id: string, amount: number) => ({ id, date: "2026-08-05", label: "UNITY", amount_ht: -amount, vat: 0, amount_ttc: -amount, currency: "EUR", category: "software" as const, account: "main", status: "pending" as const });
+    expect(suggestSplitPaymentMatches([receipt], [payment("first", 60), payment("second", 30)]).invoice).toMatchObject({ transactionIds: ["first", "second"], total: 90 });
   });
 
   it("recherche une transaction par libellé, montant ou date", () => {

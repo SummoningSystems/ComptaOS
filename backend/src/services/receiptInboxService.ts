@@ -58,3 +58,13 @@ export async function removePendingReceipt(id: string): Promise<PendingReceipt |
     return receipt;
   });
 }
+
+export async function removePendingReceipts(ids: string[]): Promise<PendingReceipt[]> {
+  return mutate(async () => {
+    const wanted = new Set(ids);
+    const receipts = await loadPendingReceipts();
+    const removed = receipts.filter((item) => wanted.has(item.id));
+    if (removed.length) await savePendingReceipts(receipts.filter((item) => !wanted.has(item.id)));
+    return removed;
+  });
+}

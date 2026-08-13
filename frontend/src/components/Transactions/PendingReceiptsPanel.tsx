@@ -5,6 +5,8 @@ import {
   fetchPendingReceipts,
   fetchPendingReceiptBatchOcr,
   linkPendingReceipt,
+  linkPendingReceiptGroup,
+  linkPendingReceiptToMany,
   rotatePendingReceipt,
   transformPendingReceipt,
   updatePendingReceiptOcr,
@@ -20,6 +22,7 @@ import type { Transaction } from "../../types";
 interface Props { transactions: Transaction[]; onLinked: (transaction: Transaction, proposal?: ReceiptOcrProposal) => void }
 export interface ReceiptMatch { transactionId: string; score: number; confidence: "high" | "medium" | "low"; reasons: string[] }
 export interface ReceiptGroupMatch { receiptIds: string[]; transactionId: string; total: number; score: number; reasons: string[] }
+export interface SplitPaymentMatch { receiptId: string; transactionIds: string[]; total: number; score: number; reasons: string[] }
 const euros = (value: number) => `${value.toFixed(2)} €`;
 const transactionLabel = (transaction: Transaction) => `${transaction.date} · ${transaction.label} · ${Math.abs(transaction.amount_ttc).toFixed(2)} €${(transaction.attachments?.length ?? (transaction.attachment ? 1 : 0)) ? ` · ${transaction.attachments?.length ?? 1} pièce(s)` : ""}`;
 
@@ -83,6 +86,30 @@ export function suggestReceiptGroups(receipts: PendingReceipt[], transactions: T
   return groups.sort((left, right) => right.score - left.score);
 }
 
+export function suggestSplitPaymentMatches(receipts: PendingReceipt[], transactions: Transaction[]): Record<string, SplitPaymentMatch> {
+  const expenses = transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected" && !(item.attachments?.length || item.attachment));
+  const matches: Record<string, SplitPaymentMatch> = {};
+  for (const receipt of receipts) {
+    const proposal = receipt.ocr.proposal;
+    if (!proposal?.amountTtc) continue;
+    const candidates: SplitPaymentMatch[] = [];
+    for (let left = 0; left < expenses.length; left++) for (let right = left + 1; right < expenses.length; right++) {
+      const pair = [expenses[left], expenses[right]];
+      const total = pair.reduce((sum, item) => sum + Math.abs(item.amount_ttc), 0);
+      if (Math.abs(total - proposal.amountTtc) > 0.05) continue;
+      const maxDays = proposal.date ? Math.max(...pair.map((item) => daysBetween(proposal.date!, item.date))) : Infinity;
+      let score = 90; const reasons = ["somme des 2 paiements égale au TTC"];
+      if (maxDays <= 7) { score += 15; reasons.push("dates proches"); }
+      const supplierWords = words(proposal.supplier ?? "");
+      if (pair.some((item) => [...supplierWords].some((word) => words(item.label).has(word)))) { score += 10; reasons.push("fournisseur reconnu"); }
+      candidates.push({ receiptId: receipt.id, transactionIds: pair.map((item) => item.id), total, score, reasons });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    if (candidates[0]) matches[receipt.id] = candidates[0];
+  }
+  return matches;
+}
+
 export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [receipts, setReceipts] = useState<PendingReceipt[]>([]);
@@ -97,6 +124,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   const expenses = useMemo(() => transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected").sort((a, b) => b.date.localeCompare(a.date)), [transactions]);
   const suggestions = useMemo(() => suggestReceiptMatches(receipts, transactions), [receipts, transactions]);
   const groupSuggestions = useMemo(() => suggestReceiptGroups(receipts, transactions), [receipts, transactions]);
+  const splitSuggestions = useMemo(() => suggestSplitPaymentMatches(receipts, transactions), [receipts, transactions]);
   const quality = useMemo(() => ({ successful: receipts.filter((item) => item.ocr.status === "success").length, corrected: receipts.filter((item) => item.ocr.validatedAt).length, failed: receipts.filter((item) => item.ocr.status === "error").length }), [receipts]);
 
   useEffect(() => {
@@ -166,9 +194,10 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     if (!transactionId) return;
     setBusyId(receipt.id); setError("");
     try {
-      const result = await linkPendingReceipt(receipt.id, transactionId);
+      const match = suggestions[receipt.id];
+      const result = await linkPendingReceipt(receipt.id, transactionId, match?.transactionId === transactionId ? match : undefined);
       setReceipts((current) => current.filter((item) => item.id !== receipt.id));
-      onLinked(result.transaction, result.proposal);
+      result.transactions.forEach((transaction, index) => onLinked(transaction, index === 0 && !result.appliedProposal ? result.proposal : undefined));
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Association impossible."); }
     finally { setBusyId(""); }
   }
@@ -183,12 +212,8 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   async function linkGroup(group: ReceiptGroupMatch) {
     setBusyId(group.receiptIds.join("+")); setError("");
     try {
-      for (const receiptId of group.receiptIds) {
-        const receipt = receipts.find((item) => item.id === receiptId);
-        if (!receipt) continue;
-        const result = await linkPendingReceipt(receipt.id, group.transactionId);
-        onLinked(result.transaction, result.proposal);
-      }
+      const result = await linkPendingReceiptGroup(group.receiptIds, group.transactionId, group);
+      result.transactions.forEach((transaction) => onLinked(transaction));
       setReceipts((current) => current.filter((item) => !group.receiptIds.includes(item.id)));
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Association groupée impossible."); }
     finally { setBusyId(""); }
@@ -200,7 +225,8 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     try {
       for (const [receiptId, suggestion] of entries) {
         const receipt = receipts.find((item) => item.id === receiptId); if (!receipt) continue;
-        const result = await linkPendingReceipt(receipt.id, suggestion.transactionId); onLinked(result.transaction, result.proposal);
+        const result = await linkPendingReceipt(receipt.id, suggestion.transactionId, suggestion);
+        result.transactions.forEach((transaction, index) => onLinked(transaction, index === 0 && !result.appliedProposal ? result.proposal : undefined));
         setReceipts((current) => current.filter((item) => item.id !== receiptId));
       }
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Validation groupée interrompue."); }
@@ -212,6 +238,16 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     setBusyId(receipt.id); setError("");
     try { await deletePendingReceipt(receipt.id); setReceipts((current) => current.filter((item) => item.id !== receipt.id)); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Suppression impossible."); }
+    finally { setBusyId(""); }
+  }
+
+  async function linkSplit(match: SplitPaymentMatch) {
+    setBusyId(match.receiptId); setError("");
+    try {
+      const result = await linkPendingReceiptToMany(match.receiptId, match.transactionIds, match);
+      setReceipts((current) => current.filter((item) => item.id !== match.receiptId));
+      result.transactions.forEach((transaction) => onLinked(transaction));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Association aux paiements impossible."); }
     finally { setBusyId(""); }
   }
 
@@ -232,7 +268,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     {groupSuggestions.map((group) => { const transaction = transactions.find((item) => item.id === group.transactionId); return transaction ? <div key={group.receiptIds.join("+")} className="mb-2 flex items-center gap-3 rounded border border-purple-700 bg-purple-950/25 px-3 py-2 text-xs"><div className="min-w-0 flex-1"><strong className="text-purple-300">Rapprochement multiple proposé</strong><p className="truncate text-vscode-muted">2 justificatifs = {euros(group.total)} → {transaction.date} · {transaction.label}. {group.reasons.join(" ; ")}.</p></div><button disabled={Boolean(busyId)} onClick={() => void linkGroup(group)} className="rounded bg-purple-700 px-3 py-1 text-white disabled:opacity-40">Associer les 2</button></div> : null; })}
     {receipts.length === 0 ? <p className="py-2 text-xs text-vscode-muted">Aucun justificatif en attente. Tu peux importer toutes tes pièces en une seule sélection.</p> : <div className="grid max-h-[30rem] grid-cols-1 gap-3 overflow-y-auto pb-1 2xl:grid-cols-2">
       {receipts.map((receipt) => {
-        const proposal = receipt.ocr.proposal; const suggestion = suggestions[receipt.id];
+        const proposal = receipt.ocr.proposal; const suggestion = suggestions[receipt.id]; const splitSuggestion = splitSuggestions[receipt.id];
         const suggestedTransaction = suggestion ? transactions.find((item) => item.id === suggestion.transactionId) : undefined;
         const target = targetByReceipt[receipt.id] ?? suggestion?.transactionId ?? "";
         const amountVat = proposal ? proposal.amountVat ?? Math.max(0, proposal.amountTtc - proposal.amountHt) : 0;
@@ -246,6 +282,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
             <div className="mt-1 flex flex-wrap items-center gap-2"><p className={`text-[10px] ${receipt.ocr.validatedAt ? "text-blue-300" : receipt.ocr.status === "success" ? "text-green-400" : "text-amber-400"}`}>{receipt.ocr.validatedAt ? "Vérifié manuellement" : receipt.ocr.status === "success" ? "OCR terminé" : "OCR à reprendre ou saisie manuelle"}</p>{receipt.ocr.status !== "success" && !importProgress && <button onClick={() => void analyzeReceipts([receipt])} className="text-[10px] text-vscode-accent hover:underline">Relancer</button>}<button onClick={() => setEditingReceipt(receipt)} className="text-[10px] text-vscode-accent hover:underline">Vérifier / corriger</button>{receipt.mimetype.startsWith("image/") && <><button disabled={busyId === receipt.id} onClick={() => void transform(receipt, "enhance")} className="text-[10px] text-vscode-accent hover:underline disabled:opacity-40">Contraste + OCR</button><button disabled={busyId === receipt.id} onClick={() => void transform(receipt, "crop")} className="text-[10px] text-vscode-accent hover:underline disabled:opacity-40">Recadrer + OCR</button></>}</div>
             {proposal && <div className="mt-1.5 rounded bg-vscode-bg/60 px-2 py-1.5 text-[10px] text-vscode-muted"><p>HT {euros(proposal.amountHt)} · TVA {euros(amountVat)} · TTC {euros(proposal.amountTtc)}</p>{proposal.vatSplits.map((split, index) => { const splitHt = split.amountHt ?? split.amountTtc / (1 + split.rate / 100); const splitVat = split.amountVat ?? split.amountTtc - splitHt; return <p key={`${split.rate}-${index}`} className="mt-0.5 text-vscode-text">TVA {split.rate} % : HT {euros(splitHt)} · TVA {euros(splitVat)} · TTC {euros(split.amountTtc)}</p>; })}</div>}
             {suggestedTransaction && <div className="mt-2 flex items-center gap-2 rounded border border-green-800/60 bg-green-950/20 px-2 py-1.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] text-green-300">Proposition {suggestion.confidence} ({suggestion.score}) : {suggestedTransaction.date} · {suggestedTransaction.label} · {Math.abs(suggestedTransaction.amount_ttc).toFixed(2)} €</p><p className="truncate text-[10px] text-vscode-muted">{suggestion.reasons.join(" · ")}</p></div><button disabled={busyId === receipt.id} onClick={() => void link(receipt, suggestedTransaction.id)} className="shrink-0 rounded bg-green-700 px-2 py-1 text-[10px] text-white disabled:opacity-40">Valider</button></div>}
+            {splitSuggestion && <div className="mt-2 rounded border border-purple-700/70 bg-purple-950/25 px-2 py-2"><p className="text-[10px] font-medium text-purple-300">Cette facture semble réglée par 2 paiements</p><p className="mt-0.5 text-[10px] text-vscode-muted">{splitSuggestion.transactionIds.map((id) => { const item = transactions.find((transaction) => transaction.id === id); return item ? `${item.date} · ${item.label} · ${euros(Math.abs(item.amount_ttc))}` : id; }).join(" + ")}</p><p className="mt-0.5 text-[10px] text-vscode-muted">{splitSuggestion.reasons.join(" · ")}</p><button disabled={busyId === receipt.id} onClick={() => void linkSplit(splitSuggestion)} className="mt-1.5 rounded bg-purple-700 px-2 py-1 text-[10px] text-white disabled:opacity-40">Associer aux 2 paiements et appliquer la TVA</button></div>}
             {proposal?.amountTtc && !suggestedTransaction && <p className="mt-2 rounded border border-vscode-border bg-vscode-bg/50 px-2 py-1.5 text-[10px] text-vscode-muted">Aucune transaction du même montant.</p>}
             <div className="mt-2 flex gap-2"><div className="relative min-w-0 flex-1"><input aria-label={`Rechercher une transaction pour ${receipt.originalName}`} value={searchValue} onFocus={() => setFocusedSearch(receipt.id)} onBlur={() => window.setTimeout(() => setFocusedSearch((current) => current === receipt.id ? "" : current), 120)} onChange={(event) => { setSearchByReceipt((current) => ({ ...current, [receipt.id]: event.target.value })); setTargetByReceipt((current) => ({ ...current, [receipt.id]: "" })); }} placeholder="Rechercher par nom, montant ou date…" className="w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs" />{focusedSearch === receipt.id && <div className="absolute bottom-full z-30 mb-1 max-h-48 w-full overflow-y-auto rounded border border-vscode-border bg-vscode-panel shadow-xl">{searchResults.length ? searchResults.map((transaction) => <button key={transaction.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTargetByReceipt((current) => ({ ...current, [receipt.id]: transaction.id })); setSearchByReceipt((current) => ({ ...current, [receipt.id]: transactionLabel(transaction) })); setFocusedSearch(""); }} className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-vscode-border">{transactionLabel(transaction)}</button>) : <p className="px-2 py-2 text-xs text-vscode-muted">Aucune transaction trouvée</p>}</div>}</div><button disabled={!target || busyId === receipt.id} onClick={() => void link(receipt, target)} className="rounded bg-amber-700 px-3 py-1 text-xs text-white disabled:opacity-40">Associer</button></div>
           </div>

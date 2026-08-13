@@ -198,9 +198,18 @@ export async function fetchPendingReceiptBatchOcr(): Promise<BatchOcrProgress> {
   return data;
 }
 
-export async function linkPendingReceipt(receiptId: string, transactionId: string): Promise<{ transaction: Transaction; proposal?: ReceiptOcrProposal }> {
-  const { data } = await api.post<{ transaction: Transaction; proposal?: ReceiptOcrProposal }>(`/attachments/inbox/${receiptId}/link`, { transactionId });
+export interface ReconciliationResult { transaction: Transaction; transactions: Transaction[]; proposal?: ReceiptOcrProposal; appliedProposal: boolean }
+export async function linkPendingReceipt(receiptId: string, transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+  const { data } = await api.post<ReconciliationResult>(`/attachments/inbox/${receiptId}/link`, { transactionId, applyProposal: true, ...match });
   return data;
+}
+
+export async function linkPendingReceiptGroup(receiptIds: string[], transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+  const { data } = await api.post<ReconciliationResult>("/attachments/inbox/link-group", { receiptIds, transactionId, ...match }); return data;
+}
+
+export async function linkPendingReceiptToMany(receiptId: string, transactionIds: string[], match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+  const { data } = await api.post<ReconciliationResult>(`/attachments/inbox/${receiptId}/link-many`, { transactionIds, ...match }); return data;
 }
 
 export async function deletePendingReceipt(receiptId: string): Promise<void> {
