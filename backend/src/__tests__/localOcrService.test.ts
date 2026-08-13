@@ -6,6 +6,7 @@ describe("extractTextLocally", () => {
     vi.unstubAllGlobals();
     delete process.env.OCR_LOCAL_URL;
     delete process.env.OCR_LOCAL_RETRY_DELAY_MS;
+    delete process.env.OCR_LOCAL_TIMEOUT_MS;
   });
 
   it("retries once after a transient worker failure", async () => {
@@ -30,5 +31,22 @@ describe("extractTextLocally", () => {
     await expect(extractTextLocally(Buffer.from("receipt"), "text/plain"))
       .rejects.toThrow("OCR local indisponible (415): unsupported document");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not stack a retry after a worker timeout", async () => {
+    vi.useFakeTimers();
+    process.env.OCR_LOCAL_URL = "http://ocr:8000";
+    process.env.OCR_LOCAL_TIMEOUT_MS = "10";
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = extractTextLocally(Buffer.from("receipt"), "image/jpeg");
+    const assertion = expect(pending).rejects.toThrow("dépassé 1 secondes");
+    await vi.advanceTimersByTimeAsync(10);
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

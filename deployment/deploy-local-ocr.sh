@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="$HOME/apps/comptaos"
-IMAGE=comptaos-ocr:3.2.0
+IMAGE=comptaos-ocr:3.3.0
 CONTAINER=comptaos-ocr
 NETWORK=tipforgood_tipforgood-network
 

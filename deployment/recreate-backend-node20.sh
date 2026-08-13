@@ -16,7 +16,7 @@ env_file=$(mktemp /tmp/comptaos-env.XXXXXX)
 chmod 600 "$env_file"
 trap 'rm -f "$env_file"' EXIT
 docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" \
-  | grep -Ev '^(PATH|NODE_VERSION|YARN_VERSION|OCR_LOCAL_URL|OCR_REMOTE_FALLBACK)=' > "$env_file"
+  | grep -Ev '^(PATH|NODE_VERSION|YARN_VERSION|OCR_LOCAL_URL|OCR_REMOTE_FALLBACK|OCR_LOCAL_TIMEOUT_MS)=' > "$env_file"
 
 backup_container="comptaos-backend-rollback-$(date +%Y%m%d%H%M%S)"
 docker rename "$CONTAINER" "$backup_container"
@@ -37,6 +37,7 @@ docker run -d \
   --env-file "$env_file" \
   -e OCR_LOCAL_URL=http://comptaos-ocr:8000 \
   -e OCR_REMOTE_FALLBACK=false \
+  -e OCR_LOCAL_TIMEOUT_MS=180000 \
   -v "$REPO/backend:/app" \
   -v "$REPO/workspace:/workspace" \
   --user "$host_uid:$host_gid" \

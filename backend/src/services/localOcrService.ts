@@ -1,5 +1,16 @@
-const DEFAULT_TIMEOUT_MS = 45_000;
+// Sur un petit VPS CPU, le premier passage d'une photo tournée peut dépasser
+// une minute (chargement des modèles inclus). Les traitements en lot sont déjà
+// exécutés en arrière-plan : ce délai protège contre un worker réellement
+// bloqué sans interrompre une reconnaissance normale.
+const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_RETRY_DELAY_MS = 750;
+
+class LocalOcrTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`L'analyse OCR locale a dépassé ${Math.max(1, Math.ceil(timeoutMs / 1000))} secondes`);
+    this.name = "LocalOcrTimeoutError";
+  }
+}
 
 export function localOcrUrl(): string | undefined {
   return process.env.OCR_LOCAL_URL?.replace(/\/$/, "");
@@ -17,7 +28,8 @@ async function responseError(response: Response): Promise<string> {
 
 async function recognizeOnce(baseUrl: string, buffer: Buffer, mimetype: string): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(process.env.OCR_LOCAL_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
+  const timeoutMs = Number(process.env.OCR_LOCAL_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${baseUrl}/ocr`, {
       method: "POST",
@@ -33,6 +45,9 @@ async function recognizeOnce(baseUrl: string, buffer: Buffer, mimetype: string):
     const result = await response.json() as { text?: unknown };
     if (typeof result.text !== "string" || !result.text.trim()) throw new Error("Aucun texte reconnu par l'OCR local");
     return result.text;
+  } catch (error) {
+    if (controller.signal.aborted) throw new LocalOcrTimeoutError(timeoutMs);
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -45,6 +60,9 @@ export async function extractTextLocally(buffer: Buffer, mimetype: string): Prom
   try {
     return await recognizeOnce(baseUrl, buffer, mimetype);
   } catch (error) {
+    // Relancer immédiatement un calcul qui vient réellement d'expirer ne fait
+    // qu'empiler une seconde tâche derrière la première dans le worker.
+    if (error instanceof LocalOcrTimeoutError) throw error;
     const status = (error as Error & { status?: number }).status;
     if (status !== undefined && status < 500) throw error;
     await new Promise((resolve) => setTimeout(resolve, Number(process.env.OCR_LOCAL_RETRY_DELAY_MS) || DEFAULT_RETRY_DELAY_MS));

@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pypdfium2 as pdfium
 from pypdf import PdfReader
-from PIL import Image
+from PIL import Image, ImageOps
 from paddleocr import PaddleOCR
 
 MAX_BODY = 20 * 1024 * 1024
@@ -21,7 +21,10 @@ def engine():
         ENGINE = PaddleOCR(
             lang="fr",
             ocr_version="PP-OCRv5",
-            use_doc_orientation_classify=False,
+            # Les photos de smartphone ne conservent pas toujours leur EXIF
+            # après compression. Ce petit modèle détecte aussi les documents
+            # physiquement tournés à 90, 180 ou 270 degrés.
+            use_doc_orientation_classify=True,
             use_doc_unwarping=False,
             use_textline_orientation=False,
             text_detection_model_name="PP-OCRv5_mobile_det",
@@ -37,7 +40,10 @@ def images_from_document(data, mimetype):
             return [page.render(scale=2).to_pil().convert("RGB") for page in document]
         finally:
             document.close()
-    return [Image.open(io.BytesIO(data)).convert("RGB")]
+    # Corrige gratuitement l'orientation lorsque le téléphone a conservé
+    # l'information EXIF, avant de laisser PaddleOCR traiter les autres cas.
+    with Image.open(io.BytesIO(data)) as source:
+        return [ImageOps.exif_transpose(source).convert("RGB")]
 
 
 def native_pdf_text(data):
@@ -86,7 +92,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Le client peut avoir fermé la connexion pendant une analyse
+            # longue. Le worker reste sain et accepte la prochaine tâche.
+            pass
 
     def do_GET(self):
         if self.path == "/health":
