@@ -18,6 +18,7 @@ vi.mock("../api/client", () => ({
   linkPendingReceipt: vi.fn(),
   deletePendingReceipt: vi.fn(),
   uploadPendingReceipt: vi.fn(),
+  rotatePendingReceipt: vi.fn(),
 }));
 
 describe("justificatifs en attente sur ordinateur", () => {
@@ -25,7 +26,8 @@ describe("justificatifs en attente sur ordinateur", () => {
     render(<PendingReceiptsPanel transactions={[{ id: "meal", date: "2026-08-05", label: "Restaurant", amount_ht: -20, vat: 0, amount_ttc: -20, currency: "EUR", category: "restaurant", account: "main", status: "pending" }]} onLinked={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText("Justificatifs en attente")).toBeVisible());
-    expect(screen.getByAltText("Aperçu de photo-mobile.jpg")).toHaveAttribute("src", "/api/attachments/file/receipt_phone.jpg");
+    expect(screen.getByAltText("Aperçu de photo-mobile.jpg")).toHaveAttribute("src", expect.stringContaining("/api/attachments/file/receipt_phone.jpg?v="));
+    expect(screen.getByRole("button", { name: "Tourner photo-mobile.jpg à gauche" })).toBeVisible();
     fireEvent.focus(screen.getByLabelText("Rechercher une transaction pour photo-mobile.jpg"));
     expect(screen.getByRole("button", { name: "2026-08-05 · Restaurant · 20.00 €" })).toBeVisible();
     expect(screen.getByText("Aucune transaction du même montant.")).toBeVisible();

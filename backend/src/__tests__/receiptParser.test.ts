@@ -47,4 +47,17 @@ Total Incl. TAX*
     expect(result).toMatchObject({ supplier: "Unity Technologies SF", invoiceRef: "IN010102957943", date: "2026-08-07", amountHt: 36.79, amountVat: 7.36, amountTtc: 44.15, category: "software", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 36.79, amountVat: 7.36, amountTtc: 44.15 }]);
   });
+  it("reconstruit les deux TVA d'un justificatif Lightspeed tourné", () => {
+    const result = parseReceiptTextLocally(`* JUSTIFICATIF DE PAIEMENT #2 *
+LA TABLE DE LAURENT
+13/08/2026 13:32:12
+Repas complet
+Total
+31.50
+(HT: € 28.34)
+A: TVA 10% sur 25.08: € 2.51 (27.58)
+B: TVA 20% sur 3.26: € 0.65 (3.92)`);
+    expect(result).toMatchObject({ amountHt: 28.34, amountVat: 3.16, amountTtc: 31.5, category: "restaurant", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 25.07, amountVat: 2.51, amountTtc: 27.58 }, { rate: 20, amountHt: 3.27, amountVat: 0.65, amountTtc: 3.92 }]);
+  });
 });

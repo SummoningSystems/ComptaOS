@@ -7,7 +7,7 @@ import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
 import { extractReceiptFromDocument, type ReceiptProposal } from "../services/ocrService.js";
 import { loadAiConfig } from "../services/settingsService.js";
-import { localOcrUrl } from "../services/localOcrService.js";
+import { localOcrUrl, rotateImageLocally } from "../services/localOcrService.js";
 import { nanoid } from "../utils/id.js";
 import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, updatePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
 
@@ -83,6 +83,25 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
     try { return reply.send(await analyzeInboxReceipt(receipt)); }
     catch (error) { return reply.status(404).send({ error: error instanceof Error ? error.message : "Analyse impossible" }); }
+  });
+
+  app.post<{ Params: { id: string }; Body: { degrees: -90 | 90 | 180 } }>("/inbox/:id/rotate", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
+    if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
+    if (!receipt.mimetype.startsWith("image/")) return reply.status(415).send({ error: "Seules les images peuvent être tournées" });
+    if (![-90, 90, 180].includes(req.body?.degrees)) return reply.status(400).send({ error: "Rotation invalide" });
+    const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
+    if (!fsSync.existsSync(filePath)) return reply.status(404).send({ error: "Fichier justificatif introuvable" });
+    try {
+      const rotated = await rotateImageLocally(await fs.readFile(filePath), receipt.mimetype, req.body.degrees);
+      await fs.writeFile(filePath, rotated);
+      receipt.mimetype = "image/jpeg";
+      receipt.ocr = { status: "unavailable", message: `Orientation corrigée ${Date.now()}, OCR à relancer` };
+      await updatePendingReceipt(receipt);
+      return reply.send(receipt);
+    } catch (error) {
+      return reply.status(500).send({ error: error instanceof Error ? error.message : "Rotation impossible" });
+    }
   });
 
   app.post<{ Params: { id: string }; Body: { transactionId: string } }>("/inbox/:id/link", async (req, reply) => {

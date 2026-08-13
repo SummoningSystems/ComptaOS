@@ -5,6 +5,7 @@ import {
   fetchPendingReceipts,
   fetchPendingReceiptBatchOcr,
   linkPendingReceipt,
+  rotatePendingReceipt,
   startPendingReceiptBatchOcr,
   uploadPendingReceipt,
   type PendingReceipt,
@@ -140,6 +141,16 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     if (incomplete.length > 0) await analyzeReceipts(incomplete);
   }
 
+  async function rotate(receipt: PendingReceipt, degrees: -90 | 90 | 180) {
+    setBusyId(receipt.id); setError("");
+    try {
+      const updated = await rotatePendingReceipt(receipt.id, degrees);
+      setReceipts((current) => current.map((item) => item.id === updated.id ? updated : item));
+      await analyzeReceipts([updated]);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Rotation impossible."); }
+    finally { setBusyId(""); }
+  }
+
   async function link(receipt: PendingReceipt, transactionId = targetByReceipt[receipt.id] ?? suggestions[receipt.id]?.transactionId) {
     if (!transactionId) return;
     setBusyId(receipt.id); setError("");
@@ -210,7 +221,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
         const searchValue = searchByReceipt[receipt.id] ?? (selectedTransaction ? transactionLabel(selectedTransaction) : "");
         const searchResults = filterTransactions(expenses, searchValue);
         return <article key={receipt.id} className="flex min-w-0 gap-3 rounded-lg border border-amber-800/60 bg-vscode-panel p-3">
-          <a href={attachmentUrl(receipt.filename)} target="_blank" rel="noreferrer" className="flex h-24 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-vscode-border bg-vscode-bg" title="Ouvrir le justificatif">{receipt.mimetype.startsWith("image/") ? <img src={attachmentUrl(receipt.filename)} alt={`Aperçu de ${receipt.originalName}`} className="h-full w-full object-cover" /> : <span className="text-xs text-vscode-muted">PDF</span>}</a>
+          <div className="w-20 shrink-0"><a href={attachmentUrl(receipt.filename)} target="_blank" rel="noreferrer" className="flex h-24 w-20 items-center justify-center overflow-hidden rounded border border-vscode-border bg-vscode-bg" title="Ouvrir le justificatif">{receipt.mimetype.startsWith("image/") ? <img src={`${attachmentUrl(receipt.filename)}?v=${encodeURIComponent(receipt.ocr.message ?? receipt.createdAt)}`} alt={`Aperçu de ${receipt.originalName}`} className="h-full w-full object-cover" /> : <span className="text-xs text-vscode-muted">PDF</span>}</a>{receipt.mimetype.startsWith("image/") && <div className="mt-1 flex justify-center gap-1"><button disabled={busyId === receipt.id || Boolean(importProgress)} onClick={() => void rotate(receipt, -90)} className="rounded border border-vscode-border px-1.5 py-0.5 text-xs disabled:opacity-40" title="Tourner à gauche" aria-label={`Tourner ${receipt.originalName} à gauche`}>↶</button><button disabled={busyId === receipt.id || Boolean(importProgress)} onClick={() => void rotate(receipt, 90)} className="rounded border border-vscode-border px-1.5 py-0.5 text-xs disabled:opacity-40" title="Tourner à droite" aria-label={`Tourner ${receipt.originalName} à droite`}>↷</button></div>}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-medium">{proposal?.supplier || receipt.originalName}</p><p className="mt-0.5 text-[10px] text-vscode-muted">{proposal?.date || new Date(receipt.createdAt).toLocaleDateString("fr-FR")}{proposal?.amountTtc ? ` · ${proposal.amountTtc.toFixed(2)} € TTC` : " · montant à vérifier"}</p>{proposal?.invoiceRef && <p className="mt-0.5 truncate text-[10px] text-blue-300">Référence : {proposal.invoiceRef}</p>}</div><button disabled={busyId === receipt.id} onClick={() => void remove(receipt)} className="text-xs text-vscode-muted hover:text-red-400 disabled:opacity-40" aria-label={`Supprimer ${receipt.originalName}`}>Supprimer</button></div>
             <div className="mt-1 flex items-center gap-2"><p className={`text-[10px] ${receipt.ocr.status === "success" ? "text-green-400" : "text-amber-400"}`}>{receipt.ocr.status === "success" ? "OCR terminé" : "OCR à reprendre ou saisie manuelle"}</p>{receipt.ocr.status !== "success" && !importProgress && <button onClick={() => void analyzeReceipts([receipt])} className="text-[10px] text-vscode-accent hover:underline">Relancer</button>}</div>

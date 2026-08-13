@@ -175,6 +175,11 @@ export async function analyzePendingReceipt(receiptId: string): Promise<PendingR
   return data;
 }
 
+export async function rotatePendingReceipt(receiptId: string, degrees: -90 | 90 | 180): Promise<PendingReceipt> {
+  const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/rotate`, { degrees });
+  return data;
+}
+
 export interface BatchOcrProgress { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string }
 export async function startPendingReceiptBatchOcr(ids?: string[]): Promise<BatchOcrProgress> {
   const { data } = await api.post<BatchOcrProgress>("/attachments/inbox/analyze-batch", ids ? { ids } : {});

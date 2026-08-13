@@ -87,6 +87,16 @@ def recognize(data, mimetype):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def send_bytes(self, status, body, content_type):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -107,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path != "/ocr":
+        if self.path not in {"/ocr", "/rotate"}:
             return self.send_json(404, {"error": "not found"})
         length = int(self.headers.get("Content-Length", "0"))
         mimetype = self.headers.get("X-Mime-Type", "application/octet-stream")
@@ -116,7 +126,19 @@ class Handler(BaseHTTPRequestHandler):
         if mimetype not in {"application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"}:
             return self.send_json(415, {"error": "unsupported document"})
         try:
-            text = recognize(self.rfile.read(length), mimetype)
+            data = self.rfile.read(length)
+            if self.path == "/rotate":
+                if not mimetype.startswith("image/"):
+                    return self.send_json(415, {"error": "only images can be rotated"})
+                degrees = int(self.headers.get("X-Rotation", "0"))
+                if degrees not in {-90, 90, 180}:
+                    return self.send_json(400, {"error": "rotation must be -90, 90 or 180"})
+                with Image.open(io.BytesIO(data)) as source:
+                    image = ImageOps.exif_transpose(source).convert("RGB").rotate(-degrees, expand=True)
+                    output = io.BytesIO()
+                    image.save(output, format="JPEG", quality=90, optimize=True)
+                return self.send_bytes(200, output.getvalue(), "image/jpeg")
+            text = recognize(data, mimetype)
             self.send_json(200, {"text": text})
         except Exception as error:
             traceback.print_exc()

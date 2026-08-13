@@ -51,6 +51,22 @@ function detectInvoiceRef(text: string): string | undefined {
 
 interface VatSummary { amountHt: number; amountTtc: number; vatSplits: Array<{ rate: number; amountTtc: number }> }
 
+/** Tickets Lightspeed : "TVA 10% sur 25.08: € 2.51 (27.58)". */
+function detectTaxBaseSummary(text: string): VatSummary | undefined {
+  const rows: Array<{ rate: number; amountHt: number; amountVat: number; amountTtc: number }> = [];
+  const pattern = new RegExp(`tva\\s*(5[,.]5|10|20)\\s*%\\s*sur\\s*${AMOUNT}\\s*:?[^\\d]{0,8}${AMOUNT}\\s*\\(\\s*${AMOUNT}\\s*\\)`, "gi");
+  for (const match of text.matchAll(pattern)) {
+    const rate = Number(match[1].replace(",", "."));
+    const amountHt = round2(amount(match[2]));
+    const amountVat = round2(amount(match[3]));
+    const amountTtc = round2(amount(match[4]));
+    if (Math.abs(amountHt + amountVat - amountTtc) >= 0.06 || Math.abs(amountHt * rate / 100 - amountVat) >= 0.08) continue;
+    rows.push({ rate, amountHt, amountVat, amountTtc });
+  }
+  if (!rows.length) return undefined;
+  return { amountHt: round2(rows.reduce((sum, row) => sum + row.amountHt, 0)), amountTtc: round2(rows.reduce((sum, row) => sum + row.amountTtc, 0)), vatSplits: rows.map(({ rate, amountTtc }) => ({ rate, amountTtc })) };
+}
+
 /** Tableaux PDF lus colonne par colonne : tous les en-têtes, puis toutes les valeurs. */
 function detectColumnSummary(text: string): VatSummary | undefined {
   const compact = text.replace(/\s+/g, " ");
@@ -118,7 +134,7 @@ function detectVatSplits(text: string): Array<{ rate: number; amountTtc: number 
 /** Transforme le texte OCR en proposition prudente, sans LLM ni donnée inventée. */
 export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   const text = rawText.replace(/\u00a0/g, " ");
-  const summary = detectColumnSummary(text) ?? detectVerticalVatSummary(text);
+  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectVerticalVatSummary(text);
   const amountTtc = summary?.amountTtc ?? findLastAmount(text, [
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),

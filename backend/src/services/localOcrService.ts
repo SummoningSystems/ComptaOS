@@ -69,3 +69,11 @@ export async function extractTextLocally(buffer: Buffer, mimetype: string): Prom
     return recognizeOnce(baseUrl, buffer, mimetype);
   }
 }
+
+export async function rotateImageLocally(buffer: Buffer, mimetype: string, degrees: -90 | 90 | 180): Promise<Buffer> {
+  const baseUrl = localOcrUrl();
+  if (!baseUrl) throw new Error("Service OCR local non configuré");
+  const response = await fetch(`${baseUrl}/rotate`, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mimetype, "X-Rotation": String(degrees) }, body: buffer as unknown as BodyInit });
+  if (!response.ok) throw new Error(`Rotation impossible (${response.status}): ${await responseError(response)}`);
+  return Buffer.from(await response.arrayBuffer());
+}
