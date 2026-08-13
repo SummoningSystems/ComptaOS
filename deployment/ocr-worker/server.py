@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pypdfium2 as pdfium
 from pypdf import PdfReader
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 from paddleocr import PaddleOCR
 
 MAX_BODY = 20 * 1024 * 1024
@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path not in {"/ocr", "/rotate"}:
+        if self.path not in {"/ocr", "/rotate", "/transform"}:
             return self.send_json(404, {"error": "not found"})
         length = int(self.headers.get("Content-Length", "0"))
         mimetype = self.headers.get("X-Mime-Type", "application/octet-stream")
@@ -137,6 +137,22 @@ class Handler(BaseHTTPRequestHandler):
                     image = ImageOps.exif_transpose(source).convert("RGB").rotate(-degrees, expand=True)
                     output = io.BytesIO()
                     image.save(output, format="JPEG", quality=90, optimize=True)
+                return self.send_bytes(200, output.getvalue(), "image/jpeg")
+            if self.path == "/transform":
+                if not mimetype.startswith("image/"):
+                    return self.send_json(415, {"error": "only images can be transformed"})
+                operation = self.headers.get("X-Transform", "")
+                with Image.open(io.BytesIO(data)) as source:
+                    image = ImageOps.exif_transpose(source).convert("RGB")
+                    if operation == "enhance":
+                        image = ImageEnhance.Contrast(ImageOps.autocontrast(ImageOps.grayscale(image))).enhance(1.35).convert("RGB")
+                    elif operation == "crop":
+                        # Retire les marges de prise de vue sans risquer de couper le centre du ticket.
+                        left, top = int(image.width * .04), int(image.height * .04)
+                        image = image.crop((left, top, image.width - left, image.height - top))
+                    else:
+                        return self.send_json(400, {"error": "unknown transform"})
+                    output = io.BytesIO(); image.save(output, format="JPEG", quality=90, optimize=True)
                 return self.send_bytes(200, output.getvalue(), "image/jpeg")
             text = recognize(data, mimetype)
             self.send_json(200, {"text": text})

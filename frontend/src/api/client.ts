@@ -31,7 +31,7 @@ export interface ReceiptOcrProposal {
   category: Transaction["category"]; vatSplits: Array<{ rate: number; amountHt?: number; amountVat?: number; amountTtc: number }>;
   confidence: "high" | "medium" | "low";
 }
-export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; message?: string }
+export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; automaticProposal?: ReceiptOcrProposal; rawText?: string; validatedAt?: string; message?: string }
 export interface PendingReceipt { id: string; filename: string; originalName: string; mimetype: string; createdAt: string; ocr: AttachmentOcrResult }
 
 /** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
@@ -175,9 +175,17 @@ export async function analyzePendingReceipt(receiptId: string): Promise<PendingR
   return data;
 }
 
+export async function updatePendingReceiptOcr(receiptId: string, proposal: ReceiptOcrProposal): Promise<PendingReceipt> {
+  const { data } = await api.patch<PendingReceipt>(`/attachments/inbox/${receiptId}/ocr`, { proposal: { supplier: proposal.supplier, date: proposal.date, invoice_ref: proposal.invoiceRef, amount_ht: proposal.amountHt, amount_vat: proposal.amountVat, amount_ttc: proposal.amountTtc, category: proposal.category, confidence: "high", vat_splits: proposal.vatSplits.map((row) => ({ rate: row.rate, amount_ht: row.amountHt, amount_vat: row.amountVat, amount_ttc: row.amountTtc })) } });
+  return data;
+}
+
 export async function rotatePendingReceipt(receiptId: string, degrees: -90 | 90 | 180): Promise<PendingReceipt> {
   const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/rotate`, { degrees });
   return data;
+}
+export async function transformPendingReceipt(receiptId: string, operation: "enhance" | "crop"): Promise<PendingReceipt> {
+  const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/transform`, { operation }); return data;
 }
 
 export interface BatchOcrProgress { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string }

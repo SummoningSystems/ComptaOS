@@ -6,12 +6,15 @@ import {
   fetchPendingReceiptBatchOcr,
   linkPendingReceipt,
   rotatePendingReceipt,
+  transformPendingReceipt,
+  updatePendingReceiptOcr,
   startPendingReceiptBatchOcr,
   uploadPendingReceipt,
   type PendingReceipt,
   type ReceiptOcrProposal,
   type BatchOcrProgress,
 } from "../../api/client";
+import { PendingReceiptEditor } from "./PendingReceiptEditor";
 import type { Transaction } from "../../types";
 
 interface Props { transactions: Transaction[]; onLinked: (transaction: Transaction, proposal?: ReceiptOcrProposal) => void }
@@ -90,9 +93,11 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   const [error, setError] = useState("");
   const [importProgress, setImportProgress] = useState<({ phase: "stockage"; done: number; total: number } | ({ phase: "ocr" } & BatchOcrProgress)) | null>(null);
   const [lastBatch, setLastBatch] = useState<BatchOcrProgress | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<PendingReceipt | null>(null);
   const expenses = useMemo(() => transactions.filter((item) => item.amount_ttc < 0 && item.status !== "rejected").sort((a, b) => b.date.localeCompare(a.date)), [transactions]);
   const suggestions = useMemo(() => suggestReceiptMatches(receipts, transactions), [receipts, transactions]);
   const groupSuggestions = useMemo(() => suggestReceiptGroups(receipts, transactions), [receipts, transactions]);
+  const quality = useMemo(() => ({ successful: receipts.filter((item) => item.ocr.status === "success").length, corrected: receipts.filter((item) => item.ocr.validatedAt).length, failed: receipts.filter((item) => item.ocr.status === "error").length }), [receipts]);
 
   useEffect(() => {
     Promise.all([fetchPendingReceipts(), fetchPendingReceiptBatchOcr()]).then(([items, progress]) => { setReceipts(items); if (progress.running) void monitorBatch(progress); }).catch(() => setError("Impossible de charger les justificatifs en attente."));
@@ -151,6 +156,12 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
     finally { setBusyId(""); }
   }
 
+  async function transform(receipt: PendingReceipt, operation: "enhance" | "crop") {
+    setBusyId(receipt.id); setError("");
+    try { const updated = await transformPendingReceipt(receipt.id, operation); setReceipts((current) => current.map((item) => item.id === updated.id ? updated : item)); await analyzeReceipts([updated]); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Préparation impossible."); } finally { setBusyId(""); }
+  }
+
   async function link(receipt: PendingReceipt, transactionId = targetByReceipt[receipt.id] ?? suggestions[receipt.id]?.transactionId) {
     if (!transactionId) return;
     setBusyId(receipt.id); setError("");
@@ -160,6 +171,13 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
       onLinked(result.transaction, result.proposal);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Association impossible."); }
     finally { setBusyId(""); }
+  }
+
+  async function saveCorrection(proposal: ReceiptOcrProposal) {
+    if (!editingReceipt) return;
+    const updated = await updatePendingReceiptOcr(editingReceipt.id, proposal);
+    setReceipts((current) => current.map((item) => item.id === updated.id ? updated : item));
+    setEditingReceipt(null);
   }
 
   async function linkGroup(group: ReceiptGroupMatch) {
@@ -202,6 +220,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
       <h2 className="text-xs font-semibold text-amber-300">Justificatifs en attente</h2>
       <span className="rounded-full bg-amber-800/60 px-2 py-0.5 text-[10px] text-amber-100">{receipts.length}</span>
       <span className="text-[10px] text-vscode-muted">Import en lot, OCR puis proposition de rapprochement</span>
+      <span className="rounded border border-vscode-border px-2 py-0.5 text-[10px] text-vscode-muted">OCR {quality.successful}/{receipts.length} · corrigés {quality.corrected} · échecs {quality.failed}</span>
       <input ref={inputRef} type="file" multiple accept="image/*,application/pdf" className="hidden" aria-label="Importer plusieurs justificatifs" onChange={(event) => void importFiles(event.target.files)} />
       {receipts.some((receipt) => receipt.ocr.status !== "success") && <button disabled={Boolean(importProgress)} onClick={() => void retryIncompleteOcr()} className="ml-auto rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-300 disabled:opacity-50">Relancer les OCR incomplets</button>}
       <button disabled={Boolean(importProgress)} onClick={() => inputRef.current?.click()} className={`${receipts.some((receipt) => receipt.ocr.status !== "success") ? "" : "ml-auto"} rounded bg-vscode-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50`}>{importProgress ? `${importProgress.phase === "stockage" ? "Stockage" : "OCR"} ${importProgress.done}/${importProgress.total}…` : "＋ Importer plusieurs fichiers"}</button>
@@ -224,7 +243,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
           <div className="w-20 shrink-0"><a href={attachmentUrl(receipt.filename)} target="_blank" rel="noreferrer" className="flex h-24 w-20 items-center justify-center overflow-hidden rounded border border-vscode-border bg-vscode-bg" title="Ouvrir le justificatif">{receipt.mimetype.startsWith("image/") ? <img src={`${attachmentUrl(receipt.filename)}?v=${encodeURIComponent(receipt.ocr.message ?? receipt.createdAt)}`} alt={`Aperçu de ${receipt.originalName}`} className="h-full w-full object-cover" /> : <span className="text-xs text-vscode-muted">PDF</span>}</a>{receipt.mimetype.startsWith("image/") && <div className="mt-1 flex justify-center gap-1"><button disabled={busyId === receipt.id || Boolean(importProgress)} onClick={() => void rotate(receipt, -90)} className="rounded border border-vscode-border px-1.5 py-0.5 text-xs disabled:opacity-40" title="Tourner à gauche" aria-label={`Tourner ${receipt.originalName} à gauche`}>↶</button><button disabled={busyId === receipt.id || Boolean(importProgress)} onClick={() => void rotate(receipt, 90)} className="rounded border border-vscode-border px-1.5 py-0.5 text-xs disabled:opacity-40" title="Tourner à droite" aria-label={`Tourner ${receipt.originalName} à droite`}>↷</button></div>}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-medium">{proposal?.supplier || receipt.originalName}</p><p className="mt-0.5 text-[10px] text-vscode-muted">{proposal?.date || new Date(receipt.createdAt).toLocaleDateString("fr-FR")}{proposal?.amountTtc ? ` · ${proposal.amountTtc.toFixed(2)} € TTC` : " · montant à vérifier"}</p>{proposal?.invoiceRef && <p className="mt-0.5 truncate text-[10px] text-blue-300">Référence : {proposal.invoiceRef}</p>}</div><button disabled={busyId === receipt.id} onClick={() => void remove(receipt)} className="text-xs text-vscode-muted hover:text-red-400 disabled:opacity-40" aria-label={`Supprimer ${receipt.originalName}`}>Supprimer</button></div>
-            <div className="mt-1 flex items-center gap-2"><p className={`text-[10px] ${receipt.ocr.status === "success" ? "text-green-400" : "text-amber-400"}`}>{receipt.ocr.status === "success" ? "OCR terminé" : "OCR à reprendre ou saisie manuelle"}</p>{receipt.ocr.status !== "success" && !importProgress && <button onClick={() => void analyzeReceipts([receipt])} className="text-[10px] text-vscode-accent hover:underline">Relancer</button>}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2"><p className={`text-[10px] ${receipt.ocr.validatedAt ? "text-blue-300" : receipt.ocr.status === "success" ? "text-green-400" : "text-amber-400"}`}>{receipt.ocr.validatedAt ? "Vérifié manuellement" : receipt.ocr.status === "success" ? "OCR terminé" : "OCR à reprendre ou saisie manuelle"}</p>{receipt.ocr.status !== "success" && !importProgress && <button onClick={() => void analyzeReceipts([receipt])} className="text-[10px] text-vscode-accent hover:underline">Relancer</button>}<button onClick={() => setEditingReceipt(receipt)} className="text-[10px] text-vscode-accent hover:underline">Vérifier / corriger</button>{receipt.mimetype.startsWith("image/") && <><button disabled={busyId === receipt.id} onClick={() => void transform(receipt, "enhance")} className="text-[10px] text-vscode-accent hover:underline disabled:opacity-40">Contraste + OCR</button><button disabled={busyId === receipt.id} onClick={() => void transform(receipt, "crop")} className="text-[10px] text-vscode-accent hover:underline disabled:opacity-40">Recadrer + OCR</button></>}</div>
             {proposal && <div className="mt-1.5 rounded bg-vscode-bg/60 px-2 py-1.5 text-[10px] text-vscode-muted"><p>HT {euros(proposal.amountHt)} · TVA {euros(amountVat)} · TTC {euros(proposal.amountTtc)}</p>{proposal.vatSplits.map((split, index) => { const splitHt = split.amountHt ?? split.amountTtc / (1 + split.rate / 100); const splitVat = split.amountVat ?? split.amountTtc - splitHt; return <p key={`${split.rate}-${index}`} className="mt-0.5 text-vscode-text">TVA {split.rate} % : HT {euros(splitHt)} · TVA {euros(splitVat)} · TTC {euros(split.amountTtc)}</p>; })}</div>}
             {suggestedTransaction && <div className="mt-2 flex items-center gap-2 rounded border border-green-800/60 bg-green-950/20 px-2 py-1.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] text-green-300">Proposition {suggestion.confidence} ({suggestion.score}) : {suggestedTransaction.date} · {suggestedTransaction.label} · {Math.abs(suggestedTransaction.amount_ttc).toFixed(2)} €</p><p className="truncate text-[10px] text-vscode-muted">{suggestion.reasons.join(" · ")}</p></div><button disabled={busyId === receipt.id} onClick={() => void link(receipt, suggestedTransaction.id)} className="shrink-0 rounded bg-green-700 px-2 py-1 text-[10px] text-white disabled:opacity-40">Valider</button></div>}
             {proposal?.amountTtc && !suggestedTransaction && <p className="mt-2 rounded border border-vscode-border bg-vscode-bg/50 px-2 py-1.5 text-[10px] text-vscode-muted">Aucune transaction du même montant.</p>}
@@ -233,5 +252,6 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
         </article>;
       })}
     </div>}
+    {editingReceipt && <PendingReceiptEditor receipt={editingReceipt} onSave={saveCorrection} onClose={() => setEditingReceipt(null)} />}
   </section>;
 }

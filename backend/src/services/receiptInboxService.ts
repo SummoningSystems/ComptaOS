@@ -10,7 +10,7 @@ export interface PendingReceipt {
   originalName: string;
   mimetype: string;
   createdAt: string;
-  ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; message?: string };
+  ocr: { status: "success" | "unavailable" | "error"; proposal?: ReceiptProposal; automaticProposal?: ReceiptProposal; rawText?: string; validatedAt?: string; message?: string };
 }
 
 function inboxPath(): string { return path.join(getWorkspaceRoot(), "receipt-inbox.json"); }

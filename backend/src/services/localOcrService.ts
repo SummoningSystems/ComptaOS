@@ -77,3 +77,10 @@ export async function rotateImageLocally(buffer: Buffer, mimetype: string, degre
   if (!response.ok) throw new Error(`Rotation impossible (${response.status}): ${await responseError(response)}`);
   return Buffer.from(await response.arrayBuffer());
 }
+
+export async function transformImageLocally(buffer: Buffer, mimetype: string, operation: "enhance" | "crop"): Promise<Buffer> {
+  const baseUrl = localOcrUrl(); if (!baseUrl) throw new Error("Service OCR local non configuré");
+  const response = await fetch(`${baseUrl}/transform`, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mimetype, "X-Transform": operation }, body: buffer as unknown as BodyInit });
+  if (!response.ok) throw new Error(`Transformation impossible (${response.status}): ${await responseError(response)}`);
+  return Buffer.from(await response.arrayBuffer());
+}

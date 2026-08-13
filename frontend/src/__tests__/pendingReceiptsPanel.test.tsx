@@ -19,6 +19,8 @@ vi.mock("../api/client", () => ({
   deletePendingReceipt: vi.fn(),
   uploadPendingReceipt: vi.fn(),
   rotatePendingReceipt: vi.fn(),
+  transformPendingReceipt: vi.fn(),
+  updatePendingReceiptOcr: vi.fn(),
 }));
 
 describe("justificatifs en attente sur ordinateur", () => {
@@ -28,6 +30,7 @@ describe("justificatifs en attente sur ordinateur", () => {
     await waitFor(() => expect(screen.getByText("Justificatifs en attente")).toBeVisible());
     expect(screen.getByAltText("Aperçu de photo-mobile.jpg")).toHaveAttribute("src", expect.stringContaining("/api/attachments/file/receipt_phone.jpg?v="));
     expect(screen.getByRole("button", { name: "Tourner photo-mobile.jpg à gauche" })).toBeVisible();
+    expect(screen.getByText("Vérifier / corriger")).toBeVisible();
     fireEvent.focus(screen.getByLabelText("Rechercher une transaction pour photo-mobile.jpg"));
     expect(screen.getByRole("button", { name: "2026-08-05 · Restaurant · 20.00 €" })).toBeVisible();
     expect(screen.getByText("Aucune transaction du même montant.")).toBeVisible();

@@ -5,9 +5,9 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
-import { extractReceiptFromDocument, type ReceiptProposal } from "../services/ocrService.js";
-import { loadAiConfig } from "../services/settingsService.js";
-import { localOcrUrl, rotateImageLocally } from "../services/localOcrService.js";
+import { extractReceiptFromDocument, normalizeReceiptProposal, type ReceiptProposal } from "../services/ocrService.js";
+import { learnMerchantRule, loadAiConfig, loadMerchantRules, merchantPattern } from "../services/settingsService.js";
+import { localOcrUrl, rotateImageLocally, transformImageLocally } from "../services/localOcrService.js";
 import { nanoid } from "../utils/id.js";
 import { addPendingReceipt, loadPendingReceipts, removePendingReceipt, updatePendingReceipt, type PendingReceipt } from "../services/receiptInboxService.js";
 
@@ -23,10 +23,16 @@ export async function attachmentsRoutes(app: FastifyInstance) {
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } }); // 20 MB
 
   let batchOcr = { running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" };
+  function applyLearnedRule(proposal: ReceiptProposal): ReceiptProposal {
+    const rule = loadMerchantRules().find((item) => item.pattern === merchantPattern(proposal.supplier));
+    if (!rule) return proposal;
+    const vatSplits = proposal.vatSplits.length || rule.vatRate === undefined || proposal.amountTtc <= 0 ? proposal.vatSplits : [{ rate: rule.vatRate, amountTtc: proposal.amountTtc }];
+    return { ...proposal, category: rule.category ?? proposal.category, vatSplits, confidence: "high" };
+  }
   async function analyzeInboxReceipt(receipt: PendingReceipt): Promise<PendingReceipt> {
     const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
     if (!fsSync.existsSync(filePath)) throw new Error("Fichier justificatif introuvable");
-    try { receipt.ocr = { status: "success", proposal: (await extractReceiptFromDocument(await fs.readFile(filePath), receipt.mimetype)).proposal }; }
+    try { const result = await extractReceiptFromDocument(await fs.readFile(filePath), receipt.mimetype); const proposal = applyLearnedRule(result.proposal); receipt.ocr = { status: "success", proposal, automaticProposal: result.proposal, rawText: result.rawText }; }
     catch (error) { receipt.ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
     await updatePendingReceipt(receipt);
     return receipt;
@@ -70,7 +76,7 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     const aiConfig = loadAiConfig();
     const hasRemoteOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY) && Boolean(aiConfig?.apiKey);
     if (req.query.skipOcr !== "true" && (localOcrUrl() || hasRemoteOcr)) {
-      try { ocr = { status: "success", proposal: (await extractReceiptFromDocument(buffer, data.mimetype)).proposal }; }
+      try { const result = await extractReceiptFromDocument(buffer, data.mimetype); ocr = { status: "success", proposal: applyLearnedRule(result.proposal), automaticProposal: result.proposal, rawText: result.rawText }; }
       catch (error) { ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" }; }
     }
     const receipt: PendingReceipt = { id, filename, originalName: path.basename(data.filename), mimetype: data.mimetype, createdAt: new Date().toISOString(), ocr };
@@ -83,6 +89,17 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
     try { return reply.send(await analyzeInboxReceipt(receipt)); }
     catch (error) { return reply.status(404).send({ error: error instanceof Error ? error.message : "Analyse impossible" }); }
+  });
+
+  app.patch<{ Params: { id: string }; Body: { proposal: unknown } }>("/inbox/:id/ocr", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
+    if (!receipt) return reply.status(404).send({ error: "Justificatif en attente introuvable" });
+    const proposal = normalizeReceiptProposal(req.body?.proposal);
+    if (proposal.amountTtc <= 0) return reply.status(400).send({ error: "Le montant TTC doit être supérieur à zéro" });
+    if (proposal.vatSplits.length && Math.abs(proposal.vatSplits.reduce((sum, row) => sum + row.amountTtc, 0) - proposal.amountTtc) >= 0.02) return reply.status(400).send({ error: "La somme de la ventilation TVA doit correspondre au TTC" });
+    receipt.ocr = { ...receipt.ocr, status: "success", automaticProposal: receipt.ocr.automaticProposal ?? receipt.ocr.proposal, proposal, validatedAt: new Date().toISOString(), message: "Données vérifiées manuellement" };
+    learnMerchantRule(proposal.supplier, { category: proposal.category, vatRate: proposal.vatSplits.length === 1 ? proposal.vatSplits[0].rate : undefined });
+    await updatePendingReceipt(receipt); return reply.send(receipt);
   });
 
   app.post<{ Params: { id: string }; Body: { degrees: -90 | 90 | 180 } }>("/inbox/:id/rotate", async (req, reply) => {
@@ -102,6 +119,15 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     } catch (error) {
       return reply.status(500).send({ error: error instanceof Error ? error.message : "Rotation impossible" });
     }
+  });
+
+  app.post<{ Params: { id: string }; Body: { operation: "enhance" | "crop" } }>("/inbox/:id/transform", async (req, reply) => {
+    const receipt = (await loadPendingReceipts()).find((item) => item.id === req.params.id);
+    if (!receipt || !receipt.mimetype.startsWith("image/")) return reply.status(404).send({ error: "Image en attente introuvable" });
+    if (!['enhance', 'crop'].includes(req.body?.operation)) return reply.status(400).send({ error: "Transformation invalide" });
+    const filePath = path.join(getWorkspaceRoot(), "attachments", path.basename(receipt.filename));
+    const transformed = await transformImageLocally(await fs.readFile(filePath), receipt.mimetype, req.body.operation);
+    await fs.writeFile(filePath, transformed); receipt.mimetype = "image/jpeg"; receipt.ocr = { status: "unavailable", message: `Image préparée ${Date.now()}, OCR à relancer` }; await updatePendingReceipt(receipt); return reply.send(receipt);
   });
 
   app.post<{ Params: { id: string }; Body: { transactionId: string } }>("/inbox/:id/link", async (req, reply) => {
