@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pypdfium2 as pdfium
@@ -118,6 +119,7 @@ class Handler(BaseHTTPRequestHandler):
             text = recognize(self.rfile.read(length), mimetype)
             self.send_json(200, {"text": text})
         except Exception as error:
+            traceback.print_exc()
             self.send_json(500, {"error": str(error)[:300]})
 
     def log_message(self, fmt, *args):
