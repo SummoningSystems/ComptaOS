@@ -143,14 +143,18 @@ export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   const amountTtc = summary?.amountTtc ?? findLastAmount(text, [
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
+    new RegExp(`(?:^|\\n)\\s*total(?!\\s*(?:tva|vat|tax|ht|hors|excl))[^\\d\\n]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*incl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim"),
   ]);
-  const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`hors\\s*taxe[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  let amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`hors\\s*taxe[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
   let vatSplits = summary?.vatSplits ?? detectVatSplits(text);
   const explicitVat = findLastAmount(text, [new RegExp(`(?:^|\\n)\\s*(?:total\\s*)?(?:tax|vat|tva)(?:\\s+(?:2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\\s*%)?\\s*:?[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  if (!amountHt && amountTtc > explicitVat && explicitVat > 0) amountHt = round2(amountTtc - explicitVat);
   if (!vatSplits.length && amountHt > 0 && amountTtc > 0 && explicitVat > 0 && Math.abs(amountHt + explicitVat - amountTtc) < 0.06) {
-    const rate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
+    const printedRate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
+    const inferredRate = [2.1, 5.5, 10, 20].find((candidate) => Math.abs(amountHt * candidate / 100 - explicitVat) < 0.08);
+    const rate = printedRate ?? inferredRate;
     if (rate !== undefined && Math.abs(amountHt * rate / 100 - explicitVat) < 0.08) vatSplits = [{ rate, amountTtc }];
   }
   const splitTotal = round2(vatSplits.reduce((sum, split) => sum + split.amountTtc, 0));

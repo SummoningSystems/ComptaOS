@@ -99,4 +99,13 @@ Free Pro commercialise les offres fixes Freebox Pro.`);
     expect(result).toMatchObject({ supplier: "Free Pro", invoiceRef: "F202607078452", date: "2026-07-01", amountHt: 39.99, amountVat: 8, amountTtc: 47.99, category: "telecom", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 39.99, amountVat: 8, amountTtc: 47.99 }]);
   });
+  it("ne confond pas la TVA avec le total simple d'un ticket de restaurant", () => {
+    const result = parseReceiptTextLocally(`LES ASIATIDES
+13/07/2026
+TICKET N° 0019187/8
+TOTAL 15,50 EUR
+TVA 1,41 EUR`);
+    expect(result).toMatchObject({ supplier: "LES ASIATIDES", date: "2026-07-13", invoiceRef: "0019187/8", amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5, confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5 }]);
+  });
 });
