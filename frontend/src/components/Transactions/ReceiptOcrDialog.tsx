@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ReceiptOcrProposal } from "../../api/client";
 import type { Category, Transaction } from "../../types";
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 const VAT_RATES = [0, 2.1, 5.5, 10, 20];
 interface Props { transaction: Transaction; proposal: ReceiptOcrProposal; onApply: (values: { category: Category; invoiceRef?: string; vatSplits: Array<{ rate: number; amountTtc: number }> }) => Promise<void>; onClose: () => void }
 

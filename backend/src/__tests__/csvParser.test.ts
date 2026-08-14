@@ -64,6 +64,9 @@ describe("mapPenylaneCategory (via colonne 'Types de dépenses / revenus')", () 
   it("Alimentaire → food", () => expect(parseWithCategory("Alimentaire")).toBe("food"));
   it("Restaurant → restaurant", () => expect(parseWithCategory("Restaurant")).toBe("restaurant"));
   it("Salaire → salary", () => expect(parseWithCategory("Salaire")).toBe("salary"));
+  it("Sous-traitance → subcontracting", () => expect(parseWithCategory("Sous-traitance")).toBe("subcontracting"));
+  it("Honoraires → professional_fees", () => expect(parseWithCategory("Honoraires consultant")).toBe("professional_fees"));
+  it("Prestataire → external_services", () => expect(parseWithCategory("Prestataire extérieur")).toBe("external_services"));
   it("Impôt → taxes", () => expect(parseWithCategory("Impôt")).toBe("taxes"));
   it("Assurance → insurance", () => expect(parseWithCategory("Assurance")).toBe("insurance"));
   it("Inconnu → misc", () => expect(parseWithCategory("Autre chose")).toBe("misc"));

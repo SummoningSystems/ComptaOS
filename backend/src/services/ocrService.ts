@@ -28,7 +28,7 @@ export interface ReceiptProposal {
   confidence: "high" | "medium" | "low";
 }
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
@@ -75,7 +75,7 @@ async function parseReceiptTextRemotely(rawText: string): Promise<ReceiptProposa
   "amount_ht": <montant HT en nombre>,
   "amount_ttc": <montant TTC en nombre>,
   "vat_splits": [{ "rate": <taux>, "amount_ttc": <part TTC soumise à ce taux> }],
-  "category": "<hosting|software|salary|travel|restaurant|food|taxes|equipment|subscription|rent|legal|insurance|misc>",
+  "category": "<hosting|software|salary|subcontracting|professional_fees|external_services|travel|restaurant|food|taxes|equipment|subscription|rent|legal|insurance|misc>",
   "confidence": "<high|medium|low>"
 }
 

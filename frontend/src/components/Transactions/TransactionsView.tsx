@@ -101,9 +101,14 @@ function TagEditor({
 }
 
 const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "travel", "restaurant", "food",
+  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
   "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
 ];
+const CATEGORY_LABELS: Partial<Record<Category, string>> = {
+  subcontracting: "Sous-traitance",
+  professional_fees: "Conseil et honoraires",
+  external_services: "Autres prestations",
+};
 
 const VAT_RATE_PRESETS = [0, 2.1, 5.5, 10, 20];
 
@@ -397,6 +402,9 @@ const CATEGORY_COLORS: Record<Category, string> = {
   hosting: "bg-blue-900 text-blue-300",
   software: "bg-purple-900 text-purple-300",
   salary: "bg-green-900 text-green-300",
+  subcontracting: "bg-cyan-900 text-cyan-300",
+  professional_fees: "bg-violet-900 text-violet-300",
+  external_services: "bg-slate-700 text-slate-200",
   travel: "bg-yellow-900 text-yellow-300",
   restaurant: "bg-orange-900 text-orange-300",
   food: "bg-lime-900 text-lime-300",
@@ -935,7 +943,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as Category | "")}
           className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-0.5 focus:outline-none focus:border-vscode-accent">
           <option value="">Toutes catég.</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
         </select>
         {/* Statut */}
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -1213,7 +1221,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                               <td className="px-2 py-1.5">
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
-                                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                  {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

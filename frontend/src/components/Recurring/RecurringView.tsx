@@ -3,8 +3,8 @@ import { fetchManualRecurring, fetchTransactions, fetchTreasuryAlert, saveManual
 import { Category, ManualRecurring, Transaction, TreasuryAlert } from "../../types";
 import { addCalendarMonths, buildForecast, detectRecurring, Frequency, monthlyEquivalent, removeManualDuplicates, scenarioAmount } from "./recurringModel";
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
-const CATEGORY_LABELS: Record<Category, string> = { hosting: "Hébergement", software: "Logiciels", salary: "Salaires", travel: "Déplacements", restaurant: "Restaurant", food: "Alimentation", taxes: "Impôts et taxes", equipment: "Équipement", subscription: "Abonnements", rent: "Loyer", legal: "Honoraires", insurance: "Assurance", misc: "Divers" };
+const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORY_LABELS: Record<Category, string> = { hosting: "Hébergement", software: "Logiciels", salary: "Salaires", subcontracting: "Sous-traitance", professional_fees: "Conseil et honoraires", external_services: "Autres prestations", travel: "Déplacements", restaurant: "Restaurant", food: "Alimentation", taxes: "Impôts et taxes", equipment: "Équipement", subscription: "Abonnements", rent: "Loyer", legal: "Frais juridiques", insurance: "Assurance", misc: "Divers" };
 const FREQUENCY_LABELS: Record<Frequency, string> = { mensuel: "Mensuel", trimestriel: "Trimestriel", annuel: "Annuel" };
 const DECISION_LABELS = { keep: "Conserver", reduce: "Réduire", cancel: "Supprimer", planned: "Projet" } as const;
 const today = () => new Date().toISOString().slice(0, 10);

@@ -19,6 +19,9 @@ function detectCategory(text: string): Category {
   if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
   if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
+  if (/sous[- ]traitance|subcontract/.test(normalized)) return "subcontracting";
+  if (/honoraires|consultant|consulting|conseil/.test(normalized)) return "professional_fees";
+  if (/prestataire|prestation de service|services? extérieurs?/.test(normalized)) return "external_services";
   if (/assurance/.test(normalized)) return "insurance";
   if (/loyer|location immobili/.test(normalized)) return "rent";
   if (/materiel|matériel|equipement|équipement/.test(normalized)) return "equipment";

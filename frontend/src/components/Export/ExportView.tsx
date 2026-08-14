@@ -3,8 +3,8 @@ import { api } from "../../api/client";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => String(CURRENT_YEAR - i));
-const CATEGORIES = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"] as const;
-const LABELS: Record<string, string> = { hosting: "Hébergement", software: "Logiciels", salary: "Salaires", travel: "Déplacements", restaurant: "Restaurant", food: "Alimentation", taxes: "Impôts et taxes", equipment: "Équipement", subscription: "Abonnements", rent: "Loyer", legal: "Honoraires", insurance: "Assurance", misc: "Divers" };
+const CATEGORIES = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"] as const;
+const LABELS: Record<string, string> = { hosting: "Hébergement", software: "Logiciels", salary: "Salaires", subcontracting: "Sous-traitance", professional_fees: "Conseil et honoraires", external_services: "Autres prestations", travel: "Déplacements", restaurant: "Restaurant", food: "Alimentation", taxes: "Impôts et taxes", equipment: "Équipement", subscription: "Abonnements", rent: "Loyer", legal: "Frais juridiques", insurance: "Assurance", misc: "Divers" };
 interface Account { number: string; label: string }
 interface Config { bank: Account; revenue: Account; vatDeductible: Account; vatCollected: Account; categories: Record<string, Account> }
 interface Anomaly { severity: "blocking" | "warning"; code: string; message: string; transactionId?: string }

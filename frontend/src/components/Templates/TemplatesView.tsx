@@ -26,7 +26,7 @@ const EMPTY: Omit<TransactionTemplate, "id"> = {
   notes: "",
 };
 
-const CATEGORIES = ["revenue", "salary", "hosting", "software", "travel", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORIES = ["revenue", "salary", "subcontracting", "professional_fees", "external_services", "hosting", "software", "travel", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 
 export function TemplatesView() {
   const [templates, setTemplates] = useState<TransactionTemplate[]>([]);

@@ -4,6 +4,9 @@ import { loadAllTransactions } from "../services/transactionService.js";
 /** Map catégorie → comptes PCG débit/crédit */
 const PCG_MAP: Record<string, { debit: string; credit: string; label: string }> = {
   salary:       { debit: "641000", credit: "512000", label: "Rémunérations" },
+  subcontracting: { debit: "611000", credit: "512000", label: "Sous-traitance générale" },
+  professional_fees: { debit: "622600", credit: "512000", label: "Honoraires" },
+  external_services: { debit: "628000", credit: "512000", label: "Autres services extérieurs" },
   hosting:      { debit: "626000", credit: "512000", label: "Frais hébergement/cloud" },
   software:     { debit: "605000", credit: "512000", label: "Logiciels & licences" },
   travel:       { debit: "625000", credit: "512000", label: "Déplacements & transport" },

@@ -4,7 +4,7 @@ import { uploadInvoicePdf } from "../../api/client";
 import { Invoice, Category } from "../../types";
 
 const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "travel", "restaurant",
+  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant",
   "taxes", "equipment", "subscription", "misc",
 ];
 

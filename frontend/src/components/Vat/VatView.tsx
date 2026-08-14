@@ -5,7 +5,7 @@ import type { Category } from "../../types";
 type VatSplit = { rate: number; amount_ttc: number };
 
 const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "travel", "restaurant", "food",
+  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
   "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
 ];
 

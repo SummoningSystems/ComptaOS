@@ -161,6 +161,9 @@ function mapPenylaneCategory(raw: string): Category {
   if (v.includes("alimentaire") || v.includes("épicerie") || v.includes("courses")) return "food";
   if (v.includes("restaurant") || v.includes("repas")) return "restaurant";
   if (v.includes("salaire") || v.includes("salary") || v.includes("rémunération")) return "salary";
+  if (v.includes("sous-traitance") || v.includes("sous traitance") || v.includes("subcontract")) return "subcontracting";
+  if (v.includes("honoraire") || v.includes("consultant") || v.includes("conseil")) return "professional_fees";
+  if (v.includes("prestataire") || v.includes("prestation de service") || v.includes("service extérieur")) return "external_services";
   if (v.includes("impôt") || v.includes("taxe") || v.includes("tax")) return "taxes";
   if (v.includes("bureau") || v.includes("ordinateur") || v.includes("équipement") || v.includes("matériel")) return "equipment";
   if (v.includes("téléphone") || v.includes("internet") || v.includes("abonnement")) return "subscription";

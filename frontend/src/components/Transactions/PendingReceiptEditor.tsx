@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { PendingReceipt, ReceiptOcrProposal } from "../../api/client";
 import type { Category } from "../../types";
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function PendingReceiptEditor({ receipt, onSave, onClose }: { receipt: PendingReceipt; onSave: (proposal: ReceiptOcrProposal) => Promise<void>; onClose: () => void }) {
