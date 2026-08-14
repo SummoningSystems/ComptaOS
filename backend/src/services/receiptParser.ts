@@ -18,6 +18,7 @@ function detectCategory(text: string): Category {
   const normalized = text.toLowerCase();
   if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition|boulangerie|sandwich/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
+  if (/freebox|free pro/.test(normalized)) return "hosting";
   if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
   if (/sous[- ]traitance|subcontract/.test(normalized)) return "subcontracting";
   if (/honoraires|consultant|consulting|conseil/.test(normalized)) return "professional_fees";
@@ -41,14 +42,15 @@ function detectDate(text: string): string | undefined {
 }
 
 function detectSupplier(text: string): string {
-  const known = text.match(/\b(Unity Technologies(?:\s+SF)?|Unity Asset Store)\b/i)?.[1];
+  const known = text.match(/\b(Free Pro|Unity Technologies(?:\s+SF)?|Unity Asset Store)\b/i)?.[1];
   if (known) return known;
   const ignored = /ticket|facture|note|duplicata|client|adresse|telephone|tél[.:]|siret|tva|bill\s+\d/i;
   return text.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 3 && line.length <= 60 && /[a-zà-ÿ]{3}/i.test(line) && !ignored.test(line)) ?? "Inconnu";
 }
 
 function detectInvoiceRef(text: string): string | undefined {
-  return text.match(/invoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1]
+  return text.match(/n[°o]?\s*de\s*facture\s*[:#-]?\s*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1]
+    ?? text.match(/invoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1]
     ?? text.match(/(?:bill|facture|ticket|note|reçu|réf(?:érence)?)[ \t#:n°-]*([a-z0-9][a-z0-9/_-]{2,})/i)?.[1];
 }
 
@@ -146,7 +148,7 @@ export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   ]);
   const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`hors\\s*taxe[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
   let vatSplits = summary?.vatSplits ?? detectVatSplits(text);
-  const explicitVat = findLastAmount(text, [new RegExp(`(?:^|\\n)\\s*(?:total\\s*)?(?:tax|vat|tva)\\s*:?[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  const explicitVat = findLastAmount(text, [new RegExp(`(?:^|\\n)\\s*(?:total\\s*)?(?:tax|vat|tva)(?:\\s+(?:2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\\s*%)?\\s*:?[^\\d]{0,16}${AMOUNT}`, "gim")]);
   if (!vatSplits.length && amountHt > 0 && amountTtc > 0 && explicitVat > 0 && Math.abs(amountHt + explicitVat - amountTtc) < 0.06) {
     const rate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
     if (rate !== undefined && Math.abs(amountHt * rate / 100 - explicitVat) < 0.08) vatSplits = [{ rate, amountTtc }];

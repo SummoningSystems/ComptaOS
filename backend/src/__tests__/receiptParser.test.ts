@@ -82,4 +82,21 @@ TVA
     expect(result).toMatchObject({ supplier: "SAS BOULANGERIES BG", date: "2026-07-15", amountHt: 4.45, amountVat: 0.45, amountTtc: 4.9, category: "restaurant", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 4.45, amountVat: 0.45, amountTtc: 4.9 }]);
   });
+
+  it("analyse une facture Free Pro dont le taux est placé dans la ligne Total TVA", () => {
+    const result = parseReceiptTextLocally(`SUMMONING SYSTEMS
+Synthèse de votre facture
+Total HT 39.99 €
+Total TVA 20% 8.00 €
+TOTAL TTC 47.99 €
+Date d'échéance : comptant
+Référence mandat: JNRUMSUMMONINGSYSTEM020260302104129
+DATE
+01/07/2026
+N° DE FACTURE
+F202607078452
+Free Pro commercialise les offres fixes Freebox Pro.`);
+    expect(result).toMatchObject({ supplier: "Free Pro", invoiceRef: "F202607078452", date: "2026-07-01", amountHt: 39.99, amountVat: 8, amountTtc: 47.99, category: "hosting", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 39.99, amountVat: 8, amountTtc: 47.99 }]);
+  });
 });
