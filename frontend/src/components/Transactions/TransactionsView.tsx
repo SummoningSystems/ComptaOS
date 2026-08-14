@@ -718,6 +718,23 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
 
   // Détection de doublons : même date + libellé norm. + montant (hors rejected)
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(workFilter === "duplicates");
+  const hasActiveFilters = Boolean(filter || tagFilter || categoryFilter || statusFilter || dateFrom || dateTo || showUnjustified || hideRejected || typeFilter || holderFilter || yearFilter || flowFilter || showDuplicatesOnly);
+
+  function resetAllFilters() {
+    setFilter("");
+    setTagFilter(null);
+    setCategoryFilter("");
+    setStatusFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setShowUnjustified(false);
+    setHideRejected(false);
+    setTypeFilter("");
+    setHolderFilter("");
+    setYearFilter("");
+    setFlowFilter("");
+    setShowDuplicatesOnly(false);
+  }
   const duplicateIds = (() => {
     const seen = new Map<string, string[]>();
     for (const t of transactions) {
@@ -838,7 +855,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         <div className="flex items-center gap-3 border-b border-blue-700 bg-blue-900/25 px-4 py-2 text-xs text-blue-200 shrink-0">
           <strong>{WORK_FILTER_LABELS[workFilter]}</strong>
           <span>{workFilter === "receipt-inbox" ? "La boîte de justificatifs est affichée ci-dessus." : `${displayedFiltered.length} transaction${displayedFiltered.length > 1 ? "s" : ""} affichée${displayedFiltered.length > 1 ? "s" : ""}.`}</span>
-          {workFilter !== "receipt-inbox" && <button onClick={() => { setCategoryFilter(""); setShowUnjustified(false); setShowDuplicatesOnly(false); }} className="ml-auto rounded border border-blue-600 px-2 py-0.5 hover:bg-blue-800">Afficher toutes les transactions</button>}
+          {workFilter !== "receipt-inbox" && <button onClick={resetAllFilters} className="ml-auto rounded border border-blue-600 px-2 py-0.5 hover:bg-blue-800">Afficher toutes les transactions</button>}
         </div>
       )}
       {/* Toolbar row 1 */}
@@ -934,10 +951,11 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         <span className="text-vscode-muted text-xs">→</span>
         <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
           className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-0.5 focus:outline-none focus:border-vscode-accent" />
-        {(categoryFilter || statusFilter || dateFrom || dateTo || typeFilter || holderFilter || yearFilter || flowFilter) && (
-          <button onClick={() => { setCategoryFilter(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setTypeFilter(""); setHolderFilter(""); setYearFilter(""); setFlowFilter(""); }}
-            className="text-[10px] text-vscode-muted hover:text-vscode-text">
-            × réinit
+        {hasActiveFilters && (
+          <button onClick={resetAllFilters}
+            className="rounded border border-vscode-border px-2 py-0.5 text-[10px] text-vscode-muted hover:border-vscode-accent hover:text-vscode-text"
+            title="Effacer la recherche, les dates, l'année et tous les filtres actifs">
+            × Réinitialiser tous les filtres
           </button>
         )}
         {/* Type paiement */}
