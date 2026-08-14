@@ -60,4 +60,26 @@ B: TVA 20% sur 3.26: € 0.65 (3.92)`);
     expect(result).toMatchObject({ amountHt: 28.34, amountVat: 3.16, amountTtc: 31.5, category: "restaurant", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 25.07, amountVat: 2.51, amountTtc: 27.58 }, { rate: 20, amountHt: 3.27, amountVat: 0.65, amountTtc: 3.92 }]);
   });
+
+  it("analyse un ticket de boulangerie avec le récapitulatif français sur plusieurs lignes", () => {
+    const result = parseReceiptTextLocally(`SAS BOULANGERIES BG
+Marie Blachère
+15/07/2026 à 12:12:55
+Hors taxe
+4,45 €
+TVA
+0,45 €
+Total TTC
+4,90 €
+CODE
+TAUX
+HT
+TVA
+3
+10.00 %
+4.45
+0.45`);
+    expect(result).toMatchObject({ supplier: "SAS BOULANGERIES BG", date: "2026-07-15", amountHt: 4.45, amountVat: 0.45, amountTtc: 4.9, category: "restaurant", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 4.45, amountVat: 0.45, amountTtc: 4.9 }]);
+  });
 });

@@ -1,4 +1,5 @@
 import io
+import gc
 import json
 import os
 import tempfile
@@ -70,20 +71,31 @@ def result_text(result):
 
 
 def recognize(data, mimetype):
+    global ENGINE
     if mimetype == "application/pdf":
         text = native_pdf_text(data)
         if text:
             return text
-    texts = []
+    images = images_from_document(data, mimetype)
     with OCR_LOCK:
-        for image in images_from_document(data, mimetype):
-            with tempfile.NamedTemporaryFile(suffix=".png") as temp:
-                image.save(temp.name)
-                for result in engine().predict(temp.name):
-                    text = result_text(result)
-                    if text:
-                        texts.append(text)
-    return "\n\n".join(texts)
+        for attempt in range(2):
+            texts = []
+            try:
+                for image in images:
+                    with tempfile.NamedTemporaryFile(suffix=".png") as temp:
+                        image.save(temp.name)
+                        for result in engine().predict(temp.name):
+                            text = result_text(result)
+                            if text:
+                                texts.append(text)
+                return "\n\n".join(texts)
+            except RuntimeError:
+                # Paddle peut conserver un prédicteur natif invalide après une
+                # erreur CPU. Le recréer permet de repartir sans intervention.
+                ENGINE = None
+                gc.collect()
+                if attempt == 1:
+                    raise
 
 
 class Handler(BaseHTTPRequestHandler):

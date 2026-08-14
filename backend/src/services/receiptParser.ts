@@ -16,7 +16,7 @@ function findLastAmount(text: string, patterns: RegExp[]): number {
 
 function detectCategory(text: string): Category {
   const normalized = text.toLowerCase();
-  if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition/.test(normalized)) return "restaurant";
+  if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition|boulangerie|sandwich/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
   if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
   if (/sous[- ]traitance|subcontract/.test(normalized)) return "subcontracting";
@@ -117,7 +117,7 @@ function detectVerticalVatSummary(text: string): VatSummary | undefined {
 function detectVatSplits(text: string): Array<{ rate: number; amountTtc: number }> {
   const rows: Array<{ rate: number; amountTtc: number }> = [];
   for (const line of text.split(/\r?\n/)) {
-    const rateMatch = line.match(/(?:tva\s*)?(5[,.]5|10|20)\s*%/i);
+    const rateMatch = line.match(/(?:tva\s*)?(5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/i);
     if (!rateMatch) continue;
     const rate = Number(rateMatch[1].replace(",", "."));
     const values = [...line.matchAll(new RegExp(AMOUNT, "g"))].map((match) => amount(match[1]));
@@ -144,11 +144,11 @@ export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
     new RegExp(`ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*incl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim"),
   ]);
-  const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  const amountHt = summary?.amountHt ?? findLastAmount(text, [new RegExp(`total\\s*ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`hors\\s*taxe[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`ht[^\\d]{0,12}${AMOUNT}`, "gim"), new RegExp(`total\\s*excl\\.?\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
   let vatSplits = summary?.vatSplits ?? detectVatSplits(text);
-  const explicitVat = findLastAmount(text, [new RegExp(`total\\s*(?:tax|vat)[^\\d]{0,16}${AMOUNT}`, "gim")]);
+  const explicitVat = findLastAmount(text, [new RegExp(`(?:^|\\n)\\s*(?:total\\s*)?(?:tax|vat|tva)\\s*:?[^\\d]{0,16}${AMOUNT}`, "gim")]);
   if (!vatSplits.length && amountHt > 0 && amountTtc > 0 && explicitVat > 0 && Math.abs(amountHt + explicitVat - amountTtc) < 0.06) {
-    const rate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10|20)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
+    const rate = [...text.matchAll(/\b(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/g)].map((match) => Number(match[1].replace(",", "."))).at(-1);
     if (rate !== undefined && Math.abs(amountHt * rate / 100 - explicitVat) < 0.08) vatSplits = [{ rate, amountTtc }];
   }
   const splitTotal = round2(vatSplits.reduce((sum, split) => sum + split.amountTtc, 0));
