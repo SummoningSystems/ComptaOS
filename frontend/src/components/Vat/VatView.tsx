@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData, type VatTransactionDetail } from "../../api/client";
 import type { Category } from "../../types";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 type VatSplit = { rate: number; amount_ttc: number };
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
 
 const VAT_RATE_PRESETS = [0, 2.1, 5.5, 10, 20];
 
@@ -71,6 +68,7 @@ function EditableCategoryCell({
   disabled: boolean;
   onSave: (nextValue: Category) => Promise<void>;
 }) {
+  const { categories } = useCategoryCatalog();
   return (
     <select
       value={value}
@@ -79,8 +77,8 @@ function EditableCategoryCell({
       className="w-full bg-transparent border border-transparent rounded px-1 py-0.5 text-vscode-muted focus:bg-vscode-bg focus:border-vscode-accent focus:outline-none disabled:opacity-60"
       aria-label="Catégorie de transaction"
     >
-      {CATEGORIES.map((category) => (
-        <option key={category} value={category}>{category}</option>
+      {categories.map((category) => (
+        <option key={category.id} value={category.id}>{category.label}</option>
       ))}
     </select>
   );

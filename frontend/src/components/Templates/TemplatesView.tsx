@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface TransactionTemplate {
   id: string;
@@ -26,9 +27,8 @@ const EMPTY: Omit<TransactionTemplate, "id"> = {
   notes: "",
 };
 
-const CATEGORIES = ["revenue", "salary", "subcontracting", "professional_fees", "external_services", "hosting", "software", "travel", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
-
 export function TemplatesView() {
+  const { categories } = useCategoryCatalog();
   const [templates, setTemplates] = useState<TransactionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -150,7 +150,7 @@ export function TemplatesView() {
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text px-2 py-1.5 rounded focus:outline-none"
               >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -220,7 +220,7 @@ export function TemplatesView() {
                   {t.amount_ttc >= 0 ? "+" : ""}{t.amount_ttc.toFixed(2)} €
                 </span>
                 <span className="text-[10px] text-vscode-muted">HT {t.amount_ht.toFixed(2)} €</span>
-                <span className="text-[10px] bg-vscode-panel border border-vscode-border rounded px-1.5 py-0.5">{t.category}</span>
+                <span className="text-[10px] bg-vscode-panel border border-vscode-border rounded px-1.5 py-0.5">{categories.find((category) => category.id === t.category)?.label ?? t.category}</span>
                 {t.vat > 0 && <span className="text-[10px] text-yellow-300">TVA {t.vat}%</span>}
               </div>
               {t.account && (

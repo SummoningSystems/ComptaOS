@@ -1072,7 +1072,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
       {aiSuggestion && (
         <div className="flex items-center gap-3 px-4 py-2 bg-purple-900/30 border-b border-purple-700 text-xs flex-wrap">
           <span className="text-purple-300">✨ IA suggère :</span>
-          <span className="font-semibold text-white">{aiSuggestion.category}</span>
+          <span className="font-semibold text-white">{categories.find((category) => category.id === aiSuggestion.category)?.label ?? aiSuggestion.category}</span>
           <span className="text-purple-300">TVA {aiSuggestion.vat_rate}%</span>
           <span className="text-vscode-muted italic truncate max-w-xs">{aiSuggestion.reasoning}</span>
           <span className={`px-1.5 py-0.5 rounded text-[10px] ${aiSuggestion.confidence === "high" ? "bg-green-800 text-green-300" : aiSuggestion.confidence === "medium" ? "bg-yellow-800 text-yellow-300" : "bg-red-800 text-red-300"}`}>

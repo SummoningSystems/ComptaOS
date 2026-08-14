@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchTransactions } from "../../api/client";
 import { Transaction } from "../../types";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface TierStats {
   name: string;
@@ -13,6 +14,7 @@ interface TierStats {
 }
 
 export function TiersView() {
+  const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -179,7 +181,7 @@ export function TiersView() {
                         <td className={`text-right px-4 py-1.5 font-mono tabular-nums ${t.amount_ttc >= 0 ? "text-green-400" : "text-red-400"}`}>
                           {t.amount_ttc >= 0 ? "+" : ""}{t.amount_ttc.toFixed(2)} €
                         </td>
-                        <td className="px-4 py-1.5 text-vscode-muted text-[10px]">{t.category}</td>
+                        <td className="px-4 py-1.5 text-vscode-muted text-[10px]">{categories.find((category) => category.id === t.category)?.label ?? t.category}</td>
                       </tr>
                     ))}
                   </>

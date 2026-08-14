@@ -11,6 +11,7 @@ import { fetchDashboard, fetchTransactions } from "../../api/client";
 import { DashboardData, Transaction } from "../../types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 function fmt(n: number) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
@@ -32,6 +33,7 @@ function KpiCard({ label, value, sub, accent, help }: { label: string; value: st
 }
 
 export function TreasuryView() {
+  const { categories } = useCategoryCatalog();
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -319,7 +321,7 @@ export function TreasuryView() {
                 <div key={t.id} className="flex items-center justify-between py-1 border-b border-vscode-border/40 gap-2">
                   <div className="flex flex-col min-w-0">
                     <span className="text-vscode-text text-xs truncate max-w-[220px]" title={t.label}>{t.label}</span>
-                    <span className="text-vscode-muted text-[10px]">{t.date} · {t.category}</span>
+                    <span className="text-vscode-muted text-[10px]">{t.date} · {categories.find((category) => category.id === t.category)?.label ?? t.category}</span>
                   </div>
                   <span className={`text-xs font-mono shrink-0 ${t.amount_ttc >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {t.amount_ttc >= 0 ? "+" : ""}{fmt(t.amount_ttc)}

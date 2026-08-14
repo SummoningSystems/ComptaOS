@@ -2,13 +2,11 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { uploadInvoicePdf } from "../../api/client";
 import { Invoice, Category } from "../../types";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant",
-  "taxes", "equipment", "subscription", "misc",
-];
 
 export function PdfImporter() {
+  const { categories } = useCategoryCatalog();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<Partial<Invoice> | null>(null);
@@ -162,7 +160,7 @@ export function PdfImporter() {
                 onChange={(e) => setInvoice((i) => ({ ...i, category: e.target.value as Category }))}
                 className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none"
               >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
 

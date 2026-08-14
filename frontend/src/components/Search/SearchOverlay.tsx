@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { searchWorkspace, SearchResult } from "../../api/search";
 import { useAppStore } from "../../stores/appStore";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface SearchOverlayProps {
   open: boolean;
@@ -36,6 +37,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
 }
 
 export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
+  const { categories } = useCategoryCatalog();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,7 +151,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                       {(r.transaction?.amount_ttc ?? 0) >= 0 ? "+" : ""}
                       {r.transaction?.amount_ttc?.toFixed(2)} €
                     </span>
-                    <span className="text-vscode-muted text-[10px] shrink-0 ml-2">{r.transaction?.category}</span>
+                    <span className="text-vscode-muted text-[10px] shrink-0 ml-2">{categories.find((category) => category.id === r.transaction?.category)?.label ?? r.transaction?.category}</span>
                   </ResultRow>
                 );
               })}

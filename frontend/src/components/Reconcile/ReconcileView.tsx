@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface ReconcileTransaction {
   id: string;
@@ -24,6 +25,7 @@ const ISSUE_LABELS: Record<ReconciliationIssue, string> = {
 const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
+  const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<ReconcileTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(() => initialMonth ?? (() => {
@@ -228,7 +230,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
                   </td>
                   <td className="px-3 py-2 font-mono text-vscode-muted">{t.date}</td>
                   <td className="px-3 py-2 text-vscode-text truncate max-w-[260px]" title={t.label}>{t.label}</td>
-                  <td className="px-3 py-2 text-vscode-muted">{t.category}</td>
+                  <td className="px-3 py-2 text-vscode-muted">{categories.find((category) => category.id === t.category)?.label ?? t.category}</td>
                   <td className="px-3 py-2 text-vscode-muted truncate" title={t.account}>{t.account || "—"}</td>
                   <td className={`px-3 py-2 text-right font-mono font-semibold ${t.amount_ttc >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {t.amount_ttc >= 0 ? "+" : ""}{t.amount_ttc.toFixed(2)} €
