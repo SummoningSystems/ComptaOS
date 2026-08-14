@@ -19,6 +19,7 @@ function detectCategory(text: string): Category {
   if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition|boulangerie|sandwich/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
   if (/freebox|free pro/.test(normalized)) return "telecom";
+  if (/kandbaz|domiciliation/.test(normalized)) return "subscription";
   if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
   if (/sous[- ]traitance|subcontract/.test(normalized)) return "subcontracting";
   if (/honoraires|consultant|consulting|conseil/.test(normalized)) return "professional_fees";
@@ -103,6 +104,27 @@ function detectReorderedHeaderSummary(text: string): VatSummary | undefined {
   return { amountHt, amountTtc, vatSplits: [{ rate, amountTtc }] };
 }
 
+/** Factures françaises : "Total € HT", "TVA_20 (20%)", "Total € TTC". */
+function detectFrenchInvoiceSummary(text: string): VatSummary | undefined {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const htLine = lines.find((line) => /total\s*(?:€|eur(?:os?)?)?\s*ht/i.test(line));
+  const ttcLine = lines.find((line) => /total\s*(?:€|eur(?:os?)?)?\s*ttc/i.test(line));
+  const vatLine = lines.find((line) => /(?:^|\s)(?:tva|vat)(?:[_\s-]|$)/i.test(line));
+  const lastAmount = (line: string | undefined): number => {
+    if (!line) return 0;
+    const values = [...line.matchAll(new RegExp(AMOUNT, "g"))];
+    return values.length ? round2(amount(values.at(-1)![1])) : 0;
+  };
+  const amountHt = lastAmount(htLine);
+  const amountTtc = lastAmount(ttcLine);
+  const vat = lastAmount(vatLine);
+  if (amountHt <= 0 || amountTtc <= 0 || vat <= 0 || Math.abs(amountHt + vat - amountTtc) >= 0.06) return undefined;
+  const rateText = vatLine?.match(/(?:tva|vat)[_\s-]*(2[,.]1|5[,.]5|10|20)|\((2[,.]1|5[,.]5|10|20)\s*%\)/i);
+  const rate = rateText ? Number((rateText[1] ?? rateText[2]).replace(",", ".")) : [2.1, 5.5, 10, 20].find((candidate) => Math.abs(amountHt * candidate / 100 - vat) < 0.08);
+  if (rate === undefined || Math.abs(amountHt * rate / 100 - vat) >= 0.08) return undefined;
+  return { amountHt, amountTtc, vatSplits: [{ rate, amountTtc }] };
+}
+
 /** Tickets lus verticalement : taux sur une ligne, puis HT, TVA et TTC sur trois lignes. */
 function detectVerticalVatSummary(text: string): VatSummary | undefined {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -154,7 +176,7 @@ function detectVatSplits(text: string): Array<{ rate: number; amountTtc: number 
 /** Transforme le texte OCR en proposition prudente, sans LLM ni donnée inventée. */
 export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   const text = rawText.replace(/\u00a0/g, " ");
-  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectReorderedHeaderSummary(text) ?? detectVerticalVatSummary(text);
+  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectReorderedHeaderSummary(text) ?? detectFrenchInvoiceSummary(text) ?? detectVerticalVatSummary(text);
   const amountTtc = summary?.amountTtc ?? findLastAmount(text, [
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),

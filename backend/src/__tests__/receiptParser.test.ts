@@ -125,4 +125,17 @@ TOTAL`);
     expect(result).toMatchObject({ supplier: "LES ASIATIDES", invoiceRef: "0019187/8", amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5, confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5 }]);
   });
+
+  it("analyse une facture avec le symbole euro entre Total et HT ou TTC", () => {
+    const result = parseReceiptTextLocally(`KANDBAZ
+Total € HT 37,00
+TVA_20 (20%) 7,40
+Total € TTC 44,40€
+Paiement effectué (-) 44,40
+Date de facture : 01-07-2026
+FACTURE
+N° de facture FZ-707242`);
+    expect(result).toMatchObject({ supplier: "KANDBAZ", invoiceRef: "FZ-707242", date: "2026-07-01", amountHt: 37, amountVat: 7.4, amountTtc: 44.4, category: "subscription", confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 37, amountVat: 7.4, amountTtc: 44.4 }]);
+  });
 });
