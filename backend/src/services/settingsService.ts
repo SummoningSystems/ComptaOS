@@ -3,6 +3,7 @@ import { join } from "path";
 import { Category } from "../types/index.js";
 import { getActiveCompanyPath } from "./companiesService.js";
 import { atomicWriteFileSync } from "./atomicFile.js";
+import { BUILTIN_CATEGORIES, loadCategoryCatalog } from "./categoryCatalogService.js";
 
 function getSettingsDir(): string {
   return join(getActiveCompanyPath(), "settings");
@@ -226,7 +227,7 @@ export interface AccountingConfig {
   categories: Record<Category, AccountingAccount>;
 }
 
-const DEFAULT_CATEGORY_ACCOUNTS: Record<Category, AccountingAccount> = {
+const LEGACY_CATEGORY_ACCOUNTS: Record<Category, AccountingAccount> = {
   hosting: { number: "626000", label: "Frais postaux et télécommunications" },
   software: { number: "615600", label: "Maintenance et logiciels" },
   salary: { number: "641000", label: "Rémunérations du personnel" },
@@ -244,6 +245,10 @@ const DEFAULT_CATEGORY_ACCOUNTS: Record<Category, AccountingAccount> = {
   insurance: { number: "616000", label: "Primes d'assurances" },
   misc: { number: "658000", label: "Charges diverses de gestion courante" },
 };
+
+const DEFAULT_CATEGORY_ACCOUNTS: Record<Category, AccountingAccount> = Object.fromEntries(
+  BUILTIN_CATEGORIES.map((category) => [category.id, category.account]),
+);
 
 export function defaultAccountingConfig(): AccountingConfig {
   return {
@@ -267,7 +272,11 @@ export function loadAccountingConfig(): AccountingConfig {
       return { number: typeof candidate.number === "string" ? candidate.number : fallback.number, label: typeof candidate.label === "string" ? candidate.label : fallback.label };
     };
     const categories = { ...defaults.categories };
-    for (const category of Object.keys(categories) as Category[]) categories[category] = mergeAccount(defaults.categories[category], saved.categories?.[category]);
+    for (const definition of loadCategoryCatalog()) categories[definition.id] = mergeAccount(definition.account, saved.categories?.[definition.id]);
+    for (const category of Object.keys(saved.categories ?? {})) {
+      const savedAccount = saved.categories?.[category];
+      if (savedAccount) categories[category] = mergeAccount(categories[category] ?? savedAccount, savedAccount);
+    }
     return {
       bank: mergeAccount(defaults.bank, saved.bank),
       revenue: mergeAccount(defaults.revenue, saved.revenue),

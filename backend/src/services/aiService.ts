@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { loadAiConfig, AiConfig } from "./settingsService.js";
 import { Category, Transaction } from "../types/index.js";
+import { loadCategoryCatalog } from "./categoryCatalogService.js";
 
 // ── Résolution de la config active ───────────────────────────────────────────
 
@@ -75,10 +76,7 @@ export interface CategorizationResult {
   confidence: "high" | "medium" | "low";
 }
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
+const categories = () => loadCategoryCatalog().filter((category) => category.active);
 
 export async function categorizeTransaction(
   label: string,
@@ -92,14 +90,14 @@ export async function categorizeTransaction(
   const system = "Tu es un expert-comptable français. Réponds UNIQUEMENT avec un JSON valide, sans markdown ni commentaire.";
   const prompt = `Analyse cette transaction bancaire.
 Transaction : libellé="${label}", montant=${amount} EUR${historyText}
-Catégories : ${CATEGORIES.join(", ")}
+Catégories : ${categories().map((category) => `${category.id} (${category.label})`).join(", ")}
 JSON : {"category":"...","vat_rate":0,"reasoning":"...","confidence":"high|medium|low"}`;
 
   const text = await callAi(system, prompt, 256);
   try {
     const match = text.match(/\{[\s\S]*\}/);
     const result = JSON.parse(match?.[0] ?? text) as CategorizationResult;
-    if (!CATEGORIES.includes(result.category)) result.category = "misc";
+    if (!categories().some((category) => category.id === result.category)) result.category = "misc";
     if (![0, 5.5, 10, 20].includes(result.vat_rate)) result.vat_rate = 20;
     return result;
   } catch {

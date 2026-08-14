@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import type { PendingReceipt, ReceiptOcrProposal } from "../../api/client";
 import type { Category } from "../../types";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function PendingReceiptEditor({ receipt, onSave, onClose }: { receipt: PendingReceipt; onSave: (proposal: ReceiptOcrProposal) => Promise<void>; onClose: () => void }) {
+  const { categories } = useCategoryCatalog();
+  const CATEGORIES = categories.map((category) => category.id);
   const initial = receipt.ocr.proposal ?? { supplier: "", amountHt: 0, amountVat: 0, amountTtc: 0, category: "misc" as Category, confidence: "low" as const, vatSplits: [] };
   const [value, setValue] = useState<ReceiptOcrProposal>(structuredClone(initial)); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [showRaw, setShowRaw] = useState(false);
   const vatTotal = useMemo(() => round2(value.vatSplits.reduce((sum, row) => sum + (row.amountVat ?? row.amountTtc - row.amountTtc / (1 + row.rate / 100)), 0)), [value.vatSplits]);

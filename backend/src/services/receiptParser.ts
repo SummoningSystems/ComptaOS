@@ -18,7 +18,7 @@ function detectCategory(text: string): Category {
   const normalized = text.toLowerCase();
   if (/restaurant|brasserie|bistro|grill|cafe|café|repas|addition|boulangerie|sandwich/.test(normalized)) return "restaurant";
   if (/hotel|sncf|train|taxi|uber|stationnement|parking/.test(normalized)) return "travel";
-  if (/freebox|free pro/.test(normalized)) return "hosting";
+  if (/freebox|free pro/.test(normalized)) return "telecom";
   if (/logiciel|software|licence|license|abonnement|unity asset store|digital asset/.test(normalized)) return "software";
   if (/sous[- ]traitance|subcontract/.test(normalized)) return "subcontracting";
   if (/honoraires|consultant|consulting|conseil/.test(normalized)) return "professional_fees";

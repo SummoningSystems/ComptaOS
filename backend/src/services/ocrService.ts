@@ -5,6 +5,7 @@ import { loadAiConfig } from "./settingsService.js";
 import { callAi } from "./aiService.js";
 import { extractTextLocally, localOcrUrl } from "./localOcrService.js";
 import { parseReceiptTextLocally } from "./receiptParser.js";
+import { loadCategoryCatalog } from "./categoryCatalogService.js";
 
 function getMistralClient(): Mistral {
   const config = loadAiConfig();
@@ -28,7 +29,7 @@ export interface ReceiptProposal {
   confidence: "high" | "medium" | "low";
 }
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
+const categoryIds = () => loadCategoryCatalog().filter((category) => category.active).map((category) => category.id);
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
@@ -43,7 +44,7 @@ export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
     const providedVat = Number(row.amount_vat); const splitVat = Number.isFinite(providedVat) && providedVat >= 0 ? providedVat : splitTtc - splitHt;
     return [{ rate: round2(rate), amountHt: round2(splitHt), amountVat: round2(splitVat), amountTtc: round2(splitTtc) }];
   });
-  const category = CATEGORIES.includes(input.category as Category) ? input.category as Category : "misc";
+  const category = categoryIds().includes(String(input.category)) ? String(input.category) : "misc";
   const confidence = ["high", "medium", "low"].includes(String(input.confidence)) ? input.confidence as ReceiptProposal["confidence"] : "low";
   const normalizedHt = Number.isFinite(amountHt) ? round2(Math.abs(amountHt)) : 0; const normalizedTtc = Number.isFinite(amountTtc) ? round2(Math.abs(amountTtc)) : 0;
   const providedVat = Number(input.amount_vat); const amountVat = Number.isFinite(providedVat) ? round2(Math.abs(providedVat)) : round2(Math.max(0, normalizedTtc - normalizedHt));
@@ -75,7 +76,7 @@ async function parseReceiptTextRemotely(rawText: string): Promise<ReceiptProposa
   "amount_ht": <montant HT en nombre>,
   "amount_ttc": <montant TTC en nombre>,
   "vat_splits": [{ "rate": <taux>, "amount_ttc": <part TTC soumise à ce taux> }],
-  "category": "<hosting|software|salary|subcontracting|professional_fees|external_services|travel|restaurant|food|taxes|equipment|subscription|rent|legal|insurance|misc>",
+  "category": "<${categoryIds().join("|")}>",
   "confidence": "<high|medium|low>"
 }
 

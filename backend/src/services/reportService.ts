@@ -209,7 +209,7 @@ function buildActivityReport(
     "|---|---|---|",
   ];
 
-  const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  const sorted = Object.entries(byCategory).filter((entry): entry is [string, number] => typeof entry[1] === "number").sort((a, b) => b[1] - a[1]);
   for (const [cat, amount] of sorted) {
     const pct = totalExp > 0 ? ((amount / totalExp) * 100).toFixed(1) : "0.0";
     lines.push(`| ${cat} | ${amount.toFixed(2)} € | ${pct}% |`);

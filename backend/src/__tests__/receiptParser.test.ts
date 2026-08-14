@@ -96,7 +96,7 @@ DATE
 N° DE FACTURE
 F202607078452
 Free Pro commercialise les offres fixes Freebox Pro.`);
-    expect(result).toMatchObject({ supplier: "Free Pro", invoiceRef: "F202607078452", date: "2026-07-01", amountHt: 39.99, amountVat: 8, amountTtc: 47.99, category: "hosting", confidence: "high" });
+    expect(result).toMatchObject({ supplier: "Free Pro", invoiceRef: "F202607078452", date: "2026-07-01", amountHt: 39.99, amountVat: 8, amountTtc: 47.99, category: "telecom", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 39.99, amountVat: 8, amountTtc: 47.99 }]);
   });
 });

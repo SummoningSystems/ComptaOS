@@ -1,11 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Category, Transaction } from "../../types";
-
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
-const CATEGORY_LABELS: Partial<Record<Category, string>> = { subcontracting: "Sous-traitance", professional_fees: "Conseil et honoraires", external_services: "Autres prestations" };
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 const VAT_RATE_PRESETS = [0, 2.1, 5.5, 10, 20];
 
@@ -15,6 +10,7 @@ interface Props {
 }
 
 export function AddTransactionModal({ onClose, onSave }: Props) {
+  const { categories } = useCategoryCatalog();
   const today = new Date().toISOString().slice(0, 10);
 
   const [date, setDate] = useState(today);
@@ -173,7 +169,7 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
                 onChange={(e) => setCategory(e.target.value as Category)}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
               >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>

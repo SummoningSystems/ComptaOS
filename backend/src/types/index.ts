@@ -44,23 +44,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type Category =
-  | "hosting"
-  | "software"
-  | "salary"
-  | "subcontracting"
-  | "professional_fees"
-  | "external_services"
-  | "travel"
-  | "restaurant"
-  | "food"
-  | "taxes"
-  | "equipment"
-  | "subscription"
-  | "rent"
-  | "legal"
-  | "insurance"
-  | "misc";
+export type Category = string;
 
 export interface WorkspaceSettings {
   name: string;

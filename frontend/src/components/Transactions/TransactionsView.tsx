@@ -8,6 +8,7 @@ import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
 import { PendingReceiptsPanel } from "./PendingReceiptsPanel";
 import { aiCategorize } from "../../api/ai";
 import { fetchAllTags } from "../../api/search";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 // ── Tag editor inline ─────────────────────────────────────────────────────────
 
@@ -101,15 +102,6 @@ function TagEditor({
   );
 }
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
-const CATEGORY_LABELS: Partial<Record<Category, string>> = {
-  subcontracting: "Sous-traitance",
-  professional_fees: "Conseil et honoraires",
-  external_services: "Autres prestations",
-};
 
 const VAT_RATE_PRESETS = [0, 2.1, 5.5, 10, 20];
 
@@ -422,6 +414,7 @@ type WorkFilter = "unjustified" | "misc" | "pending" | "duplicates" | "receipt-i
 const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
 
 export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilter; month?: string }) {
+  const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -944,7 +937,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as Category | "")}
           className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-0.5 focus:outline-none focus:border-vscode-accent">
           <option value="">Toutes catég.</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
         {/* Statut */}
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -1222,7 +1215,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                               <td className="px-2 py-1.5">
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
-                                  {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
+                                  {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

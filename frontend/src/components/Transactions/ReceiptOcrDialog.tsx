@@ -1,12 +1,14 @@
 import { useState } from "react";
 import type { ReceiptOcrProposal } from "../../api/client";
 import type { Category, Transaction } from "../../types";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
-const CATEGORIES: Category[] = ["hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food", "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc"];
 const VAT_RATES = [0, 2.1, 5.5, 10, 20];
 interface Props { transaction: Transaction; proposal: ReceiptOcrProposal; onApply: (values: { category: Category; invoiceRef?: string; vatSplits: Array<{ rate: number; amountTtc: number }> }) => Promise<void>; onClose: () => void }
 
 export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Props) {
+  const { categories } = useCategoryCatalog();
+  const CATEGORIES = categories.map((category) => category.id);
   const bankTotal = Math.abs(transaction.amount_ttc); const initial = proposal.vatSplits.length ? proposal.vatSplits : [{ rate: 0, amountTtc: bankTotal }];
   const [category, setCategory] = useState<Category>(proposal.category); const [invoiceRef, setInvoiceRef] = useState(proposal.invoiceRef ?? "");
   const [splits, setSplits] = useState(initial); const [saving, setSaving] = useState(false); const [error, setError] = useState("");

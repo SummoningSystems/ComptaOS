@@ -12,6 +12,7 @@ import {
   AiConfig,
   AiConfigStatus,
   CategoryBudget,
+  CategoryDefinition,
   Company,
   CompanyProfile,
 } from "../types";
@@ -406,6 +407,25 @@ export interface GitSyncStatus {
   behind: number;
   local: { ready: boolean; error?: string; uncommitted: number; lastCommit?: string; lastAutoCommitAt?: string };
   localDestinationAllowed: boolean;
+}
+
+export async function fetchCategories(): Promise<CategoryDefinition[]> {
+  const { data } = await api.get<CategoryDefinition[]>("/settings/categories");
+  return data;
+}
+
+export async function createCategory(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
+  const { data } = await api.post<CategoryDefinition>("/settings/categories", category);
+  return data;
+}
+
+export async function updateCategoryDefinition(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
+  const { data } = await api.put<CategoryDefinition>(`/settings/categories/${category.id}`, category);
+  return data;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await api.delete(`/settings/categories/${id}`);
 }
 
 export interface GitSyncConfig {

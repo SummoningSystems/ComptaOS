@@ -1,20 +1,12 @@
-export type Category =
-  | "hosting"
-  | "software"
-  | "salary"
-  | "subcontracting"
-  | "professional_fees"
-  | "external_services"
-  | "travel"
-  | "restaurant"
-  | "food"
-  | "taxes"
-  | "equipment"
-  | "subscription"
-  | "rent"
-  | "legal"
-  | "insurance"
-  | "misc";
+export type Category = string;
+
+export interface CategoryDefinition {
+  id: Category;
+  label: string;
+  account: { number: string; label: string };
+  builtin: boolean;
+  active: boolean;
+}
 
 export interface VatSplit {
   rate: number;       // taux en % : 0, 2.1, 5.5, 10, 20

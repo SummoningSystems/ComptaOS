@@ -11,7 +11,10 @@ import {
   saveAiConfig,
   fetchCompanyProfile,
   saveCompanyProfile,
+  createCategory,
+  deleteCategory,
 } from "../../api/client";
+import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 const CATEGORIES: Category[] = [
   "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
@@ -38,6 +41,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export function SettingsView() {
+  const { categories, allCategories, reload: reloadCategories } = useCategoryCatalog();
   const [rules, setRules] = useState<CategoryRule[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false });
   const [aiStatus, setAiStatus] = useState<AiConfigStatus>({ configured: false });
@@ -58,6 +62,8 @@ export function SettingsView() {
   // Form pour nouvelle règle
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("misc");
+  const [customCategory, setCustomCategory] = useState({ id: "", label: "", accountNumber: "", accountLabel: "" });
+  const [categoryError, setCategoryError] = useState("");
 
   useEffect(() => {
     Promise.all([fetchCategoryRules(), fetchTreasuryAlert(), fetchAiConfig(), fetchCompanyProfile()])
@@ -94,6 +100,24 @@ export function SettingsView() {
 
   async function handleDeleteRule(id: string) {
     await handleSaveRules(rules.filter((r) => r.id !== id));
+  }
+
+  async function handleCreateCategory() {
+    setCategoryError("");
+    try {
+      await createCategory({ id: customCategory.id, label: customCategory.label, account: { number: customCategory.accountNumber, label: customCategory.accountLabel }, active: true });
+      setCustomCategory({ id: "", label: "", accountNumber: "", accountLabel: "" });
+      await reloadCategories();
+      flashSaved();
+    } catch (error) {
+      setCategoryError((error as { response?: { data?: { error?: string } } }).response?.data?.error ?? "Impossible de créer la catégorie.");
+    }
+  }
+
+  async function handleDeleteCustomCategory(id: string) {
+    await deleteCategory(id);
+    await reloadCategories();
+    flashSaved();
   }
 
   async function handleSaveAlert() {
@@ -141,6 +165,20 @@ export function SettingsView() {
           </span>
         )}
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-vscode-muted uppercase tracking-wider">Catalogue de catégories</h2>
+        <p className="text-xs text-vscode-muted">Catégories standard et catégories propres à votre activité, chacune avec son compte PCG.</p>
+        <div className="grid md:grid-cols-2 gap-2 text-xs">{allCategories.filter((c) => c.active).map((c) => <div key={c.id} className="flex items-center gap-2 rounded border border-vscode-border p-2"><span className="flex-1"><strong>{c.label}</strong><span className="block text-vscode-muted">{c.account.number} · {c.account.label}</span></span>{!c.builtin && <button onClick={() => void handleDeleteCustomCategory(c.id)} className="text-red-400">Désactiver</button>}</div>)}</div>
+        <div className="grid md:grid-cols-[1fr_1.4fr_0.8fr_1.4fr_auto] gap-2">
+          <input value={customCategory.id} onChange={(e) => setCustomCategory((v) => ({ ...v, id: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") }))} placeholder="code_interne" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
+          <input value={customCategory.label} onChange={(e) => setCustomCategory((v) => ({ ...v, label: e.target.value }))} placeholder="Libellé visible" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
+          <input value={customCategory.accountNumber} onChange={(e) => setCustomCategory((v) => ({ ...v, accountNumber: e.target.value.replace(/\D/g, "") }))} placeholder="Compte PCG" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
+          <input value={customCategory.accountLabel} onChange={(e) => setCustomCategory((v) => ({ ...v, accountLabel: e.target.value }))} placeholder="Libellé du compte" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
+          <button onClick={() => void handleCreateCategory()} className="bg-vscode-accent text-white rounded px-3 py-1.5 text-sm">Créer</button>
+        </div>
+        {categoryError && <p className="text-xs text-red-400">{categoryError}</p>}
+      </section>
 
       {/* ── Profil entreprise ────────────────────────────────────────────── */}
       <section className="space-y-3">
@@ -224,7 +262,7 @@ export function SettingsView() {
                     </code>
                   </td>
                   <td className="py-2 pr-4 text-vscode-muted">
-                    {CATEGORY_LABELS[rule.category]}
+                    {categories.find((category) => category.id === rule.category)?.label ?? rule.category}
                   </td>
                   <td className="py-2">
                     <button
@@ -257,9 +295,9 @@ export function SettingsView() {
             onChange={(e) => setNewCategory(e.target.value as Category)}
             className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
           >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
               </option>
             ))}
           </select>
