@@ -71,6 +71,25 @@ describe("transactionService persistence", () => {
     ]);
   });
 
+  it("ne recalcule pas la TVA lors de l'ajout d'un justificatif", async () => {
+    const directory = path.join(workspace.root, "transactions");
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(
+      path.join(directory, "txn_test.yaml"),
+      yaml.stringify(transaction({ amount_ttc: -15.8, amount_ht: -15.8, vat: 0, vat_rate: 20 })),
+      "utf-8",
+    );
+    invalidateTransactionCache();
+
+    const updated = await updateTransaction("txn_test", {
+      attachment: "ticket.jpg",
+      attachments: ["ticket.jpg"],
+      justified: true,
+    });
+
+    expect(updated).toMatchObject({ amount_ttc: -15.8, amount_ht: -15.8, vat: 0, vat_rate: 20 });
+  });
+
   it("calcule la TVA d'un repas ventile entre 10 % et 20 %", async () => {
     await saveTransaction(transaction({ amount_ttc: -30, amount_ht: -30, vat: 0, vat_rate: 0 }));
 

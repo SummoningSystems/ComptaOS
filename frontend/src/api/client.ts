@@ -228,6 +228,11 @@ export function attachmentUrl(filename: string): string {
   return apiUrl(`/attachments/file/${encodeURIComponent(filename)}`);
 }
 
+export async function fetchAttachmentObjectUrl(filename: string): Promise<string> {
+  const { data } = await api.get(`/attachments/file/${encodeURIComponent(filename)}`, { responseType: "blob" });
+  return URL.createObjectURL(data);
+}
+
 // ── Import CSV ────────────────────────────────────────────────────────────────
 
 export async function previewCsv(content: string): Promise<{

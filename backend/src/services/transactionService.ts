@@ -135,7 +135,7 @@ function normalizeTransaction(txn: Transaction): Transaction {
  * depuis le bon dossier et réinitialiser le watcher sur le bon répertoire.
  */
 export function invalidateTransactionCache(): void {
-  _cache = null;
+  invalidateCache();
   if (_watcher) {
     _watcher.close();
     _watcher = null;
@@ -227,7 +227,12 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const txn = yaml.parse(content) as Transaction;
   await assertMonthOpen(txn.date);
   if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
-  const updated = normalizeTransaction({ ...txn, ...patch });
+  const merged = { ...txn, ...patch };
+  const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits"];
+  const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
+  // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
+  // recalculer silencieusement la TVA à partir d'un ancien taux.
+  const updated = changesAccounting ? normalizeTransaction(merged) : merged;
   await atomicWriteFile(filePath, yaml.stringify(updated));
   invalidateCache();
   return updated;
