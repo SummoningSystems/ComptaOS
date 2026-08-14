@@ -6,6 +6,7 @@ import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
 import { PendingReceiptsPanel } from "./PendingReceiptsPanel";
+import { MultiInvoiceDialog } from "./MultiInvoiceDialog";
 import { aiCategorize } from "../../api/ai";
 import { fetchAllTags } from "../../api/search";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
@@ -454,6 +455,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   const [vatSaveMessage, setVatSaveMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [ocrReview, setOcrReview] = useState<{ transaction: Transaction; proposal: ReceiptOcrProposal } | null>(null);
+  const [multiInvoiceTransaction, setMultiInvoiceTransaction] = useState<Transaction | null>(null);
 
   async function load() {
     setLoading(true);
@@ -814,6 +816,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     <div className="flex flex-col h-full">
       {attachmentMessage && <div role={attachmentMessage.type === "error" ? "alert" : "status"} className={`fixed right-4 top-14 z-50 max-w-sm rounded border px-4 py-2 text-xs shadow-lg ${attachmentMessage.type === "success" ? "border-green-700 bg-green-950 text-green-300" : "border-red-700 bg-red-950 text-red-300"}`}>{attachmentMessage.text}<button onClick={() => setAttachmentMessage(null)} className="ml-3 text-vscode-muted">×</button></div>}
       {ocrReview && <ReceiptOcrDialog transaction={ocrReview.transaction} proposal={ocrReview.proposal} onApply={applyOcrProposal} onClose={() => setOcrReview(null)} />}
+      {multiInvoiceTransaction && <MultiInvoiceDialog transaction={multiInvoiceTransaction} onClose={() => setMultiInvoiceTransaction(null)} onComplete={(updated) => { setTransactions((current) => current.map((transaction) => transaction.id === updated.id ? updated : transaction)); setMultiInvoiceTransaction(null); setAttachmentMessage({ type: "success", text: "Factures associées et TVA consolidée sur la transaction." }); }} />}
       <datalist id="vat-rate-presets">
         {VAT_RATE_PRESETS.map((rate) => (
           <option key={rate} value={rate} />
@@ -1279,6 +1282,14 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                     </label>
                                     </AttachmentDropZone>
                                   )}
+                                  <button
+                                    onClick={() => setMultiInvoiceTransaction(txn)}
+                                    className="flex h-6 items-center justify-center rounded border border-purple-700 px-1.5 text-[9px] font-semibold text-purple-300 hover:bg-purple-900/30"
+                                    title="Associer plusieurs factures à cette transaction"
+                                    aria-label={`Multi-factures pour ${txn.label}`}
+                                  >
+                                    Multi
+                                  </button>
                                   {/* IA */}
                                   <button
                                     onClick={() => handleAiCategorize(txn)}
