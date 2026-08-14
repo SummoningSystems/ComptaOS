@@ -42,7 +42,7 @@ export function PdfPreview({ url, title }: { url: string; title: string }) {
     return () => { cancelled = true; void task.destroy(); };
   }, [url, title]);
 
-  return <div className="relative min-h-0 flex-1 overflow-auto bg-black/20 p-4">
+  return <div className="relative min-h-0 w-full flex-1 self-stretch overflow-auto bg-black/20 p-4">
     {loading && <p className="py-8 text-center text-sm text-vscode-muted">Chargement du PDF…</p>}
     {error && <p role="alert" className="py-8 text-center text-sm text-red-400">Impossible d’afficher ce PDF : {error}</p>}
     <div ref={containerRef} />
