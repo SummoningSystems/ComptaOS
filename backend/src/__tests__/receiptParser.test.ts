@@ -108,4 +108,21 @@ TVA 1,41 EUR`);
     expect(result).toMatchObject({ supplier: "LES ASIATIDES", date: "2026-07-13", invoiceRef: "0019187/8", amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5, confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5 }]);
   });
+
+  it("associe les valeurs quand les en-têtes TVA TTC HT sont regroupés avant elles", () => {
+    const result = parseReceiptTextLocally(`LES ASIATIDES
+Ticket #0019187/8
+15,50
+TVA
+TTC
+HT
+1,41
+15,50
+14,09
+TVA 10 %
+15,50 EUR
+TOTAL`);
+    expect(result).toMatchObject({ supplier: "LES ASIATIDES", invoiceRef: "0019187/8", amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5, confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 14.09, amountVat: 1.41, amountTtc: 15.5 }]);
+  });
 });

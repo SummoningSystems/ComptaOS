@@ -88,6 +88,21 @@ function detectColumnSummary(text: string): VatSummary | undefined {
   return { amountHt, amountTtc, vatSplits: [{ rate, amountTtc }] };
 }
 
+/** Tickets dont l'OCR restitue d'abord les en-têtes TVA/TTC/HT, puis leurs valeurs. */
+function detectReorderedHeaderSummary(text: string): VatSummary | undefined {
+  const compact = text.replace(/\s+/g, " ");
+  const match = compact.match(new RegExp(`tva\\s+ttc\\s+ht\\s+${AMOUNT}\\s+${AMOUNT}\\s+${AMOUNT}`, "i"));
+  if (!match) return undefined;
+  const vat = round2(amount(match[1]));
+  const amountTtc = round2(amount(match[2]));
+  const amountHt = round2(amount(match[3]));
+  if (amountHt <= 0 || vat <= 0 || Math.abs(amountHt + vat - amountTtc) >= 0.06) return undefined;
+  const printedRate = compact.match(/tva\s*(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/i)?.[1];
+  const rate = printedRate ? Number(printedRate.replace(",", ".")) : [2.1, 5.5, 10, 20].find((candidate) => Math.abs(amountHt * candidate / 100 - vat) < 0.08);
+  if (rate === undefined || Math.abs(amountHt * rate / 100 - vat) >= 0.08) return undefined;
+  return { amountHt, amountTtc, vatSplits: [{ rate, amountTtc }] };
+}
+
 /** Tickets lus verticalement : taux sur une ligne, puis HT, TVA et TTC sur trois lignes. */
 function detectVerticalVatSummary(text: string): VatSummary | undefined {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -139,7 +154,7 @@ function detectVatSplits(text: string): Array<{ rate: number; amountTtc: number 
 /** Transforme le texte OCR en proposition prudente, sans LLM ni donnée inventée. */
 export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
   const text = rawText.replace(/\u00a0/g, " ");
-  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectVerticalVatSummary(text);
+  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectReorderedHeaderSummary(text) ?? detectVerticalVatSummary(text);
   const amountTtc = summary?.amountTtc ?? findLastAmount(text, [
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),
