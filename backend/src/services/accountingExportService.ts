@@ -3,6 +3,7 @@ import { basename, join } from "path";
 import { Transaction } from "../types/index.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { AccountingAccount, AccountingConfig, loadCompanyProfile } from "./settingsService.js";
+import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 
 export interface AccountingLine {
   journalCode: string; journalLabel: string; entryNumber: string; entryDate: string;
@@ -50,7 +51,7 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     if (Math.abs(round(transaction.amount_ht + transaction.vat - transaction.amount_ttc)) > 0.01) anomalies.push({ severity: "blocking", code: "VAT_MISMATCH", message: "HT + TVA ne correspond pas au TTC.", transactionId: transaction.id });
     const attachments = [...new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])])];
     for (const attachment of attachments) if (!existsSync(join(getWorkspaceRoot(), "attachments", basename(attachment)))) anomalies.push({ severity: "blocking", code: "MISSING_ATTACHMENT", message: `Le justificatif ${attachment} est introuvable.`, transactionId: transaction.id });
-    if (transaction.amount_ttc < 0 && attachments.length === 0 && !transaction.invoiceRef && !transaction.justified) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
+    if (needsTransactionEvidence(transaction)) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
     const base = { journalCode: "BQ", journalLabel: "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
     const ht = Math.abs(round(transaction.amount_ht)); const vat = Math.abs(round(transaction.vat)); const ttc = Math.abs(round(transaction.amount_ttc));
     if (transaction.amount_ttc < 0) {

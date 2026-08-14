@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { fetchDashboard, fetchTransactions } from "../../api/client";
 import { DashboardData, Transaction } from "../../types";
+import { needsTransactionEvidence } from "../../utils/transactionEvidence";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
@@ -91,7 +92,7 @@ export function Dashboard() {
   const thisMonth = validTxns.filter((t) => t.date.startsWith(currentMonth));
   const thisMonthRevenue = thisMonth.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ttc, 0);
   const thisMonthExpenses = thisMonth.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.amount_ttc), 0);
-  const unjustifiedCount = data.unjustified_count ?? validTxns.filter((t) => t.justified === false).length;
+  const unjustifiedCount = data.unjustified_count ?? validTxns.filter(needsTransactionEvidence).length;
   const rejectedCount = transactions.filter((t) => t.status === "rejected").length;
 
   // Alertes

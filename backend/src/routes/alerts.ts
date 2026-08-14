@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { getTransactionLoadIssues, loadAllTransactions } from "../services/transactionService.js";
 import { loadBudgets } from "../services/settingsService.js";
 import { loadPendingReceipts } from "../services/receiptInboxService.js";
+import { needsTransactionEvidence } from "../services/transactionEvidenceService.js";
 
 export interface SystemAlert {
   id: string;
@@ -34,7 +35,7 @@ export async function alertsRoutes(app: FastifyInstance) {
     }
 
     // 1. Transactions non justifiées
-    const unjustified = validTxns.filter((t) => t.justified === false);
+    const unjustified = validTxns.filter(needsTransactionEvidence);
     if (unjustified.length > 0) {
       alerts.push({
         id: "unjustified",

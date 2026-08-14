@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit } from "../../types";
+import { needsTransactionEvidence } from "../../utils/transactionEvidence";
 import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
@@ -706,7 +707,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     const matchesStatus = statusFilter === "" || t.status === statusFilter;
     const matchesDateFrom = dateFrom === "" || t.date >= dateFrom;
     const matchesDateTo = dateTo === "" || t.date <= dateTo;
-    const matchesJustified = !showUnjustified || t.justified === false;
+    const matchesJustified = !showUnjustified || needsTransactionEvidence(t);
     const matchesRejected = !hideRejected || t.status !== "rejected";
     const matchesType = typeFilter === "" || t.paymentType === typeFilter;
     const matchesHolder = holderFilter === "" || t.cardHolder === holderFilter;
@@ -1027,7 +1028,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         )}
         {/* Filtre À justifier */}
         {(() => {
-          const unjustifiedCount = transactions.filter((t) => t.justified === false).length;
+          const unjustifiedCount = transactions.filter(needsTransactionEvidence).length;
           return unjustifiedCount > 0 ? (
             <button
               onClick={() => setShowUnjustified((v) => !v)}

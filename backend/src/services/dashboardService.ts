@@ -2,6 +2,7 @@ import { loadAllTransactions } from "./transactionService.js";
 import { loadManualRecurring } from "./manualRecurringService.js";
 import { DashboardData } from "../types/index.js";
 import { getConnections } from "./bankingService.js";
+import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 
 /** Construit les données agrégées pour le dashboard. */
 export async function computeDashboard(requestedYear?: string): Promise<DashboardData> {
@@ -94,7 +95,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     (t) => t.date.startsWith(currentYear) && t.category === "misc" && t.status !== "rejected"
   ).length;
   const unjustifiedCount = transactions.filter(
-    (t) => t.date.startsWith(currentYear) && t.justified === false && t.status !== "rejected"
+    (t) => t.date.startsWith(currentYear) && needsTransactionEvidence(t)
   ).length;
 
   // ── Solde cumulé par mois ──────────────────────────────────────────────────

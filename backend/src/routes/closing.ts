@@ -7,6 +7,7 @@ import { loadAccountingConfig } from "../services/settingsService.js";
 import { activeClosing, closeMonth, loadClosings, reopenMonth } from "../services/closingService.js";
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
+import { needsTransactionEvidence } from "../services/transactionEvidenceService.js";
 
 type Step = { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number; action?: "banking" | "transactions" | "vat" | "reconcile" | "export"; filter?: "unjustified" | "misc" | "pending" };
 
@@ -14,7 +15,7 @@ async function checklist(month: string) {
   const [transactions, receipts, connections, closing] = await Promise.all([loadAllTransactions(), loadPendingReceipts(), getConnections().catch(() => []), activeClosing(month)]);
   const active = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date.startsWith(month));
   const expenses = active.filter((transaction) => transaction.amount_ttc < 0);
-  const unjustified = expenses.filter((transaction) => transaction.justified === false || (![...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])].length && !transaction.invoiceRef));
+  const unjustified = expenses.filter(needsTransactionEvidence);
   const uncategorized = active.filter((transaction) => transaction.category === "misc");
   const vatMissing = expenses.filter((transaction) => transaction.vat === 0 && !["salary", "taxes"].includes(transaction.category));
   const unreconciled = active.filter((transaction) => transaction.reconciled !== true);
