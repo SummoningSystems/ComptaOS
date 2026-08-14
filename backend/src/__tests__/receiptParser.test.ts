@@ -128,6 +128,7 @@ TOTAL`);
 
   it("analyse une facture avec le symbole euro entre Total et HT ou TTC", () => {
     const result = parseReceiptTextLocally(`KANDBAZ
+N° TVA Intracommunautaire : FR42497933408
 Total € HT 37,00
 TVA_20 (20%) 7,40
 Total € TTC 44,40€

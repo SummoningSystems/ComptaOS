@@ -109,7 +109,7 @@ function detectFrenchInvoiceSummary(text: string): VatSummary | undefined {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const htLine = lines.find((line) => /total\s*(?:€|eur(?:os?)?)?\s*ht/i.test(line));
   const ttcLine = lines.find((line) => /total\s*(?:€|eur(?:os?)?)?\s*ttc/i.test(line));
-  const vatLine = lines.find((line) => /(?:^|\s)(?:tva|vat)(?:[_\s-]|$)/i.test(line));
+  const vatLine = lines.find((line) => !/intracommunautaire/i.test(line) && /(?:tva|vat)[_\s-]*(?:2[,.]1|5[,.]5|10|20)|\((?:2[,.]1|5[,.]5|10|20)\s*%\)/i.test(line));
   const lastAmount = (line: string | undefined): number => {
     if (!line) return 0;
     const values = [...line.matchAll(new RegExp(AMOUNT, "g"))];
