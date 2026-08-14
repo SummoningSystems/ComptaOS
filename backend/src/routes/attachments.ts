@@ -272,8 +272,8 @@ export async function attachmentsRoutes(app: FastifyInstance) {
       const hasRemoteOcr = Boolean(aiConfig?.mistralApiKey ?? process.env.MISTRAL_API_KEY) && Boolean(aiConfig?.apiKey);
       if (localOcrUrl() || hasRemoteOcr) {
         try {
-          const result = await extractReceiptFromDocument(buffer, data.mimetype);
-          ocr = { status: "success", proposal: result.proposal };
+          const result = await extractReceiptFromDocument(buffer, data.mimetype, { expectedTtc: Math.abs(updated.amount_ttc) });
+          ocr = { status: "success", proposal: result.proposal.category === "misc" && updated.category !== "misc" ? { ...result.proposal, category: updated.category } : result.proposal };
         } catch (error) {
           ocr = { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" };
         }
@@ -295,8 +295,9 @@ export async function attachmentsRoutes(app: FastifyInstance) {
     const mimetype = mimeMap[ext];
     if (!mimetype) return reply.status(400).send({ error: "Format non compatible avec l’OCR" });
     try {
-      const result = await extractReceiptFromDocument(await fs.readFile(filePath), mimetype);
-      return reply.send({ transaction, ocr: { status: "success", proposal: result.proposal } });
+      const result = await extractReceiptFromDocument(await fs.readFile(filePath), mimetype, { expectedTtc: Math.abs(transaction.amount_ttc) });
+      const proposal = result.proposal.category === "misc" && transaction.category !== "misc" ? { ...result.proposal, category: transaction.category } : result.proposal;
+      return reply.send({ transaction, ocr: { status: "success", proposal } });
     } catch (error) {
       return reply.send({ transaction, ocr: { status: "error", message: error instanceof Error ? error.message : "Analyse OCR impossible" } });
     }

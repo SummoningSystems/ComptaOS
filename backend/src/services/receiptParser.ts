@@ -5,6 +5,50 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 const amount = (value: string) => Number(value.replace(/\s/g, "").replace(",", "."));
 const AMOUNT = "([0-9]{1,6}(?:[\\s.]?[0-9]{3})*[,.][0-9]{2})";
 
+interface AccountingCandidate { amountHt: number; amountVat: number; amountTtc: number; rate: number; score: number }
+
+function solveAccountingAmounts(text: string, expectedTtc?: number): VatSummary | undefined {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const tokens = lines.flatMap((line, lineIndex) => [...line.matchAll(new RegExp(AMOUNT, "g"))].map((match) => ({
+    value: round2(amount(match[1])), line, lineIndex,
+  }))).filter((token) => token.value > 0 && token.value < 1_000_000);
+  const unique = [...new Map(tokens.map((token) => [token.value, token])).values()].slice(0, 60);
+  const printedRates = [...new Set([...text.matchAll(/\b(2[,.]1|5[,.]5|10(?:[,.]0+)?|20(?:[,.]0+)?)\s*%/gi)].map((match) => Number(match[1].replace(",", "."))))];
+  const standardRates = printedRates.length ? printedRates : [2.1, 5.5, 10, 20];
+  const near = (a: number, b: number, tolerance = 0.06) => Math.abs(a - b) < tolerance;
+  const labelScore = (kind: "ht" | "vat" | "ttc", value: number) => tokens.filter((token) => near(token.value, value)).reduce((best, token) => {
+    const context = `${lines[token.lineIndex - 1] ?? ""} ${token.line} ${lines[token.lineIndex + 1] ?? ""}`.toLowerCase();
+    if (kind === "ttc" && /total|ttc|à payer|a payer|net à payer|paiement effectué/.test(context)) return Math.max(best, 25);
+    if (kind === "ht" && /\bht\b|hors taxe|excl/.test(context)) return Math.max(best, 20);
+    if (kind === "vat" && !/intracommunautaire/.test(context) && /\btva\b|\bvat\b|\btax\b/.test(context)) return Math.max(best, 20);
+    return best;
+  }, 0);
+  const ttcValues = [...new Set([...(expectedTtc && expectedTtc > 0 ? [round2(Math.abs(expectedTtc))] : []), ...unique.map((token) => token.value)])];
+  const candidates: AccountingCandidate[] = [];
+  for (const amountTtc of ttcValues) {
+    for (const rate of standardRates) {
+      const amountHt = round2(amountTtc / (1 + rate / 100));
+      const amountVat = round2(amountTtc - amountHt);
+      const htSeen = unique.some((token) => near(token.value, amountHt));
+      const vatSeen = unique.some((token) => near(token.value, amountVat));
+      const ttcSeen = unique.some((token) => near(token.value, amountTtc));
+      if (!ttcSeen || (!htSeen && !vatSeen && !(expectedTtc && printedRates.includes(rate)))) continue;
+      const score = (expectedTtc && near(amountTtc, Math.abs(expectedTtc), 0.02) ? 100 : 0) + (printedRates.includes(rate) ? 30 : 0) + (htSeen ? 25 : 0) + (vatSeen ? 25 : 0) + labelScore("ttc", amountTtc) + labelScore("ht", amountHt) + labelScore("vat", amountVat);
+      candidates.push({ amountHt, amountVat, amountTtc, rate, score });
+    }
+    for (const ht of unique) for (const vat of unique) {
+      if (!near(ht.value + vat.value, amountTtc)) continue;
+      const rate = standardRates.find((candidate) => near(ht.value * candidate / 100, vat.value, 0.08));
+      if (rate === undefined) continue;
+      const score = (expectedTtc && near(amountTtc, Math.abs(expectedTtc), 0.02) ? 100 : 0) + 60 + (printedRates.includes(rate) ? 30 : 0) + labelScore("ttc", amountTtc) + labelScore("ht", ht.value) + labelScore("vat", vat.value);
+      candidates.push({ amountHt: ht.value, amountVat: vat.value, amountTtc, rate, score });
+    }
+  }
+  const best = candidates.sort((a, b) => b.score - a.score)[0];
+  if (!best || best.score < (expectedTtc ? 100 : 85)) return undefined;
+  return { amountHt: best.amountHt, amountTtc: best.amountTtc, vatSplits: [{ rate: best.rate, amountTtc: best.amountTtc }] };
+}
+
 function findLastAmount(text: string, patterns: RegExp[]): number {
   for (const pattern of patterns) {
     const matches = [...text.matchAll(pattern)];
@@ -174,9 +218,9 @@ function detectVatSplits(text: string): Array<{ rate: number; amountTtc: number 
 }
 
 /** Transforme le texte OCR en proposition prudente, sans LLM ni donnée inventée. */
-export function parseReceiptTextLocally(rawText: string): ReceiptProposal {
+export function parseReceiptTextLocally(rawText: string, options: { expectedTtc?: number } = {}): ReceiptProposal {
   const text = rawText.replace(/\u00a0/g, " ");
-  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectReorderedHeaderSummary(text) ?? detectFrenchInvoiceSummary(text) ?? detectVerticalVatSummary(text);
+  const summary = detectTaxBaseSummary(text) ?? detectColumnSummary(text) ?? detectReorderedHeaderSummary(text) ?? detectFrenchInvoiceSummary(text) ?? detectVerticalVatSummary(text) ?? solveAccountingAmounts(text, options.expectedTtc);
   const amountTtc = summary?.amountTtc ?? findLastAmount(text, [
     new RegExp(`(?:net|total)\\s*(?:a|à)?\\s*payer[^\\d]{0,12}${AMOUNT}`, "gim"),
     new RegExp(`total\\s*ttc[^\\d]{0,12}${AMOUNT}`, "gim"),

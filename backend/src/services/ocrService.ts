@@ -94,11 +94,11 @@ ${rawText.slice(0, 3000)}`;
   }
 }
 
-export async function extractReceiptFromDocument(buffer: Buffer, mimetype: string): Promise<{ proposal: ReceiptProposal; rawText: string }> {
+export async function extractReceiptFromDocument(buffer: Buffer, mimetype: string, options: { expectedTtc?: number } = {}): Promise<{ proposal: ReceiptProposal; rawText: string }> {
   if (localOcrUrl()) {
     try {
       const rawText = await extractTextLocally(buffer, mimetype);
-      const proposal = parseReceiptTextLocally(rawText);
+      const proposal = parseReceiptTextLocally(rawText, options);
       if (proposal.confidence !== "low" || process.env.OCR_REMOTE_FALLBACK !== "true") return { proposal, rawText };
     } catch (error) {
       if (process.env.OCR_REMOTE_FALLBACK !== "true") throw error;

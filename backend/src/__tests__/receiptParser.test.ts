@@ -139,4 +139,28 @@ N° de facture FZ-707242`);
     expect(result).toMatchObject({ supplier: "KANDBAZ", invoiceRef: "FZ-707242", date: "2026-07-01", amountHt: 37, amountVat: 7.4, amountTtc: 44.4, category: "subscription", confidence: "high" });
     expect(result.vatSplits).toEqual([{ rate: 20, amountHt: 37, amountVat: 7.4, amountTtc: 44.4 }]);
   });
+
+  it("résout les montants par cohérence comptable malgré des en-têtes OCR mal lus", () => {
+    const result = parseReceiptTextLocally(`BOUILLON LABEGE
+08 juin 2026
+2.50
+10.90
+2.40
+15.80€
+Net A Payer
+ht
+taxe
+tte
+14.36
+1.44
+15.80
+TUA2
+108
+14.36
+1.44
+15.80
+total`, { expectedTtc: 15.8 });
+    expect(result).toMatchObject({ supplier: "BOUILLON LABEGE", amountHt: 14.36, amountVat: 1.44, amountTtc: 15.8, confidence: "high" });
+    expect(result.vatSplits).toEqual([{ rate: 10, amountHt: 14.36, amountVat: 1.44, amountTtc: 15.8 }]);
+  });
 });
