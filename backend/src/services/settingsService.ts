@@ -154,6 +154,10 @@ export interface CompanyProfile {
   website?: string;
   iban?: string;
   bankName?: string;
+  vatRegime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise";
+  vatReferenceYear?: number;
+  vatReferenceAmount?: number;
+  vatOpeningBalance?: number;
   onboardingDone?: boolean;
 }
 

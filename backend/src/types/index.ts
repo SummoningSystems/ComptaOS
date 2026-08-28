@@ -65,6 +65,13 @@ export interface DashboardData {
   monthly_revenue: { month: string; amount: number }[];
   monthly_expenses: { month: string; amount: number }[];
   vat_estimate: number;
+  vat_collected?: number;
+  vat_deductible?: number;
+  vat_payments?: number;
+  vat_reserve?: number;
+  spendable_cash?: number;
+  vat_regime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise";
+  next_vat_due?: { period: string; label: string; estimated_amount: number; provisional: boolean };
   treasury: number;
   /** Somme des mouvements non rejetes; ce n'est pas un solde bancaire. */
   transaction_flow: number;

@@ -109,7 +109,8 @@ export function TreasuryView() {
   const avgRev3 = recent3.length > 0
     ? recent3.reduce((s, m) => s + m.rev, 0) / recent3.length
     : 0;
-  const runway = burnRate > 0 ? data.treasury / burnRate : 999;
+  const runwayBase = data.spendable_cash ?? data.treasury;
+  const runway = burnRate > 0 ? runwayBase / burnRate : 999;
 
   // ── 15 dernières transactions non rejetées ─────────────────────────────────
   const recentTxns = transactions
@@ -147,6 +148,12 @@ export function TreasuryView() {
           Les transactions importées représentent une variation de {fmt(data.transaction_flow)}. Le solde bancaire de {fmt(data.bank_balance)} sert de référence aux projections ; l'écart de {fmt(data.balance_difference ?? 0)} correspond notamment au solde antérieur au début de l'historique importé.
         </div>
       )}
+
+      <section className="rounded-lg border border-amber-700/70 bg-amber-950/20 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-amber-200">Trésorerie réellement disponible</h3><p className="mt-1 text-[10px] text-vscode-muted">Solde bancaire diminué de la provision TVA conseillée. Estimation de pilotage, pas une déclaration fiscale.</p></div>{data.next_vat_due && <div className="rounded border border-amber-800 px-3 py-2 text-right text-[10px] text-amber-200"><strong>{data.next_vat_due.label}</strong><br/>{data.next_vat_due.period} · environ {fmt(data.next_vat_due.estimated_amount)}</div>}</div>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><KpiCard label="Solde bancaire" value={fmt(data.treasury)} sub="argent présent sur les comptes"/><KpiCard label="TVA collectée" value={fmt(data.vat_collected ?? 0)} sub="sur les encaissements de l’année" accent="text-blue-300"/><KpiCard label="Provision TVA" value={`−${fmt(data.vat_reserve ?? 0)}`} sub={`déductible ${fmt(data.vat_deductible ?? 0)} · payée ${fmt(data.vat_payments ?? 0)}`} accent="text-amber-300"/><KpiCard label="Disponible à dépenser" value={fmt(data.spendable_cash ?? data.treasury)} sub="après mise à l’écart de la TVA" accent={(data.spendable_cash ?? data.treasury) >= 0 ? "text-green-300" : "text-red-400"}/></div>
+        <p className="mt-3 text-[10px] text-vscode-muted">Pour qu’un règlement déjà versé soit déduit de la provision, ajoute le tag <code className="text-vscode-text">vat_payment</code> à la transaction ou conserve un libellé explicite TVA/CA3/CA12.</p>
+      </section>
 
       {/* ── KPIs principaux ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

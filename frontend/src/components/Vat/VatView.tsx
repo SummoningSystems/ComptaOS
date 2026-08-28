@@ -430,6 +430,12 @@ export function VatView() {
             ))}
           </datalist>
 
+          <section className="max-w-3xl rounded-lg border border-blue-800 bg-blue-950/20 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-blue-200">Régime de TVA de la société</h3><p className="mt-1 text-xs text-vscode-text">{data.regime === "simplified_ca12" ? "Régime simplifié — CA12 annuelle et deux acomptes" : data.regime === "quarterly_ca3" ? "Régime réel normal — CA3 trimestrielle" : data.regime === "franchise" ? "Franchise en base de TVA" : "Régime réel normal — CA3 mensuelle"}</p></div>{data.nextDue && <div className="rounded border border-blue-800 px-3 py-2 text-right text-xs"><strong>{data.nextDue.label}</strong><br/><span className="text-vscode-muted">{data.nextDue.period} · estimation {data.nextDue.estimatedAmount.toFixed(2)} €</span></div>}</div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4"><span>Provision actuelle<br/><strong className="text-amber-300">{(data.reserve ?? Math.max(0, data.total.net)).toFixed(2)} €</strong></span><span>Paiements TVA détectés<br/><strong>{(data.payments ?? 0).toFixed(2)} €</strong></span>{data.regime === "simplified_ca12" && <><span>Référence {data.referenceYear ?? "N-1"}<br/><strong>{(data.referenceAmount ?? 0).toFixed(2)} €</strong></span><span>Acomptes théoriques<br/><strong>55 % / 40 %</strong></span></>}</div>
+            <p className="mt-3 text-[10px] text-vscode-muted">Les échéances affichées sont prévisionnelles. Les montants et dates opposables restent ceux de l’espace professionnel impots.gouv.fr.</p>
+          </section>
+
           {/* Résumé annuel */}
           <div className="grid grid-cols-3 gap-4 max-w-2xl">
             <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">

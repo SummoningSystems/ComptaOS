@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { generateReport, ReportType } from "../services/reportService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { loadCompanyProfile } from "../services/settingsService.js";
+import { computeVatPosition } from "../services/vatPositionService.js";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 
 // ── Helpers PDF partagés ──────────────────────────────────────────────────────
@@ -121,6 +122,8 @@ export async function reportsRoutes(app: FastifyInstance) {
 
     const totalCollected = rows.reduce((s, r) => s + r.collected, 0);
     const totalDeductible = rows.reduce((s, r) => s + r.deductible, 0);
+    const profile = loadCompanyProfile();
+    const vatPosition = computeVatPosition(all, profile);
 
     return reply.send({
       year,
@@ -130,6 +133,12 @@ export async function reportsRoutes(app: FastifyInstance) {
         deductible: parseFloat(totalDeductible.toFixed(2)),
         net: parseFloat((totalCollected - totalDeductible).toFixed(2)),
       },
+      regime: profile.vatRegime,
+      referenceYear: profile.vatReferenceYear,
+      referenceAmount: profile.vatReferenceAmount,
+      reserve: vatPosition.reserve,
+      payments: vatPosition.payments,
+      nextDue: vatPosition.nextDue,
       details,
     });
   });

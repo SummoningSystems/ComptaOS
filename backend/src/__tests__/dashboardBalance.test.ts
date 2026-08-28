@@ -17,6 +17,10 @@ vi.mock("../services/bankingService.js", () => ({
   getConnections: async () => state.connections,
 }));
 
+vi.mock("../services/settingsService.js", () => ({
+  loadCompanyProfile: () => ({ name: "Test", vatRegime: "monthly_ca3" }),
+}));
+
 import { computeDashboard } from "../services/dashboardService.js";
 
 describe("dashboard bank balance", () => {

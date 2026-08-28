@@ -224,6 +224,15 @@ export function SettingsView() {
               className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
             />
           </div>
+          <div className="col-span-2 mt-2 rounded border border-vscode-border bg-vscode-sidebar p-4">
+            <h3 className="text-xs font-semibold text-vscode-text">Régime de TVA et provision de trésorerie</h3>
+            <p className="mt-1 text-[10px] text-vscode-muted">Configuration propre à cette société. Elle pilote la trésorerie réellement disponible et l’échéancier indicatif.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-vscode-muted">Régime de TVA<select aria-label="Régime de TVA" value={profile.vatRegime ?? "monthly_ca3"} onChange={(event) => setProfile((current) => ({ ...current, vatRegime: event.target.value as CompanyProfile["vatRegime"] }))} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1.5 text-sm text-vscode-text"><option value="monthly_ca3">Réel normal — CA3 mensuelle</option><option value="quarterly_ca3">Réel normal — CA3 trimestrielle</option><option value="simplified_ca12">Régime simplifié — CA12 + acomptes</option><option value="franchise">Franchise en base — sans TVA</option></select></label>
+              <label className="text-xs text-vscode-muted">Dette TVA au 1er janvier (€)<input aria-label="Dette TVA au 1er janvier" type="number" min="0" step="0.01" value={profile.vatOpeningBalance ?? 0} onChange={(event) => setProfile((current) => ({ ...current, vatOpeningBalance: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1.5 text-sm text-vscode-text" /></label>
+              {profile.vatRegime === "simplified_ca12" && <><label className="text-xs text-vscode-muted">Année de référence N-1<input aria-label="Année de référence TVA" type="number" min="2020" max="2100" value={profile.vatReferenceYear ?? new Date().getFullYear() - 1} onChange={(event) => setProfile((current) => ({ ...current, vatReferenceYear: Number(event.target.value) }))} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1.5 text-sm text-vscode-text" /></label><label className="text-xs text-vscode-muted">TVA de référence CA12 (€)<input aria-label="TVA de référence CA12" type="number" min="0" step="0.01" value={profile.vatReferenceAmount ?? 0} onChange={(event) => setProfile((current) => ({ ...current, vatReferenceAmount: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1.5 text-sm text-vscode-text" /></label><p className="sm:col-span-2 text-[10px] text-amber-300">Les acomptes indicatifs sont calculés à 55 % en juillet et 40 % en décembre. Vérifie toujours l’échéancier réel dans l’espace professionnel impots.gouv.fr. Le régime simplifié est annoncé comme supprimé au 1er janvier 2027.</p></>}
+            </div>
+          </div>
         </div>
         <button
           onClick={handleSaveProfile}

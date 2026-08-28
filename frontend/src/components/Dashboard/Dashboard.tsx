@@ -177,13 +177,14 @@ export function Dashboard() {
               ? "dernier solde Powens connu — synchronisez la banque pour l'actualiser"
               : "aucun solde bancaire synchronisé"}
           accent={data.treasury >= 0 ? "text-green-400" : "text-red-400"}
-          help="Dernier solde transmis par la banque. Il représente l'argent disponible sur les comptes synchronisés."
+          help="Dernier solde transmis par la banque, avant mise à l'écart de la TVA et des autres dettes à venir."
         />
         <KpiCard
-          label="TVA estimée à reverser"
-          value={`${data.vat_estimate.toFixed(2)} €`}
-          sub="estimation — non officielle"
-          accent={data.vat_estimate >= 0 ? "text-yellow-400" : "text-green-400"}
+          label="Disponible après TVA"
+          value={`${(data.spendable_cash ?? data.treasury).toFixed(2)} €`}
+          sub={`provision TVA ${(data.vat_reserve ?? Math.max(0, data.vat_estimate)).toFixed(2)} €`}
+          accent={(data.spendable_cash ?? data.treasury) >= 0 ? "text-green-400" : "text-red-400"}
+          help="Solde bancaire diminué de la provision TVA conseillée. Estimation de pilotage, non officielle."
         />
         <KpiCard
           label={`Produits HT ${data.current_year}`}

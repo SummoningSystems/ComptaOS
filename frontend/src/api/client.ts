@@ -543,6 +543,12 @@ export interface VatSummaryData {
   year: string;
   quarters: VatQuarterData[];
   total: { collected: number; deductible: number; net: number };
+  regime?: import("../types").CompanyProfile["vatRegime"];
+  referenceYear?: number;
+  referenceAmount?: number;
+  reserve?: number;
+  payments?: number;
+  nextDue?: { period: string; label: string; estimatedAmount: number; provisional: boolean };
   details: VatTransactionDetail[];
 }
 

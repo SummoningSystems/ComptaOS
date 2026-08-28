@@ -3,6 +3,8 @@ import { loadManualRecurring } from "./manualRecurringService.js";
 import { DashboardData } from "../types/index.js";
 import { getConnections } from "./bankingService.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
+import { loadCompanyProfile } from "./settingsService.js";
+import { computeVatPosition } from "./vatPositionService.js";
 
 /** Construit les données agrégées pour le dashboard. */
 export async function computeDashboard(requestedYear?: string): Promise<DashboardData> {
@@ -74,6 +76,9 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     ? bankAccounts.reduce((sum, account) => sum + account.balance, 0)
     : undefined;
   const treasury = bankBalance ?? transactionFlow;
+  const companyProfile = loadCompanyProfile();
+  const vatPosition = computeVatPosition(transactions, companyProfile);
+  const spendableCash = treasury - vatPosition.reserve;
   const bankBalanceUpdatedAt = bankAccounts
     .map((account) => account.updated_at)
     .filter((date): date is string => !!date)
@@ -88,7 +93,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     ? recentMonths.reduce((s, m) => s + monthlyMap[m].revenue, 0) / recentMonths.length
     : 0;
   const runwayMonths = avgMonthlyExpenses > 0
-    ? parseFloat((treasury / avgMonthlyExpenses).toFixed(1))
+    ? parseFloat((spendableCash / avgMonthlyExpenses).toFixed(1))
     : 999;
 
   const miscCount = transactions.filter(
@@ -109,7 +114,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   // ── Prévisions 6 mois à partir des frais récurrents + moyenne revenus ─────
   const forecast: { month: string; balance: number; projected: boolean }[] = [];
   // Reprendre le dernier solde connu
-  let forecastBalance = treasury;
+  let forecastBalance = spendableCash;
   const now = new Date();
   // Charges récurrentes mensuelles issues du service
   const monthlyRecurringExpenses = recurring
@@ -133,6 +138,13 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     monthly_revenue:  months.map((m) => ({ month: m, amount: parseFloat(monthlyMap[m].revenue.toFixed(2)) })),
     monthly_expenses: months.map((m) => ({ month: m, amount: parseFloat(monthlyMap[m].expenses.toFixed(2)) })),
     vat_estimate:     parseFloat(vatEstimate.toFixed(2)),
+    vat_collected: vatPosition.collected,
+    vat_deductible: vatPosition.deductible,
+    vat_payments: vatPosition.payments,
+    vat_reserve: vatPosition.reserve,
+    spendable_cash: parseFloat(spendableCash.toFixed(2)),
+    vat_regime: companyProfile.vatRegime,
+    next_vat_due: vatPosition.nextDue ? { period: vatPosition.nextDue.period, label: vatPosition.nextDue.label, estimated_amount: vatPosition.nextDue.estimatedAmount, provisional: vatPosition.nextDue.provisional } : undefined,
     treasury:         parseFloat(treasury.toFixed(2)),
     transaction_flow: parseFloat(transactionFlow.toFixed(2)),
     bank_balance: bankBalance === undefined ? undefined : parseFloat(bankBalance.toFixed(2)),
