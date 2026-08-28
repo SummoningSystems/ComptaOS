@@ -6,6 +6,55 @@ import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 import { loadCompanyProfile } from "./settingsService.js";
 import { computeVatPosition } from "./vatPositionService.js";
 
+function addMonths(isoDate: string, count: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + count, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+function recurringScenarioAmount(item: ReturnType<typeof loadManualRecurring>[number]): number {
+  if (!item.active || item.decision === "cancel") return 0;
+  if (item.decision === "reduce" && typeof item.simulatedAmount === "number") return Math.max(0, item.simulatedAmount);
+  return item.amount;
+}
+
+export function buildDashboardForecast(
+  recurring: ReturnType<typeof loadManualRecurring>,
+  transactions: Awaited<ReturnType<typeof loadAllTransactions>>,
+  startBalance: number,
+  today = new Date().toISOString().slice(0, 10),
+) {
+  const currentMonth = `${today.slice(0, 7)}-01`;
+  const recentMonths = [3, 2, 1].map((offset) => addMonths(currentMonth, -offset).slice(0, 7));
+  const revenueByMonth = new Map(recentMonths.map((month) => [month, 0]));
+  for (const transaction of transactions) {
+    const month = transaction.date.slice(0, 7);
+    if (transaction.status !== "rejected" && transaction.amount_ttc > 0 && revenueByMonth.has(month)) {
+      revenueByMonth.set(month, (revenueByMonth.get(month) ?? 0) + transaction.amount_ttc);
+    }
+  }
+  const averageRevenue = [...revenueByMonth.values()].reduce((sum, amount) => sum + amount, 0) / 3;
+  let balance = startBalance;
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const month = addMonths(currentMonth, index + 1).slice(0, 7);
+    const items: { id: string; label: string; amount: number }[] = [];
+    for (const item of recurring) {
+      const amount = recurringScenarioAmount(item);
+      if (amount <= 0) continue;
+      const step = item.frequency === "mensuel" ? 1 : item.frequency === "trimestriel" ? 3 : 12;
+      let dueDate = item.nextPayment;
+      let safety = 0;
+      while (dueDate.slice(0, 7) < month && safety++ < 120) dueDate = addMonths(dueDate, step);
+      if (dueDate.slice(0, 7) === month) items.push({ id: item.id, label: item.label, amount });
+    }
+    const expenses = items.reduce((sum, item) => sum + item.amount, 0);
+    balance += averageRevenue - expenses;
+    return { month, balance: parseFloat(balance.toFixed(2)), expenses: parseFloat(expenses.toFixed(2)), revenue: parseFloat(averageRevenue.toFixed(2)), projected: true, items };
+  });
+}
+
 /** Construit les données agrégées pour le dashboard. */
 export async function computeDashboard(requestedYear?: string): Promise<DashboardData> {
   let recurring: ReturnType<typeof loadManualRecurring> = [];
@@ -89,9 +138,6 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   const avgMonthlyExpenses = recentMonths.length > 0
     ? recentMonths.reduce((s, m) => s + monthlyMap[m].expenses, 0) / recentMonths.length
     : 0;
-  const avgMonthlyRevenue = recentMonths.length > 0
-    ? recentMonths.reduce((s, m) => s + monthlyMap[m].revenue, 0) / recentMonths.length
-    : 0;
   const runwayMonths = avgMonthlyExpenses > 0
     ? parseFloat((spendableCash / avgMonthlyExpenses).toFixed(1))
     : 999;
@@ -112,27 +158,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   });
 
   // ── Prévisions 6 mois à partir des frais récurrents + moyenne revenus ─────
-  const forecast: { month: string; balance: number; projected: boolean }[] = [];
-  // Reprendre le dernier solde connu
-  let forecastBalance = spendableCash;
-  const now = new Date();
-  // Charges récurrentes mensuelles issues du service
-  const monthlyRecurringExpenses = recurring
-    .filter((r) => r.active)
-    .reduce((sum, r) => {
-      const monthly =
-        r.frequency === "mensuel" ? r.amount
-        : r.frequency === "trimestriel" ? r.amount / 3
-        : r.amount / 12;
-      return sum + monthly;
-    }, 0);
-
-  for (let i = 1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    forecastBalance += avgMonthlyRevenue - (monthlyRecurringExpenses || avgMonthlyExpenses);
-    forecast.push({ month: key, balance: parseFloat(forecastBalance.toFixed(2)), projected: true });
-  }
+  const forecast = buildDashboardForecast(recurring, transactions, spendableCash);
 
   return {
     monthly_revenue:  months.map((m) => ({ month: m, amount: parseFloat(monthlyMap[m].revenue.toFixed(2)) })),

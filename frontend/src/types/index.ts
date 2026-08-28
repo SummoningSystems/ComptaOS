@@ -80,7 +80,7 @@ export interface DashboardData {
   unjustified_count: number;
   current_year: string;
   monthly_balance: { month: string; amount: number }[];
-  forecast: { month: string; balance: number; projected?: boolean }[];
+  forecast: { month: string; balance: number; expenses: number; revenue: number; projected?: boolean; items: { id: string; label: string; amount: number }[] }[];
   accounts: string[];
 }
 

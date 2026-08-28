@@ -351,12 +351,14 @@ export function TreasuryView() {
           <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-3">Prévisions 6 mois</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {data.forecast.map((f) => (
-              <div key={f.month} className="bg-vscode-panel border border-vscode-border rounded p-3 flex flex-col gap-1">
+              <div key={f.month} className="bg-vscode-panel border border-vscode-border rounded p-3 flex flex-col gap-1" title={f.items.length > 0 ? f.items.map((item) => `${item.label} : ${fmt(item.amount)}`).join("\n") : "Aucune échéance récurrente ce mois"}>
                 <span className="text-vscode-muted text-[10px] uppercase">{fmtMonth(f.month)}</span>
                 <span className={`text-sm font-mono font-semibold ${f.balance >= 0 ? "text-blue-400" : "text-red-400"}`}>
                   {fmt(f.balance)}
                 </span>
-                <span className="text-[10px] text-purple-400">prévision</span>
+                <span className="text-[10px] text-red-300">Frais prévus : −{fmt(f.expenses)}</span>
+                <span className="text-[10px] text-green-300">Recettes moy. : +{fmt(f.revenue)}</span>
+                <span className="text-[10px] text-vscode-muted">{f.items.length} échéance{f.items.length > 1 ? "s" : ""}</span>
               </div>
             ))}
           </div>

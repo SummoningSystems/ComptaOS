@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   transactions: [] as Array<Record<string, unknown>>,
   connections: [] as Array<Record<string, unknown>>,
+  recurring: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("../services/transactionService.js", () => ({
@@ -10,7 +11,7 @@ vi.mock("../services/transactionService.js", () => ({
 }));
 
 vi.mock("../services/manualRecurringService.js", () => ({
-  loadManualRecurring: () => [],
+  loadManualRecurring: () => state.recurring,
 }));
 
 vi.mock("../services/bankingService.js", () => ({
@@ -30,6 +31,23 @@ describe("dashboard bank balance", () => {
       vat: 0, category: "misc", status: "pending", account: "7",
     }];
     state.connections = [];
+    state.recurring = [];
+  });
+
+  it("projette les échéances réelles et respecte les décisions", async () => {
+    state.recurring = [
+      { id: "monthly", label: "Abonnement", category: "subscription", amount: 100, frequency: "mensuel", nextPayment: "2026-09-05", active: true, decision: "reduce", simulatedAmount: 80 },
+      { id: "annual", label: "Assurance", category: "insurance", amount: 600, frequency: "annuel", nextPayment: "2026-11-10", active: true },
+      { id: "cancelled", label: "Ancien outil", category: "software", amount: 50, frequency: "mensuel", nextPayment: "2026-09-01", active: true, decision: "cancel" },
+    ];
+
+    const { buildDashboardForecast } = await import("../services/dashboardService.js");
+    const forecast = buildDashboardForecast(state.recurring as never, [] as never, 2_000, "2026-08-28");
+
+    expect(forecast.map((month) => month.expenses)).toEqual([80, 80, 680, 80, 80, 80]);
+    expect(forecast[0].items.map((item) => item.label)).toEqual(["Abonnement"]);
+    expect(forecast[2].items.map((item) => item.label)).toEqual(["Abonnement", "Assurance"]);
+    expect(forecast.at(-1)?.balance).toBe(920);
   });
 
   it("nomme le cumul des transactions comme une variation en l'absence de banque", async () => {
