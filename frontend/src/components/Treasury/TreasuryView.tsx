@@ -7,11 +7,12 @@ import {
   ResponsiveContainer, ReferenceLine,
   ComposedChart, Line,
 } from "recharts";
-import { fetchDashboard, fetchTransactions } from "../../api/client";
-import { DashboardData, Transaction } from "../../types";
+import { fetchDashboard, fetchManualRecurring, fetchTransactions } from "../../api/client";
+import { DashboardData, ManualRecurring, Transaction } from "../../types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
+import { CashRunwaySimulator } from "./CashRunwaySimulator";
 
 function fmt(n: number) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
@@ -36,13 +37,15 @@ export function TreasuryView() {
   const { categories } = useCategoryCatalog();
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [recurring, setRecurring] = useState<ManualRecurring[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchDashboard(), fetchTransactions()])
-      .then(([d, t]) => {
+    Promise.all([fetchDashboard(), fetchTransactions(), fetchManualRecurring()])
+      .then(([d, t, recurringItems]) => {
         setData(d);
         setTransactions(Array.isArray(t) ? t : []);
+        setRecurring(Array.isArray(recurringItems) ? recurringItems : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -154,6 +157,8 @@ export function TreasuryView() {
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><KpiCard label="Solde bancaire" value={fmt(data.treasury)} sub="argent présent sur les comptes"/><KpiCard label="TVA collectée" value={fmt(data.vat_collected ?? 0)} sub="sur les encaissements de l’année" accent="text-blue-300"/><KpiCard label="Provision TVA" value={`−${fmt(data.vat_reserve ?? 0)}`} sub={`déductible ${fmt(data.vat_deductible ?? 0)} · payée ${fmt(data.vat_payments ?? 0)}`} accent="text-amber-300"/><KpiCard label="Disponible à dépenser" value={fmt(data.spendable_cash ?? data.treasury)} sub="après mise à l’écart de la TVA" accent={(data.spendable_cash ?? data.treasury) >= 0 ? "text-green-300" : "text-red-400"}/></div>
         <p className="mt-3 text-[10px] text-vscode-muted">Pour qu’un règlement déjà versé soit déduit de la provision, ajoute le tag <code className="text-vscode-text">vat_payment</code> à la transaction ou conserve un libellé explicite TVA/CA3/CA12.</p>
       </section>
+
+      <CashRunwaySimulator startBalance={data.spendable_cash ?? data.treasury} recurring={recurring} transactions={transactions} />
 
       {/* ── KPIs principaux ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
