@@ -39,6 +39,7 @@ export function TreasuryView() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurring, setRecurring] = useState<ManualRecurring[]>([]);
   const [loading, setLoading] = useState(true);
+  const [forecastHorizon, setForecastHorizon] = useState<6 | 12 | 18 | 24>(6);
 
   useEffect(() => {
     Promise.all([fetchDashboard(), fetchTransactions(), fetchManualRecurring()])
@@ -57,6 +58,7 @@ export function TreasuryView() {
   if (!data) {
     return <div className="flex items-center justify-center h-full text-vscode-muted text-sm">Impossible de charger les données.</div>;
   }
+  const visibleForecast = (data.forecast ?? []).slice(0, forecastHorizon);
 
   // ── Graphique combiné historique + prévisions ──────────────────────────────
   const histPoints = (data.monthly_balance ?? []).map((b) => ({
@@ -67,7 +69,7 @@ export function TreasuryView() {
 
   // Dernier solde réel comme point de jonction
   const lastReal = histPoints.at(-1);
-  const forecastPoints = (data.forecast ?? []).map((f) => ({
+  const forecastPoints = visibleForecast.map((f) => ({
     month: fmtMonth(f.month),
     prevision: f.balance,
     type: "prévision",
@@ -346,11 +348,16 @@ export function TreasuryView() {
       </div>
 
       {/* ── Prévisions mois par mois ─────────────────────────────────────── */}
-      {(data.forecast ?? []).length > 0 && (
-        <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">
-          <h3 className="text-vscode-muted text-xs uppercase tracking-wider mb-3">Prévisions 6 mois</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {data.forecast.map((f) => (
+      {visibleForecast.length > 0 && (
+        <div className="space-y-5 rounded-lg border border-vscode-border bg-vscode-sidebar p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="text-xs uppercase tracking-wider text-vscode-muted">Prévisions de trésorerie</h3><p className="mt-1 text-[10px] text-vscode-muted">Même calendrier de frais récurrents dans les deux scénarios.</p></div>
+            <div className="flex gap-1">{([6, 12, 18, 24] as const).map((months) => <button key={months} onClick={() => setForecastHorizon(months)} className={`rounded px-2 py-1 text-[10px] ${forecastHorizon === months ? "bg-vscode-accent text-white" : "border border-vscode-border text-vscode-muted hover:text-vscode-text"}`}>{months} mois</button>)}</div>
+          </div>
+          <section>
+            <h4 className="mb-3 text-xs font-medium text-blue-300">Avec recettes moyennes réinjectées</h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {visibleForecast.map((f) => (
               <div key={f.month} className="bg-vscode-panel border border-vscode-border rounded p-3 flex flex-col gap-1" title={f.items.length > 0 ? f.items.map((item) => `${item.label} : ${fmt(item.amount)}`).join("\n") : "Aucune échéance récurrente ce mois"}>
                 <span className="text-vscode-muted text-[10px] uppercase">{fmtMonth(f.month)}</span>
                 <span className={`text-sm font-mono font-semibold ${f.balance >= 0 ? "text-blue-400" : "text-red-400"}`}>
@@ -361,7 +368,14 @@ export function TreasuryView() {
                 <span className="text-[10px] text-vscode-muted">{f.items.length} échéance{f.items.length > 1 ? "s" : ""}</span>
               </div>
             ))}
-          </div>
+            </div>
+          </section>
+          <section className="border-t border-vscode-border pt-4">
+            <div className="mb-3"><h4 className="text-xs font-medium text-amber-300">Sans nouvelle entrée d’argent</h4><p className="mt-1 text-[10px] text-vscode-muted">Aucun futur encaissement : seules les échéances récurrentes sont retirées du disponible actuel.</p></div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {visibleForecast.map((f) => <div key={f.month} className={`flex flex-col gap-1 rounded border p-3 ${f.zeroRevenueBalance >= 0 ? "border-vscode-border bg-vscode-panel" : "border-red-800 bg-red-950/20"}`} title={f.items.length > 0 ? f.items.map((item) => `${item.label} : ${fmt(item.amount)}`).join("\n") : "Aucune échéance récurrente ce mois"}><span className="text-[10px] uppercase text-vscode-muted">{fmtMonth(f.month)}</span><span className={`font-mono text-sm font-semibold ${f.zeroRevenueBalance >= 0 ? "text-amber-300" : "text-red-400"}`}>{fmt(f.zeroRevenueBalance)}</span><span className="text-[10px] text-red-300">Frais prévus : −{fmt(f.expenses)}</span><span className="text-[10px] text-vscode-muted">0,00 € de recette · {f.items.length} échéance{f.items.length > 1 ? "s" : ""}</span></div>)}
+            </div>
+          </section>
         </div>
       )}
     </div>

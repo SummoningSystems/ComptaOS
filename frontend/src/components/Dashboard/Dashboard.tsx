@@ -333,7 +333,7 @@ export function Dashboard() {
             <span className="text-[10px] text-vscode-muted border border-vscode-border rounded px-1.5 py-0.5">estimation — basée sur charges récurrentes + moyenne revenus</span>
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={(data.forecast ?? []).map((d) => ({ ...d, month: formatMonth(d.month) }))}>
+            <LineChart data={(data.forecast ?? []).slice(0, 6).map((d) => ({ ...d, month: formatMonth(d.month) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#3c3c3c" />
               <XAxis dataKey="month" tick={{ fill: "#858585", fontSize: 11 }} />
               <YAxis tick={{ fill: "#858585", fontSize: 11 }} />

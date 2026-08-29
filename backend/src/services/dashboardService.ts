@@ -24,6 +24,7 @@ export function buildDashboardForecast(
   transactions: Awaited<ReturnType<typeof loadAllTransactions>>,
   startBalance: number,
   today = new Date().toISOString().slice(0, 10),
+  monthsAhead = 24,
 ) {
   const currentMonth = `${today.slice(0, 7)}-01`;
   const recentMonths = [3, 2, 1].map((offset) => addMonths(currentMonth, -offset).slice(0, 7));
@@ -36,8 +37,9 @@ export function buildDashboardForecast(
   }
   const averageRevenue = [...revenueByMonth.values()].reduce((sum, amount) => sum + amount, 0) / 3;
   let balance = startBalance;
+  let zeroRevenueBalance = startBalance;
 
-  return Array.from({ length: 6 }, (_, index) => {
+  return Array.from({ length: monthsAhead }, (_, index) => {
     const month = addMonths(currentMonth, index + 1).slice(0, 7);
     const items: { id: string; label: string; amount: number }[] = [];
     for (const item of recurring) {
@@ -51,7 +53,8 @@ export function buildDashboardForecast(
     }
     const expenses = items.reduce((sum, item) => sum + item.amount, 0);
     balance += averageRevenue - expenses;
-    return { month, balance: parseFloat(balance.toFixed(2)), expenses: parseFloat(expenses.toFixed(2)), revenue: parseFloat(averageRevenue.toFixed(2)), projected: true, items };
+    zeroRevenueBalance -= expenses;
+    return { month, balance: parseFloat(balance.toFixed(2)), zeroRevenueBalance: parseFloat(zeroRevenueBalance.toFixed(2)), expenses: parseFloat(expenses.toFixed(2)), revenue: parseFloat(averageRevenue.toFixed(2)), projected: true, items };
   });
 }
 

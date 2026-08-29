@@ -42,12 +42,13 @@ describe("dashboard bank balance", () => {
     ];
 
     const { buildDashboardForecast } = await import("../services/dashboardService.js");
-    const forecast = buildDashboardForecast(state.recurring as never, [] as never, 2_000, "2026-08-28");
+    const forecast = buildDashboardForecast(state.recurring as never, [] as never, 2_000, "2026-08-28", 6);
 
     expect(forecast.map((month) => month.expenses)).toEqual([80, 80, 680, 80, 80, 80]);
     expect(forecast[0].items.map((item) => item.label)).toEqual(["Abonnement"]);
     expect(forecast[2].items.map((item) => item.label)).toEqual(["Abonnement", "Assurance"]);
     expect(forecast.at(-1)?.balance).toBe(920);
+    expect(forecast.at(-1)?.zeroRevenueBalance).toBe(920);
   });
 
   it("nomme le cumul des transactions comme une variation en l'absence de banque", async () => {

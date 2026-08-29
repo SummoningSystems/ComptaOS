@@ -99,7 +99,7 @@ export interface DashboardData {
   unjustified_count: number; // transactions sans justificatif
   current_year: string;
   monthly_balance: { month: string; amount: number }[];
-  forecast: { month: string; balance: number; expenses: number; revenue: number; projected?: boolean; items: { id: string; label: string; amount: number }[] }[];
+  forecast: { month: string; balance: number; zeroRevenueBalance: number; expenses: number; revenue: number; projected?: boolean; items: { id: string; label: string; amount: number }[] }[];
   accounts: string[];
 }
 
