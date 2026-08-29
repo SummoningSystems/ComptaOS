@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { fetchAttachmentObjectUrl, type ReceiptOcrProposal } from "../../api/client";
+import { fetchAttachmentBlob, type ReceiptOcrProposal } from "../../api/client";
 import type { Category, Transaction } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
@@ -12,6 +12,7 @@ export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Pr
   const { categories } = useCategoryCatalog();
   const filename = transaction.attachments?.at(-1) ?? transaction.attachment;
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewPdfData, setPreviewPdfData] = useState<Uint8Array>();
   const [previewError, setPreviewError] = useState("");
   const isPdf = filename?.toLowerCase().endsWith(".pdf") ?? false;
   const bankTotal = Math.abs(transaction.amount_ttc);
@@ -26,9 +27,14 @@ export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Pr
     if (!filename) return;
     let active = true;
     let objectUrl = "";
-    fetchAttachmentObjectUrl(filename).then((url) => { objectUrl = url; if (active) setPreviewUrl(url); else URL.revokeObjectURL(url); }).catch(() => { if (active) setPreviewError("Impossible d’afficher la pièce justificative."); });
+    fetchAttachmentBlob(filename).then(async (blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      const pdfData = isPdf ? new Uint8Array(await blob.arrayBuffer()) : undefined;
+      if (active) { setPreviewUrl(objectUrl); setPreviewPdfData(pdfData); }
+      else URL.revokeObjectURL(objectUrl);
+    }).catch(() => { if (active) setPreviewError("Impossible d’afficher la pièce justificative."); });
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [filename]);
+  }, [filename, isPdf]);
 
   const splitTotal = Math.round(splits.reduce((sum, split) => sum + split.amountTtc, 0) * 100) / 100;
   const balanced = Math.abs(splitTotal - bankTotal) < 0.01;
@@ -43,7 +49,7 @@ export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Pr
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,.8fr)]">
         <section className="flex min-h-[360px] max-h-[75dvh] flex-col overflow-hidden rounded border border-vscode-border bg-vscode-bg">
           <div className="flex items-center justify-between border-b border-vscode-border px-3 py-2 text-xs"><span className="truncate text-vscode-muted">{filename ?? "Pièce justificative"}</span>{previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer" className="text-vscode-accent">Ouvrir en grand</a>}</div>
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-2">{previewUrl ? isPdf ? <Suspense fallback={<p className="text-xs text-vscode-muted">Chargement du lecteur PDF…</p>}><PdfPreview url={previewUrl} title={filename ?? "Pièce justificative"} /></Suspense> : <img src={previewUrl} alt="Pièce justificative à vérifier" className="max-h-[68dvh] max-w-full object-contain" /> : <p className="text-xs text-vscode-muted">{previewError || "Chargement de la pièce…"}</p>}</div>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-2">{previewUrl ? isPdf ? previewPdfData ? <Suspense fallback={<p className="text-xs text-vscode-muted">Chargement du lecteur PDF…</p>}><PdfPreview data={previewPdfData} title={filename ?? "Pièce justificative"} /></Suspense> : <p className="text-xs text-vscode-muted">Préparation du PDF…</p> : <img src={previewUrl} alt="Pièce justificative à vérifier" className="max-h-[68dvh] max-w-full object-contain" /> : <p className="text-xs text-vscode-muted">{previewError || "Chargement de la pièce…"}</p>}</div>
         </section>
         <section>
           {!receiptMatches && <p className="rounded border border-amber-700 bg-amber-900/20 px-3 py-2 text-xs text-amber-300">Le justificatif indique {proposal.amountTtc.toFixed(2)} €, mais la banque indique {bankTotal.toFixed(2)} €. Vérifie qu’il s’agit de la bonne pièce.</p>}

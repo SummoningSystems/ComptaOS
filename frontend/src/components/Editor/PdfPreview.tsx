@@ -3,14 +3,17 @@ import * as pdfjs from "pdfjs-dist";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `${import.meta.env.BASE_URL}assets/pdf.worker.min.js`;
 
-export function PdfPreview({ url, title }: { url: string; title: string }) {
+export function PdfPreview({ url, data, title }: { url?: string; data?: Uint8Array; title: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const task = pdfjs.getDocument({ url, withCredentials: true });
+    if (!url && !data) { setError("Source PDF indisponible"); setLoading(false); return; }
+    setLoading(true);
+    setError("");
+    const task = pdfjs.getDocument(data ? { data: new Uint8Array(data) } : { url: url!, withCredentials: true });
     async function render() {
       try {
         const document = await task.promise;
@@ -40,7 +43,7 @@ export function PdfPreview({ url, title }: { url: string; title: string }) {
     }
     void render();
     return () => { cancelled = true; void task.destroy(); };
-  }, [url, title]);
+  }, [url, data, title]);
 
   return <div className="relative min-h-0 w-full flex-1 self-stretch overflow-auto bg-black/20 p-4">
     {loading && <p className="py-8 text-center text-sm text-vscode-muted">Chargement du PDF…</p>}
