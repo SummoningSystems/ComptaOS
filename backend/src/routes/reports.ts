@@ -3,6 +3,7 @@ import { generateReport, ReportType } from "../services/reportService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { loadCompanyProfile } from "../services/settingsService.js";
 import { computeVatPosition } from "../services/vatPositionService.js";
+import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 
 // ── Helpers PDF partagés ──────────────────────────────────────────────────────
@@ -172,8 +173,9 @@ export async function reportsRoutes(app: FastifyInstance) {
     };
 
     const chargesMap: Record<string, { account: string; label: string; amount: number; count: number }> = {};
+    const productsMap: Record<string, { account: string; label: string; amount: number; count: number }> = {};
+    const categoryAccounts = new Map(loadCategoryCatalog().map((category) => [category.id, category.account]));
     let totalRevHT = 0;
-    let revenueCount = 0;
 
     for (const t of txns) {
       if (t.amount_ht < 0) {
@@ -182,8 +184,12 @@ export async function reportsRoutes(app: FastifyInstance) {
         chargesMap[account].amount += Math.abs(t.amount_ht);
         chargesMap[account].count++;
       } else if (t.amount_ht > 0) {
+        const configured = categoryAccounts.get(t.category);
+        const [account, label] = configured?.number.startsWith("7") ? [configured.number, configured.label] : ["706000", "Prestations de services"];
+        if (!productsMap[account]) productsMap[account] = { account, label, amount: 0, count: 0 };
+        productsMap[account].amount += t.amount_ht;
+        productsMap[account].count++;
         totalRevHT += t.amount_ht;
-        revenueCount++;
       }
     }
 
@@ -194,7 +200,7 @@ export async function reportsRoutes(app: FastifyInstance) {
 
     return reply.send({
       year,
-      produits: [{ account: "706000", label: "Prestations de services / Ventes", amount: parseFloat(totalRevHT.toFixed(2)), count: revenueCount }],
+      produits: Object.values(productsMap).sort((a, b) => b.amount - a.amount).map((product) => ({ ...product, amount: parseFloat(product.amount.toFixed(2)) })),
       charges: charges.map((c) => ({ ...c, amount: parseFloat(c.amount.toFixed(2)) })),
       total_produits: parseFloat(totalRevHT.toFixed(2)),
       total_charges: parseFloat(totalCharges.toFixed(2)),

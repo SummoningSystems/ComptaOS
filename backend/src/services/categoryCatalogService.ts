@@ -7,12 +7,13 @@ export interface CategoryDefinition {
   id: string;
   label: string;
   account: { number: string; label: string };
+  kind: "expense" | "revenue" | "both";
   builtin: boolean;
   active: boolean;
 }
 
-const builtin = (id: string, label: string, number: string, accountLabel: string): CategoryDefinition =>
-  ({ id, label, account: { number, label: accountLabel }, builtin: true, active: true });
+const builtin = (id: string, label: string, number: string, accountLabel: string, kind: CategoryDefinition["kind"] = "expense"): CategoryDefinition =>
+  ({ id, label, account: { number, label: accountLabel }, kind, builtin: true, active: true });
 
 export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("telecom", "Internet et télécommunications", "626000", "Frais postaux et télécommunications"),
@@ -43,7 +44,15 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("recruitment", "Recrutement", "628400", "Frais de recrutement de personnel"),
   builtin("vehicle", "Véhicules et carburant", "625100", "Voyages et déplacements"),
   builtin("interest", "Intérêts et frais financiers", "661000", "Charges d'intérêts"),
-  builtin("misc", "Divers", "658000", "Charges diverses de gestion courante"),
+  builtin("misc", "Divers (dépense)", "658000", "Charges diverses de gestion courante"),
+  builtin("service_revenue", "Prestations de services facturées", "706000", "Prestations de services", "revenue"),
+  builtin("goods_sales", "Ventes de marchandises", "707000", "Ventes de marchandises", "revenue"),
+  builtin("product_sales", "Ventes de produits fabriqués", "701000", "Ventes de produits finis", "revenue"),
+  builtin("royalty_revenue", "Licences et redevances perçues", "751000", "Redevances pour concessions, brevets et licences", "revenue"),
+  builtin("operating_grant", "Subventions d’exploitation", "740000", "Subventions d'exploitation", "revenue"),
+  builtin("financial_revenue", "Produits financiers", "760000", "Produits financiers", "revenue"),
+  builtin("exceptional_revenue", "Produits exceptionnels", "770000", "Produits exceptionnels", "revenue"),
+  builtin("other_revenue", "Autres recettes", "758000", "Autres produits de gestion courante", "revenue"),
 ];
 
 const file = () => join(getActiveCompanyPath(), "settings", "categories.json");
@@ -52,7 +61,7 @@ function customCategories(): CategoryDefinition[] {
   if (!existsSync(file())) return [];
   try {
     const value = JSON.parse(readFileSync(file(), "utf-8"));
-    return Array.isArray(value) ? value.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.account?.number === "string") : [];
+    return Array.isArray(value) ? value.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.account?.number === "string").map((item) => ({ ...item, kind: ["expense", "revenue", "both"].includes(item.kind) ? item.kind : "both" })) : [];
   } catch { return []; }
 }
 

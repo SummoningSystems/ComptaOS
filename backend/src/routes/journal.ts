@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { loadAllTransactions } from "../services/transactionService.js";
+import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
 
 /** Map catégorie → comptes PCG débit/crédit */
 const PCG_MAP: Record<string, { debit: string; credit: string; label: string }> = {
@@ -26,6 +27,7 @@ export async function journalRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { year?: string; month?: string } }>("/", async (req, reply) => {
     const { year, month } = req.query;
     const all = await loadAllTransactions();
+    const categoryAccounts = new Map(loadCategoryCatalog().map((category) => [category.id, category.account]));
 
     const filtered = all.filter((t) => {
       if (t.status === "rejected") return false;
@@ -42,17 +44,19 @@ export async function journalRoutes(app: FastifyInstance) {
       const absVat = Math.abs(t.vat);
 
       if (isRevenue) {
+        const configuredAccount = categoryAccounts.get(t.category);
+        const revenueAccount = configuredAccount?.number.startsWith("7") ? configuredAccount : { number: "706000", label: "Prestations de services" };
         return {
           date: t.date,
           label: t.label,
           account_debit: "512000",
-          account_credit: "706000",
+          account_credit: revenueAccount.number,
           account_vat: absVat > 0 ? "445710" : undefined,
           amount_ht: parseFloat(absHt.toFixed(2)),
           amount_vat: parseFloat(absVat.toFixed(2)),
           amount_ttc: parseFloat(abs.toFixed(2)),
           category: t.category,
-          pcg_label: "Ventes / Prestations",
+          pcg_label: revenueAccount.label,
           reconciled: t.reconciled ?? false,
           txn_id: t.id,
         };

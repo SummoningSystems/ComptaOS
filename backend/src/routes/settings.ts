@@ -18,7 +18,7 @@ import {
 } from "../services/settingsService.js";
 import { BUILTIN_CATEGORIES, deactivateCustomCategory, loadCategoryCatalog, upsertCustomCategory } from "../services/categoryCatalogService.js";
 
-interface CategoryBody { id?: string; label?: string; account?: { number?: string; label?: string }; active?: boolean }
+interface CategoryBody { id?: string; label?: string; account?: { number?: string; label?: string }; kind?: "expense" | "revenue" | "both"; active?: boolean }
 
 function validateCategory(body: CategoryBody, existingId?: string): string | null {
   const id = existingId ?? body.id ?? "";
@@ -26,6 +26,7 @@ function validateCategory(body: CategoryBody, existingId?: string): string | nul
   if (!body.label?.trim()) return "Le libellé est requis.";
   if (!/^\d{3,10}$/.test(body.account?.number?.trim() ?? "")) return "Le compte PCG doit contenir 3 à 10 chiffres.";
   if (!body.account?.label?.trim()) return "Le libellé du compte est requis.";
+  if (body.kind !== undefined && !["expense", "revenue", "both"].includes(body.kind)) return "Le type de catégorie est invalide.";
   return null;
 }
 
@@ -36,7 +37,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const error = validateCategory(req.body);
     if (error) return reply.status(400).send({ error });
     if (loadCategoryCatalog().some((item) => item.id === req.body.id)) return reply.status(409).send({ error: "Ce code de catégorie existe déjà." });
-    return reply.status(201).send(upsertCustomCategory({ id: req.body.id!, label: req.body.label!, account: { number: req.body.account!.number!, label: req.body.account!.label! }, active: req.body.active !== false }));
+    return reply.status(201).send(upsertCustomCategory({ id: req.body.id!, label: req.body.label!, account: { number: req.body.account!.number!, label: req.body.account!.label! }, kind: req.body.kind ?? "both", active: req.body.active !== false }));
   });
 
   app.put<{ Params: { id: string }; Body: CategoryBody }>("/categories/:id", async (req, reply) => {
@@ -44,7 +45,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     if (!loadCategoryCatalog().some((item) => item.id === req.params.id)) return reply.status(404).send({ error: "Catégorie introuvable." });
     const error = validateCategory(req.body, req.params.id);
     if (error) return reply.status(400).send({ error });
-    return reply.send(upsertCustomCategory({ id: req.params.id, label: req.body.label!, account: { number: req.body.account!.number!, label: req.body.account!.label! }, active: req.body.active !== false }));
+    return reply.send(upsertCustomCategory({ id: req.params.id, label: req.body.label!, account: { number: req.body.account!.number!, label: req.body.account!.label! }, kind: req.body.kind ?? "both", active: req.body.active !== false }));
   });
 
   app.delete<{ Params: { id: string } }>("/categories/:id", async (req, reply) => {

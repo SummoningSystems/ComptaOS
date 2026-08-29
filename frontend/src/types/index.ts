@@ -4,6 +4,7 @@ export interface CategoryDefinition {
   id: Category;
   label: string;
   account: { number: string; label: string };
+  kind: "expense" | "revenue" | "both";
   builtin: boolean;
   active: boolean;
 }

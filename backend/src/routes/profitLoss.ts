@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { Category } from "../types/index.js";
+import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
 
 const CATEGORY_LABELS: Record<Category, string> = {
   hosting: "Hébergement",
@@ -35,6 +36,7 @@ export async function profitLossRoutes(app: FastifyInstance) {
 
     const all = await loadAllTransactions();
     const active = all.filter((t) => t.status !== "rejected");
+    const categoryLabels = new Map(loadCategoryCatalog().map((category) => [category.id, category.label]));
 
     function computeForYear(y: string) {
       const txns = active.filter((t) => t.date.startsWith(y));
@@ -67,12 +69,12 @@ export async function profitLossRoutes(app: FastifyInstance) {
       return {
         revenue: Object.entries(revenue).map(([cat, amount]) => ({
           category: cat,
-          label: CATEGORY_LABELS[cat as Category] ?? cat,
+          label: categoryLabels.get(cat) ?? CATEGORY_LABELS[cat as Category] ?? cat,
           amount: parseFloat(amount.toFixed(2)),
         })).sort((a, b) => b.amount - a.amount),
         expenses: Object.entries(expenses).map(([cat, amount]) => ({
           category: cat,
-          label: CATEGORY_LABELS[cat as Category] ?? cat,
+          label: categoryLabels.get(cat) ?? CATEGORY_LABELS[cat as Category] ?? cat,
           amount: parseFloat(amount.toFixed(2)),
         })).sort((a, b) => b.amount - a.amount),
         totalRevenue: parseFloat(totalRevenue.toFixed(2)),

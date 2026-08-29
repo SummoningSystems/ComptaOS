@@ -59,8 +59,10 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, part.amount, 0));
       lines.push(line(base, config.bank, `${transaction.label} - TTC`, 0, ttc));
     } else {
+      const configuredCategory = config.categories[transaction.category];
+      const revenueAccount = configuredCategory?.number.startsWith("7") ? configuredCategory : config.revenue;
       lines.push(line(base, config.bank, `${transaction.label} - TTC`, ttc, 0));
-      lines.push(line(base, config.revenue, `${transaction.label} - HT`, 0, ht));
+      lines.push(line(base, revenueAccount, `${transaction.label} - HT`, 0, ht));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatCollected, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, 0, part.amount));
     }
     const entryLines = lines.filter((item) => item.transactionId === transaction.id);

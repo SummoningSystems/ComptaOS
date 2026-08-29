@@ -14,7 +14,12 @@ export const FALLBACK_CATEGORIES: CategoryDefinition[] = [
   ["training", "Formation"], ["maintenance", "Entretien et maintenance"], ["utilities", "Énergie et eau"],
   ["shipping", "Transport et livraison"], ["recruitment", "Recrutement"], ["vehicle", "Véhicules et carburant"],
   ["interest", "Intérêts et frais financiers"], ["misc", "Divers"],
-].map(([id, label]) => ({ id, label, account: { number: "", label: "" }, builtin: true, active: true }));
+].map(([id, label]) => ({ id, label, account: { number: "", label: "" }, kind: "expense" as const, builtin: true, active: true }));
+
+FALLBACK_CATEGORIES.push(
+  ...[["service_revenue", "Prestations de services facturées"], ["goods_sales", "Ventes de marchandises"], ["product_sales", "Ventes de produits fabriqués"], ["royalty_revenue", "Licences et redevances perçues"], ["operating_grant", "Subventions d’exploitation"], ["financial_revenue", "Produits financiers"], ["exceptional_revenue", "Produits exceptionnels"], ["other_revenue", "Autres recettes"]]
+    .map(([id, label]) => ({ id, label, account: { number: "", label: "" }, kind: "revenue" as const, builtin: true, active: true })),
+);
 
 let cached: CategoryDefinition[] | null = null;
 

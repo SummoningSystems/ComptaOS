@@ -40,6 +40,11 @@ describe("dossier expert-comptable", () => {
     expect(validateFec(fec)).toEqual([]);
   });
 
+  it("utilise le compte de produit de la catégorie pour une recette client", () => {
+    const preview = buildAccountingPreview([transaction({ id: "client", label: "Facture client", category: "goods_sales", amount_ht: 100, vat: 20, amount_ttc: 120 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "707000", credit: 100 })]));
+  });
+
   it("signale les catégories imprécises et les écritures incohérentes", () => {
     const preview = buildAccountingPreview([transaction({ category: "misc", amount_ht: -25 })], defaultAccountingConfig(), "2026");
     expect(preview.anomalies).toEqual(expect.arrayContaining([expect.objectContaining({ code: "UNCATEGORIZED" }), expect.objectContaining({ code: "VAT_MISMATCH" }), expect.objectContaining({ code: "UNBALANCED_ENTRY" })]));

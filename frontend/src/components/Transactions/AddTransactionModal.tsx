@@ -169,7 +169,12 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
                 onChange={(e) => setCategory(e.target.value as Category)}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
               >
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                <optgroup label="Recettes">
+                  {categories.filter((c) => c.kind === "revenue" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </optgroup>
+                <optgroup label="Dépenses">
+                  {categories.filter((c) => c.kind === "expense" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </optgroup>
               </select>
             </div>
             <div>

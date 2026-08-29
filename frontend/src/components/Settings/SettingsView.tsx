@@ -62,7 +62,7 @@ export function SettingsView() {
   // Form pour nouvelle règle
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("misc");
-  const [customCategory, setCustomCategory] = useState({ id: "", label: "", accountNumber: "", accountLabel: "" });
+  const [customCategory, setCustomCategory] = useState({ id: "", label: "", accountNumber: "", accountLabel: "", kind: "expense" as "expense" | "revenue" | "both" });
   const [categoryError, setCategoryError] = useState("");
 
   useEffect(() => {
@@ -105,8 +105,8 @@ export function SettingsView() {
   async function handleCreateCategory() {
     setCategoryError("");
     try {
-      await createCategory({ id: customCategory.id, label: customCategory.label, account: { number: customCategory.accountNumber, label: customCategory.accountLabel }, active: true });
-      setCustomCategory({ id: "", label: "", accountNumber: "", accountLabel: "" });
+      await createCategory({ id: customCategory.id, label: customCategory.label, account: { number: customCategory.accountNumber, label: customCategory.accountLabel }, kind: customCategory.kind, active: true });
+      setCustomCategory({ id: "", label: "", accountNumber: "", accountLabel: "", kind: "expense" });
       await reloadCategories();
       flashSaved();
     } catch (error) {
@@ -169,10 +169,11 @@ export function SettingsView() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-vscode-muted uppercase tracking-wider">Catalogue de catégories</h2>
         <p className="text-xs text-vscode-muted">Catégories standard et catégories propres à votre activité, chacune avec son compte PCG.</p>
-        <div className="grid md:grid-cols-2 gap-2 text-xs">{allCategories.filter((c) => c.active).map((c) => <div key={c.id} className="flex items-center gap-2 rounded border border-vscode-border p-2"><span className="flex-1"><strong>{c.label}</strong><span className="block text-vscode-muted">{c.account.number} · {c.account.label}</span></span>{!c.builtin && <button onClick={() => void handleDeleteCustomCategory(c.id)} className="text-red-400">Désactiver</button>}</div>)}</div>
-        <div className="grid md:grid-cols-[1fr_1.4fr_0.8fr_1.4fr_auto] gap-2">
+        <div className="grid md:grid-cols-2 gap-2 text-xs">{allCategories.filter((c) => c.active).map((c) => <div key={c.id} className="flex items-center gap-2 rounded border border-vscode-border p-2"><span className="flex-1"><strong>{c.label}</strong><span className="block text-vscode-muted">{c.kind === "revenue" ? "Recette" : c.kind === "expense" ? "Dépense" : "Recette et dépense"} · {c.account.number} · {c.account.label}</span></span>{!c.builtin && <button onClick={() => void handleDeleteCustomCategory(c.id)} className="text-red-400">Désactiver</button>}</div>)}</div>
+        <div className="grid md:grid-cols-[1fr_1.3fr_0.8fr_0.8fr_1.3fr_auto] gap-2">
           <input value={customCategory.id} onChange={(e) => setCustomCategory((v) => ({ ...v, id: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") }))} placeholder="code_interne" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
           <input value={customCategory.label} onChange={(e) => setCustomCategory((v) => ({ ...v, label: e.target.value }))} placeholder="Libellé visible" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
+          <select value={customCategory.kind} onChange={(e) => setCustomCategory((v) => ({ ...v, kind: e.target.value as typeof v.kind }))} className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm"><option value="expense">Dépense</option><option value="revenue">Recette</option><option value="both">Les deux</option></select>
           <input value={customCategory.accountNumber} onChange={(e) => setCustomCategory((v) => ({ ...v, accountNumber: e.target.value.replace(/\D/g, "") }))} placeholder="Compte PCG" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
           <input value={customCategory.accountLabel} onChange={(e) => setCustomCategory((v) => ({ ...v, accountLabel: e.target.value }))} placeholder="Libellé du compte" className="bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm" />
           <button onClick={() => void handleCreateCategory()} className="bg-vscode-accent text-white rounded px-3 py-1.5 text-sm">Créer</button>

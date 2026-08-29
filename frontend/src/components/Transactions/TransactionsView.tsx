@@ -1218,7 +1218,9 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                               <td className="px-2 py-1.5">
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
-                                  {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                  <optgroup label={txn.amount_ttc >= 0 ? "Catégories de recettes" : "Catégories de dépenses"}>
+                                    {categories.filter((c) => c.kind === "both" || c.kind === (txn.amount_ttc >= 0 ? "revenue" : "expense") || c.id === txn.category).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                  </optgroup>
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">
