@@ -5,7 +5,7 @@ import { getConnections } from "./bankingService.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 import { loadCompanyProfile } from "./settingsService.js";
 import { computeVatPosition } from "./vatPositionService.js";
-import { loadHrEmployees } from "./hrService.js";
+import { loadHrStore } from "./hrService.js";
 
 function addMonths(isoDate: string, count: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);
@@ -45,7 +45,7 @@ export function buildDashboardForecast(
     const items: { id: string; label: string; amount: number }[] = [];
     for (const item of recurring) {
       const amount = recurringScenarioAmount(item);
-      if (amount <= 0) continue;
+      if (amount === 0) continue;
       if (item.endPayment && month > item.endPayment.slice(0, 7)) continue;
       const step = item.frequency === "mensuel" ? 1 : item.frequency === "trimestriel" ? 3 : 12;
       let dueDate = item.nextPayment;
@@ -65,7 +65,11 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   let recurring: ReturnType<typeof loadManualRecurring> = [];
   try { recurring = loadManualRecurring(); } catch { /* ignore */ }
   try {
-    recurring = [...recurring, ...loadHrEmployees().filter((employee) => employee.active && employee.includeInForecast && employee.employerCostMonthly > 0).map((employee) => ({ id: `hr_${employee.id}`, label: `RH · ${employee.firstName} ${employee.lastName}`, category: "salary", amount: employee.employerCostMonthly, frequency: "mensuel" as const, nextPayment: employee.startDate, endPayment: employee.endDate || undefined, active: true }))];
+    const hr = loadHrStore();
+    recurring = [...recurring,
+      ...hr.employees.filter((employee) => employee.active && employee.includeInForecast && employee.employerCostMonthly > 0).map((employee) => ({ id: `hr_${employee.id}`, label: `RH · ${employee.firstName} ${employee.lastName}`, category: "salary", amount: employee.employerCostMonthly, frequency: "mensuel" as const, nextPayment: employee.startDate, endPayment: employee.endDate || undefined, active: true })),
+      ...hr.variables.filter((variable) => variable.amount !== 0).map((variable) => ({ id: `hr_variable_${variable.id}`, label: `Variable de paie · ${variable.label}`, category: "salary", amount: variable.amount, frequency: "mensuel" as const, nextPayment: `${variable.month}-01`, endPayment: `${variable.month}-28`, active: true })),
+    ];
   } catch { /* ignore */ }
   const [transactions, connections] = await Promise.all([
     loadAllTransactions(),

@@ -282,6 +282,16 @@ export async function saveHrEmployees(entries: import("../types").HrEmployee[]):
   await api.put("/hr/employees", entries);
 }
 
+export async function fetchHrWorkspace(): Promise<import("../types").HrStore> {
+  const { data } = await api.get<import("../types").HrStore>("/hr/workspace"); return data;
+}
+export async function saveHrWorkspace(store: import("../types").HrStore): Promise<void> { await api.put("/hr/workspace", store); }
+export async function uploadHrDocument(employeeId: string, type: import("../types").HrDocumentType, month: string, file: File): Promise<import("../types").HrDocument> {
+  const form = new FormData(); form.append("file", file); const { data } = await api.post(`/hr/documents/${employeeId}`, form, { params: { type, month: month || undefined }, headers: { "Content-Type": "multipart/form-data" } }); return data;
+}
+export async function deleteHrDocument(id: string): Promise<void> { await api.delete(`/hr/documents/${id}`); }
+export async function linkHrPayslip(id: string, transactionId?: string): Promise<void> { await api.post(`/hr/documents/${id}/link`, { transactionId }); }
+
 // ── Paramètres (règles + alerte) ──────────────────────────────────────────────────────
 
 export async function fetchCategoryRules(): Promise<CategoryRule[]> {

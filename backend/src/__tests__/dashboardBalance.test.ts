@@ -14,7 +14,7 @@ vi.mock("../services/transactionService.js", () => ({
 vi.mock("../services/manualRecurringService.js", () => ({
   loadManualRecurring: () => state.recurring,
 }));
-vi.mock("../services/hrService.js", () => ({ loadHrEmployees: () => state.employees }));
+vi.mock("../services/hrService.js", () => ({ loadHrStore: () => ({ employees: state.employees, variables: [], documents: [], deadlines: [] }) }));
 
 vi.mock("../services/bankingService.js", () => ({
   getConnections: async () => state.connections,

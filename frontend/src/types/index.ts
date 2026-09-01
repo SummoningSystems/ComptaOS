@@ -229,6 +229,8 @@ export interface HrEmployee {
   jobTitle?: string;
   startDate: string;
   endDate?: string;
+  trialEndDate?: string;
+  medicalVisitDate?: string;
   grossMonthly: number;
   netMonthly: number;
   employerCostMonthly: number;
@@ -236,6 +238,13 @@ export interface HrEmployee {
   active: boolean;
   notes?: string;
 }
+export type HrVariableType = "bonus" | "absence" | "leave" | "overtime" | "benefit" | "expense" | "advance" | "other";
+export interface HrVariable { id: string; employeeId: string; month: string; type: HrVariableType; label: string; amount: number; quantity?: number; notes?: string; }
+export type HrDocumentType = "contract" | "amendment" | "identity" | "medical" | "expense" | "payslip" | "other";
+export interface HrDocument { id: string; employeeId: string; type: HrDocumentType; month?: string; originalName: string; storedName: string; uploadedAt: string; transactionId?: string; }
+export interface HrDeadline { id: string; employeeId?: string; label: string; date: string; completed: boolean; kind: "contract" | "trial" | "medical" | "document" | "payroll" | "custom"; }
+export interface HrPayrollMonth { month: string; status: "draft" | "ready" | "sent"; updatedAt: string; }
+export interface HrStore { employees: HrEmployee[]; variables: HrVariable[]; documents: HrDocument[]; deadlines: HrDeadline[]; payrollMonths: HrPayrollMonth[]; }
 
 export interface Tab {
   id: string;
