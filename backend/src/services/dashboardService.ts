@@ -5,6 +5,7 @@ import { getConnections } from "./bankingService.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 import { loadCompanyProfile } from "./settingsService.js";
 import { computeVatPosition } from "./vatPositionService.js";
+import { loadHrEmployees } from "./hrService.js";
 
 function addMonths(isoDate: string, count: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);
@@ -45,6 +46,7 @@ export function buildDashboardForecast(
     for (const item of recurring) {
       const amount = recurringScenarioAmount(item);
       if (amount <= 0) continue;
+      if (item.endPayment && month > item.endPayment.slice(0, 7)) continue;
       const step = item.frequency === "mensuel" ? 1 : item.frequency === "trimestriel" ? 3 : 12;
       let dueDate = item.nextPayment;
       let safety = 0;
@@ -62,6 +64,9 @@ export function buildDashboardForecast(
 export async function computeDashboard(requestedYear?: string): Promise<DashboardData> {
   let recurring: ReturnType<typeof loadManualRecurring> = [];
   try { recurring = loadManualRecurring(); } catch { /* ignore */ }
+  try {
+    recurring = [...recurring, ...loadHrEmployees().filter((employee) => employee.active && employee.includeInForecast && employee.employerCostMonthly > 0).map((employee) => ({ id: `hr_${employee.id}`, label: `RH · ${employee.firstName} ${employee.lastName}`, category: "salary", amount: employee.employerCostMonthly, frequency: "mensuel" as const, nextPayment: employee.startDate, endPayment: employee.endDate || undefined, active: true }))];
+  } catch { /* ignore */ }
   const [transactions, connections] = await Promise.all([
     loadAllTransactions(),
     getConnections().catch(() => []),

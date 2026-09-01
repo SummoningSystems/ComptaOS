@@ -33,6 +33,7 @@ export function CommandPalette() {
     { id: "vat",          icon: "🧮", label: "Ouvrir TVA",              action: () => openTab({ id: "vat",          title: "TVA",         type: "vat" as TabType }) },
     { id: "tiers",        icon: "👥", label: "Ouvrir Tiers",            action: () => openTab({ id: "tiers",        title: "Tiers",       type: "tiers" as TabType }) },
     { id: "history",      icon: "📜", label: "Ouvrir Historique git",   action: () => openTab({ id: "history",      title: "Historique",  type: "history" as TabType }) },
+    { id: "hr",           icon: "👥", label: "Ouvrir RH & Paie",         action: () => openTab({ id: "hr",           title: "RH & Paie",    type: "hr" as TabType }) },
   ];
 
   const filtered = query.trim()

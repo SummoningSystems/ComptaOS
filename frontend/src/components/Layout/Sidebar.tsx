@@ -3,7 +3,7 @@ import { useAppStore } from "../../stores/appStore";
 import { FileTree } from "../Explorer/FileTree";
 import type { TabType } from "../../types";
 
-export type SidebarSection = "dashboard" | "compta" | "documents" | "finance" | "analyses" | "explorer" | "outils";
+export type SidebarSection = "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
 
 interface SidebarProps {
   activeSection: SidebarSection;
@@ -59,6 +59,14 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: "🎯", label: "Budgets",           tab: { id: "budgets",    title: "Budgets",        type: "budgets" } },
       { icon: "📈", label: "Bilan / P&L",       tab: { id: "profitloss", title: "Bilan / P&L",    type: "profitloss" } },
       { icon: "🔄", label: "Frais récurrents",  tab: { id: "recurring",  title: "Frais",          type: "recurring" } },
+    ],
+  },
+  {
+    id: "hr",
+    icon: "👥",
+    title: "RH & Paie",
+    items: [
+      { icon: "👤", label: "Équipe & coûts", tab: { id: "hr", title: "RH & Paie", type: "hr" } },
     ],
   },
   {

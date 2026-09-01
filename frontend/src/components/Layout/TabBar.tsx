@@ -6,6 +6,7 @@ const TAB_ICONS: Record<string, string> = {
   dashboard: "▣", editor: "📄", import: "📥", transactions: "📋", ocr: "🔍", reports: "📊",
   recurring: "🔄", invoices: "🧾", quotes: "📋", plugins: "🧩", pricing: "⭐", banking: "🏦",
   settings: "⚙️", tiers: "🏢", vat: "💰", budgets: "🎯", spreadsheets: "🧭", history: "🕐",
+  hr: "👥",
 };
 
 export function TabBar() {

@@ -26,6 +26,7 @@ export const WORKSPACE_GITIGNORE_ENTRIES = [
   ".jwt_secret",
   ".banking_config.json",
   "banking/",
+  "hr/",
 ];
 
 export function mergeWorkspaceGitignore(existing: string): string {

@@ -53,6 +53,7 @@ export function buildCashRunwayProjection(options: {
     for (const recurring of options.recurring) {
       const amount = scenarioAmount(recurring);
       if (!recurring.active || amount <= 0) continue;
+      if (recurring.endPayment && month > recurring.endPayment.slice(0, 7)) continue;
       const step = recurring.frequency === "mensuel" ? 1 : recurring.frequency === "trimestriel" ? 3 : 12;
       let cursor = recurring.nextPayment;
       let safety = 0;

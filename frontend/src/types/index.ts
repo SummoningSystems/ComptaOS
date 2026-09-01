@@ -111,7 +111,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users";
+export type TabType = "editor" | "dashboard" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
 
 export interface Quote {
   id: string;
@@ -213,9 +213,27 @@ export interface ManualRecurring {
   amount: number;
   frequency: "mensuel" | "trimestriel" | "annuel";
   nextPayment: string;
+  endPayment?: string;
   active: boolean;
   decision?: "keep" | "reduce" | "cancel" | "planned";
   simulatedAmount?: number;
+  notes?: string;
+}
+
+export type HrContractType = "cdi" | "cdd" | "apprenticeship" | "professionalization" | "internship";
+export interface HrEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  contractType: HrContractType;
+  jobTitle?: string;
+  startDate: string;
+  endDate?: string;
+  grossMonthly: number;
+  netMonthly: number;
+  employerCostMonthly: number;
+  includeInForecast: boolean;
+  active: boolean;
   notes?: string;
 }
 

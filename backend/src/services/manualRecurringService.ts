@@ -14,6 +14,7 @@ export interface ManualRecurring {
   amount: number; // montant positif (dépense)
   frequency: "mensuel" | "trimestriel" | "annuel";
   nextPayment: string; // ISO YYYY-MM-DD
+  endPayment?: string;
   active: boolean;
   decision?: "keep" | "reduce" | "cancel" | "planned";
   simulatedAmount?: number;
@@ -23,7 +24,7 @@ export interface ManualRecurring {
 export function isManualRecurring(value: unknown): value is ManualRecurring {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<ManualRecurring>;
-  return typeof item.id === "string" && item.id.length > 0 && typeof item.label === "string" && item.label.trim().length > 0 && typeof item.category === "string" && typeof item.amount === "number" && Number.isFinite(item.amount) && item.amount > 0 && ["mensuel", "trimestriel", "annuel"].includes(item.frequency ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(item.nextPayment ?? "") && typeof item.active === "boolean" && (item.decision === undefined || ["keep", "reduce", "cancel", "planned"].includes(item.decision)) && (item.simulatedAmount === undefined || (Number.isFinite(item.simulatedAmount) && item.simulatedAmount >= 0));
+  return typeof item.id === "string" && item.id.length > 0 && typeof item.label === "string" && item.label.trim().length > 0 && typeof item.category === "string" && typeof item.amount === "number" && Number.isFinite(item.amount) && item.amount > 0 && ["mensuel", "trimestriel", "annuel"].includes(item.frequency ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(item.nextPayment ?? "") && (item.endPayment === undefined || /^\d{4}-\d{2}-\d{2}$/.test(item.endPayment)) && typeof item.active === "boolean" && (item.decision === undefined || ["keep", "reduce", "cancel", "planned"].includes(item.decision)) && (item.simulatedAmount === undefined || (Number.isFinite(item.simulatedAmount) && item.simulatedAmount >= 0));
 }
 
 export function loadManualRecurring(): ManualRecurring[] {

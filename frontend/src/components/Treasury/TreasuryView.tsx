@@ -7,8 +7,8 @@ import {
   ResponsiveContainer, ReferenceLine,
   ComposedChart, Line,
 } from "recharts";
-import { fetchDashboard, fetchManualRecurring, fetchTransactions } from "../../api/client";
-import { DashboardData, ManualRecurring, Transaction } from "../../types";
+import { fetchDashboard, fetchHrEmployees, fetchManualRecurring, fetchTransactions } from "../../api/client";
+import { DashboardData, HrEmployee, ManualRecurring, Transaction } from "../../types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
@@ -38,15 +38,17 @@ export function TreasuryView() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurring, setRecurring] = useState<ManualRecurring[]>([]);
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [forecastHorizon, setForecastHorizon] = useState<6 | 12 | 18 | 24>(6);
 
   useEffect(() => {
-    Promise.all([fetchDashboard(), fetchTransactions(), fetchManualRecurring()])
-      .then(([d, t, recurringItems]) => {
+    Promise.all([fetchDashboard(), fetchTransactions(), fetchManualRecurring(), fetchHrEmployees()])
+      .then(([d, t, recurringItems, workforce]) => {
         setData(d);
         setTransactions(Array.isArray(t) ? t : []);
         setRecurring(Array.isArray(recurringItems) ? recurringItems : []);
+        setEmployees(Array.isArray(workforce) ? workforce : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -59,6 +61,7 @@ export function TreasuryView() {
     return <div className="flex items-center justify-center h-full text-vscode-muted text-sm">Impossible de charger les données.</div>;
   }
   const visibleForecast = (data.forecast ?? []).slice(0, forecastHorizon);
+  const treasuryCommitments: ManualRecurring[] = [...recurring, ...employees.filter((employee) => employee.active && employee.includeInForecast && employee.employerCostMonthly > 0).map((employee) => ({ id: `hr_${employee.id}`, label: `RH · ${employee.firstName} ${employee.lastName}`, category: "salary", amount: employee.employerCostMonthly, frequency: "mensuel" as const, nextPayment: employee.startDate, endPayment: employee.endDate || undefined, active: true }))];
 
   // ── Graphique combiné historique + prévisions ──────────────────────────────
   const histPoints = (data.monthly_balance ?? []).map((b) => ({
@@ -160,7 +163,7 @@ export function TreasuryView() {
         <p className="mt-3 text-[10px] text-vscode-muted">Pour qu’un règlement déjà versé soit déduit de la provision, ajoute le tag <code className="text-vscode-text">vat_payment</code> à la transaction ou conserve un libellé explicite TVA/CA3/CA12.</p>
       </section>
 
-      <CashRunwaySimulator startBalance={data.spendable_cash ?? data.treasury} recurring={recurring} transactions={transactions} />
+      <CashRunwaySimulator startBalance={data.spendable_cash ?? data.treasury} recurring={treasuryCommitments} transactions={transactions} />
 
       {/* ── KPIs principaux ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

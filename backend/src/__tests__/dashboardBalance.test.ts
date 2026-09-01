@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   transactions: [] as Array<Record<string, unknown>>,
   connections: [] as Array<Record<string, unknown>>,
   recurring: [] as Array<Record<string, unknown>>,
+  employees: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("../services/transactionService.js", () => ({
@@ -13,6 +14,7 @@ vi.mock("../services/transactionService.js", () => ({
 vi.mock("../services/manualRecurringService.js", () => ({
   loadManualRecurring: () => state.recurring,
 }));
+vi.mock("../services/hrService.js", () => ({ loadHrEmployees: () => state.employees }));
 
 vi.mock("../services/bankingService.js", () => ({
   getConnections: async () => state.connections,
@@ -32,6 +34,7 @@ describe("dashboard bank balance", () => {
     }];
     state.connections = [];
     state.recurring = [];
+    state.employees = [];
   });
 
   it("projette les échéances réelles et respecte les décisions", async () => {

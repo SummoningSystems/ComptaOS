@@ -21,4 +21,9 @@ describe("simulateur d'autonomie de trésorerie", () => {
     expect(result.zeroRevenueRunwayMonths).toBe(2);
     expect(result.months.at(-1)?.zeroRevenueBalance).toBe(-600);
   });
+
+  it("arrête une charge RH à la fin du contrat", () => {
+    const result = buildCashRunwayProjection({ recurring: [{ ...recurring[0], id: "hr_1", nextPayment: "2026-08-01", endPayment: "2026-09-30" }], transactions: [], startBalance: 2_000, monthsAhead: 3, investment: 0, safetyReserve: 0, today: "2026-08-01" });
+    expect(result.months.map((month) => month.expenses)).toEqual([500, 500, 0]);
+  });
 });

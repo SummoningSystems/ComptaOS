@@ -43,6 +43,7 @@ const PluginsView = lazy(() => import("./components/Plugins/PluginsView").then((
 const PricingView = lazy(() => import("./components/Pricing/PricingView").then((m) => ({ default: m.PricingView })));
 const BankingView = lazy(() => import("./components/Banking/BankingView").then((m) => ({ default: m.BankingView })));
 const UsersView = lazy(() => import("./components/Auth/UsersView").then((m) => ({ default: m.UsersView })));
+const HrView = lazy(() => import("./components/Hr/HrView").then((m) => ({ default: m.HrView })));
 
 function ViewLoading() {
   return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de la vue…</div>;
@@ -76,6 +77,7 @@ const TAB_LABELS: Record<TabType, string> = {
   pricing:      "Plans & Licence",
   banking:      "Connexion bancaire",
   users:        "Utilisateurs",
+  hr:           "RH & Paie",
 };
 
 // ── ErrorBoundary — empêche les pages blanches sur crash d'un composant ──────
@@ -136,6 +138,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "pricing"       && <PricingView />}
       {type === "banking"       && <BankingView />}
       {type === "users"         && currentUser && <UsersView currentUser={currentUser} />}
+      {type === "hr"            && <HrView />}
     </Suspense>
   );
 }

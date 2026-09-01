@@ -273,6 +273,15 @@ export async function saveManualRecurring(entries: ManualRecurring[]): Promise<v
   await api.put("/recurring/manual", entries);
 }
 
+export async function fetchHrEmployees(): Promise<import("../types").HrEmployee[]> {
+  const { data } = await api.get<import("../types").HrEmployee[]>("/hr/employees");
+  return data;
+}
+
+export async function saveHrEmployees(entries: import("../types").HrEmployee[]): Promise<void> {
+  await api.put("/hr/employees", entries);
+}
+
 // ── Paramètres (règles + alerte) ──────────────────────────────────────────────────────
 
 export async function fetchCategoryRules(): Promise<CategoryRule[]> {
