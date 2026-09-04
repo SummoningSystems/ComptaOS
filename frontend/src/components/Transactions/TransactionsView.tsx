@@ -10,6 +10,8 @@ import { MultiInvoiceDialog } from "./MultiInvoiceDialog";
 import { aiCategorize } from "../../api/ai";
 import { fetchAllTags } from "../../api/search";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
+import { matchesTransactionSearch } from "../../utils/transactionSearch";
 
 // ── Tag editor inline ─────────────────────────────────────────────────────────
 
@@ -250,12 +252,10 @@ function VatSplitDialog({
               </select>
               <label className="flex items-center gap-1 text-xs text-vscode-muted">
                 TTC
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                <LocalizedNumberInput
+                  min={0}
                   value={Math.abs(split.amount_ttc)}
-                  onChange={(event) => updateSplit(index, { amount_ttc: round2(sign * (Number(event.target.value) || 0)) })}
+                  onValueChange={(amount) => updateSplit(index, { amount_ttc: round2(sign * amount) })}
                   className="w-28 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-right font-mono text-vscode-text"
                   aria-label={`Montant TTC ligne ${index + 1}`}
                 />
@@ -692,11 +692,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   // ── Filtering & grouping ───────────────────────────────────────────────────
 
   const filtered = transactions.filter((t) => {
-    const matchesText =
-      filter === "" ||
-      t.label.toLowerCase().includes(filter.toLowerCase()) ||
-      t.category.includes(filter.toLowerCase()) ||
-      (t.notes?.toLowerCase().includes(filter.toLowerCase()) ?? false);
+    const matchesText = matchesTransactionSearch(t, filter);
     const matchesTag = tagFilter === null || (t.tags?.includes(tagFilter) ?? false);
     const matchesCategory = categoryFilter === "" || t.category === categoryFilter;
     const matchesStatus = statusFilter === "" || t.status === statusFilter;
@@ -871,7 +867,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         </span>
         <input
           type="text"
-          placeholder="Filtrer…"
+          placeholder="Nom, référence ou montant…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs px-2 py-1 rounded w-48 focus:outline-none focus:border-vscode-accent"

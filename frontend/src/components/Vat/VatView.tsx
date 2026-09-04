@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData, type VatTransactionDetail } from "../../api/client";
 import type { Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 type VatSplit = { rate: number; amount_ttc: number };
 
@@ -212,12 +213,10 @@ function SplitEditor({
               ))}
             </select>
             <span className="text-vscode-muted text-xs">TTC</span>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={Math.abs(split.amount_ttc).toFixed(2)}
-              onChange={(e) => updateAmount(i, parseFloat(e.target.value) || 0)}
+            <LocalizedNumberInput
+              min={0}
+              value={Math.abs(split.amount_ttc)}
+              onValueChange={(amount) => updateAmount(i, amount)}
               className="w-24 bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 text-right font-mono focus:outline-none focus:border-vscode-accent"
             />
             <span className="text-vscode-muted text-xs">€</span>

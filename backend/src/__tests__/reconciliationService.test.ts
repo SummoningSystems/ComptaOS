@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "../types/index.js";
-import { getReconciliationIssues } from "../services/reconciliationService.js";
+import { getReconciliationIssues, isPsd2Transaction, isReadyForValidationAndReconciliation, shouldAutoReconcilePsd2 } from "../services/reconciliationService.js";
 
 function transaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -37,5 +37,17 @@ describe("getReconciliationIssues", () => {
 
   it("ne demande pas de justificatif pour une recette", () => {
     expect(getReconciliationIssues(transaction({ amount_ttc: 100, amount_ht: 83.33, vat: 16.67, justified: false }))).toEqual([]);
+  });
+
+  it("identifie une transaction Powens prête pour le rapprochement automatique", () => {
+    const powens = transaction({ id: "bank_powens_42" });
+    expect(isPsd2Transaction(powens)).toBe(true);
+    expect(shouldAutoReconcilePsd2(powens)).toBe(true);
+    expect(shouldAutoReconcilePsd2(transaction({ id: "manual_42" }))).toBe(false);
+  });
+
+  it("permet la validation groupée si seuls le statut et le rapprochement manquent", () => {
+    expect(isReadyForValidationAndReconciliation(transaction({ status: "pending", reconciled: false }))).toBe(true);
+    expect(isReadyForValidationAndReconciliation(transaction({ status: "pending", category: "misc" }))).toBe(false);
   });
 });

@@ -90,6 +90,18 @@ describe("transactionService persistence", () => {
     expect(updated).toMatchObject({ amount_ttc: -15.8, amount_ht: -15.8, vat: 0, vat_rate: 20 });
   });
 
+  it("rapproche automatiquement une transaction PSD2 devenue complète", async () => {
+    await saveTransaction(transaction({ id: "bank_powens_42", status: "pending", justified: true }));
+    const updated = await updateTransaction("bank_powens_42", { status: "validated" });
+    expect(updated.reconciled).toBe(true);
+  });
+
+  it("ne rapproche pas automatiquement une transaction manuelle", async () => {
+    await saveTransaction(transaction({ id: "manual_42", status: "pending", justified: true }));
+    const updated = await updateTransaction("manual_42", { status: "validated" });
+    expect(updated.reconciled).not.toBe(true);
+  });
+
   it("calcule la TVA d'un repas ventile entre 10 % et 20 %", async () => {
     await saveTransaction(transaction({ amount_ttc: -30, amount_ht: -30, vat: 0, vat_rate: 0 }));
 

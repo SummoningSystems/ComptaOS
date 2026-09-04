@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { OutgoingInvoice, Category } from "../../types";
 import { fetchInvoices, createInvoice, updateInvoice, deleteInvoice, downloadInvoicePdf } from "../../api/client";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -284,24 +285,21 @@ export function InvoicesView() {
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">Montant HT (€)</label>
-                <input
-                  type="number"
+                <LocalizedNumberInput
                   aria-label="Montant HT"
                   min={0}
-                  step={0.01}
                   value={form.amount_ht}
-                  onChange={(e) => handleAmountHtChange(parseFloat(e.target.value) || 0)}
+                  onValueChange={handleAmountHtChange}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
                 />
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">TVA (%)</label>
-                <input
-                  type="number"
+                <LocalizedNumberInput
                   min={0}
-                  step={0.1}
+                  max={100}
                   value={form.vat_rate}
-                  onChange={(e) => handleVatRateChange(parseFloat(e.target.value) || 0)}
+                  onValueChange={handleVatRateChange}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent"
                 />
               </div>

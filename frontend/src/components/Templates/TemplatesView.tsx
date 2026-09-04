@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 import { api } from "../../api/client";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
@@ -77,12 +78,6 @@ export function TemplatesView() {
     }
   }
 
-  function computeHt() {
-    const vat = form.vat ?? 20;
-    const ht = form.amount_ttc / (1 + vat / 100);
-    setForm((f) => ({ ...f, amount_ht: parseFloat(ht.toFixed(2)) }));
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -122,11 +117,9 @@ export function TemplatesView() {
             </div>
             <div>
               <label className="text-vscode-muted block mb-1">Montant TTC (€)</label>
-              <input
-                type="number"
+              <LocalizedNumberInput
                 value={form.amount_ttc}
-                onChange={(e) => setForm((f) => ({ ...f, amount_ttc: parseFloat(e.target.value) || 0 }))}
-                onBlur={computeHt}
+                onValueChange={(amount_ttc) => setForm((f) => ({ ...f, amount_ttc, amount_ht: parseFloat((amount_ttc / (1 + (f.vat ?? 20) / 100)).toFixed(2)) }))}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text px-2 py-1.5 rounded focus:outline-none focus:border-vscode-accent"
               />
             </div>

@@ -3,6 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { uploadInvoicePdf } from "../../api/client";
 import { Invoice, Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 
 export function PdfImporter() {
@@ -121,10 +122,9 @@ export function PdfImporter() {
             {/* Montant HT */}
             <div className="flex flex-col gap-1">
               <label className="text-vscode-muted text-[11px] uppercase tracking-wider">Montant HT (€)</label>
-              <input
-                type="number"
+              <LocalizedNumberInput
                 value={invoice.amount_ht ?? 0}
-                onChange={(e) => setInvoice((i) => ({ ...i, amount_ht: parseFloat(e.target.value) }))}
+                onValueChange={(amount_ht) => setInvoice((i) => ({ ...i, amount_ht }))}
                 className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent font-mono"
               />
             </div>
@@ -132,10 +132,9 @@ export function PdfImporter() {
             {/* Montant TTC */}
             <div className="flex flex-col gap-1">
               <label className="text-vscode-muted text-[11px] uppercase tracking-wider">Montant TTC (€)</label>
-              <input
-                type="number"
+              <LocalizedNumberInput
                 value={invoice.amount_ttc ?? 0}
-                onChange={(e) => setInvoice((i) => ({ ...i, amount_ttc: parseFloat(e.target.value) }))}
+                onValueChange={(amount_ttc) => setInvoice((i) => ({ ...i, amount_ttc }))}
                 className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent font-mono"
               />
             </div>

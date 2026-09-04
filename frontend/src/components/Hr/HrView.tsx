@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl, deleteHrDocument, fetchHrWorkspace, fetchTransactions, linkHrPayslip, saveHrWorkspace, uploadHrDocument } from "../../api/client";
 import type { HrContractType, HrDeadline, HrDocumentType, HrEmployee, HrStore, HrVariable, HrVariableType, Transaction } from "../../types";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const CONTRACTS: Array<[HrContractType, string]> = [["cdi", "CDI"], ["cdd", "CDD"], ["apprenticeship", "Contrat d’apprentissage"], ["professionalization", "Contrat de professionnalisation"], ["internship", "Stage"]];
 const VARIABLE_TYPES: Array<[HrVariableType, string]> = [["bonus", "Prime"], ["absence", "Absence"], ["leave", "Congé"], ["overtime", "Heures supplémentaires"], ["benefit", "Avantage en nature"], ["expense", "Remboursement de frais"], ["advance", "Acompte"], ["other", "Autre"]];
@@ -71,6 +72,6 @@ export function HrView() {
 }
 
 function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="mt-3 block text-[10px] text-vscode-muted">{label}{children}</label>}
-function Money({label,value,onChange}:{label:string;value:number;onChange:(value:number)=>void}){return <Field label={label}><input type="number" step="0.01" value={value} onChange={(e)=>onChange(Number(e.target.value)||0)} className={input}/></Field>}
+function Money({label,value,onChange}:{label:string;value:number;onChange:(value:number)=>void}){return <Field label={label}><LocalizedNumberInput value={value} onValueChange={onChange} className={input}/></Field>}
 function DateField({label,value,set}:{label:string;value:string;set:(value:string)=>void}){return <Field label={label}><input type="date" value={value} onChange={(e)=>set(e.target.value)} className={input}/></Field>}
 function Kpi({label,value,sub}:{label:string;value:string;sub:string}){return <div className="rounded border border-vscode-border bg-vscode-sidebar p-3"><span className="text-[10px] uppercase text-vscode-muted">{label}</span><strong className="mt-1 block text-lg">{value}</strong><span className="text-[10px] text-vscode-muted">{sub}</span></div>}

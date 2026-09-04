@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Quote } from "../../types";
 import { fetchQuotes, createQuote, updateQuote, deleteQuote, convertQuoteToInvoice } from "../../api/client";
+import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const STATUS_LABELS: Record<Quote["status"], string> = {
   draft: "Brouillon",
@@ -273,18 +274,16 @@ export function QuotesView() {
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">Montant HT (€)</label>
-                <input type="number" aria-label="Montant HT" min={0} step={0.01} value={form.amount_ht}
-                  onChange={(e) => {
-                    const ht = parseFloat(e.target.value) || 0;
+                <LocalizedNumberInput aria-label="Montant HT" min={0} value={form.amount_ht}
+                  onValueChange={(ht) => {
                     setForm((f) => ({ ...f, amount_ht: ht, amount_ttc: parseFloat((ht * (1 + f.vat_rate / 100)).toFixed(2)) }));
                   }}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent" />
               </div>
               <div>
                 <label className="text-xs text-vscode-muted block mb-1">TVA (%)</label>
-                <input type="number" min={0} step={0.1} value={form.vat_rate}
-                  onChange={(e) => {
-                    const rate = parseFloat(e.target.value) || 0;
+                <LocalizedNumberInput min={0} max={100} value={form.vat_rate}
+                  onValueChange={(rate) => {
                     setForm((f) => ({ ...f, vat_rate: rate, amount_ttc: parseFloat((f.amount_ht * (1 + rate / 100)).toFixed(2)) }));
                   }}
                   className="w-full bg-vscode-bg border border-vscode-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-vscode-accent" />

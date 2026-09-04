@@ -6,6 +6,7 @@ import { Transaction } from "../types/index.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
+import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
 
 const TXN_DIR = "transactions";
 
@@ -232,7 +233,8 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
   // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
   // recalculer silencieusement la TVA à partir d'un ancien taux.
-  const updated = changesAccounting ? normalizeTransaction(merged) : merged;
+  let updated = changesAccounting ? normalizeTransaction(merged) : merged;
+  if (!Object.prototype.hasOwnProperty.call(patch, "reconciled") && shouldAutoReconcilePsd2(updated)) updated = { ...updated, reconciled: true };
   await atomicWriteFile(filePath, yaml.stringify(updated));
   invalidateCache();
   return updated;

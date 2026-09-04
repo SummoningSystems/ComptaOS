@@ -35,6 +35,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const reconciled = transactions.filter((t) => t.reconciled).length;
   const total = transactions.length;
@@ -44,6 +45,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
     setLoading(true);
     setSelected(new Set());
     setError("");
+    setMessage("");
     try {
       const { data } = await api.get<{ transactions: ReconcileTransaction[]; reconciled: number; total: number; pending: number }>(
         `/reconcile?month=${month}`
@@ -100,6 +102,16 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
   function toggleSelectAll() {
     if (selected.size === transactions.length) setSelected(new Set());
     else setSelected(new Set(transactions.map((t) => t.id)));
+  }
+
+  async function validateAndReconcileReady() {
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const { data } = await api.post<{ updated: number }>("/reconcile/ready", { month });
+      await load();
+      setMessage(data.updated ? `${data.updated} opération(s) validée(s) et rapprochée(s).` : "Aucune opération supplémentaire n’est prête.");
+    } catch { setError("La validation groupée n’a pas pu être effectuée."); }
+    finally { setSaving(false); }
   }
 
   const selectedTransactions = transactions.filter((transaction) => selected.has(transaction.id));
@@ -173,6 +185,10 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
             </button>
           </div>
         )}
+
+        <button onClick={() => void validateAndReconcileReady()} disabled={saving || pending === 0} className="rounded bg-green-700 px-2.5 py-1 text-xs text-white disabled:opacity-40" title="Valide et rapproche uniquement les opérations catégorisées et justifiées">
+          ✓ Valider et rapprocher toutes les opérations prêtes
+        </button>
       </div>
 
       <div className="border-b border-vscode-border bg-blue-950/30 px-4 py-2 text-[11px] text-vscode-muted">
@@ -184,6 +200,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
       {error && (
         <div role="alert" className="border-b border-red-800 bg-red-950/30 px-4 py-2 text-xs text-red-300">{error}</div>
       )}
+      {message && <div className="border-b border-green-800 bg-green-950/30 px-4 py-2 text-xs text-green-300">{message}</div>}
 
       {loading ? (
         <div className="flex items-center justify-center flex-1 text-vscode-muted text-xs">Chargement…</div>

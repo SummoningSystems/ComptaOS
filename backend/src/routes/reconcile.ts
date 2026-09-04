@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { loadAllTransactions, updateTransaction } from "../services/transactionService.js";
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
-import { getReconciliationIssues } from "../services/reconciliationService.js";
+import { getReconciliationIssues, isReadyForValidationAndReconciliation } from "../services/reconciliationService.js";
 
 export async function reconcileRoutes(app: FastifyInstance) {
   /** GET /api/reconcile — liste les transactions non réconciliées */
@@ -64,6 +64,15 @@ export async function reconcileRoutes(app: FastifyInstance) {
     }
     const results = await Promise.all(ids.map((id) => updateTransaction(id, { reconciled })));
     autoCommit(getWorkspaceRoot(), `rapprochement: ${ids.length} transaction(s) ${reconciled ? "validées" : "annulées"}`).catch(() => {});
+    return reply.send({ updated: results.length });
+  });
+
+  app.post<{ Body: { month: string } }>("/ready", async (req, reply) => {
+    const month = req.body?.month;
+    if (!/^\d{4}-\d{2}$/.test(month ?? "")) return reply.status(400).send({ error: "Mois invalide" });
+    const ready = (await loadAllTransactions()).filter((transaction) => transaction.date.startsWith(month) && !transaction.reconciled && isReadyForValidationAndReconciliation(transaction));
+    const results = await Promise.all(ready.map((transaction) => updateTransaction(transaction.id, { status: "validated", reconciled: true })));
+    if (results.length) autoCommit(getWorkspaceRoot(), `rapprochement: ${results.length} opération(s) prête(s) validée(s)`).catch(() => {});
     return reply.send({ updated: results.length });
   });
 }
