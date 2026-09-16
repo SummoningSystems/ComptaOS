@@ -28,4 +28,14 @@ describe("position de TVA et trésorerie disponible", () => {
   it("reconnaît aussi un paiement marqué explicitement", () => {
     expect(isVatPayment(transaction({ amount_ttc: -200, tags: ["vat_payment"] }))).toBe(true);
   });
+
+  it("ne confond pas un avoir fournisseur avec de la TVA collectée", () => {
+    const result = computeVatPosition([
+      transaction({ id: "purchase", category: "utilities", amount_ht: -100, vat: -20, amount_ttc: -120 }),
+      transaction({ id: "credit", category: "utilities", accountingTreatment: "expense_refund", amount_ht: 25, vat: 5, amount_ttc: 30 }),
+      transaction({ id: "advance-refund", category: "supplier_advance_refund", amount_ht: 10, vat: 0, amount_ttc: 10 }),
+    ], { name: "Entreprise", vatRegime: "monthly_ca3" }, new Date("2026-08-28T12:00:00Z"));
+
+    expect(result).toMatchObject({ collected: 0, deductible: 15, netLiability: 0 });
+  });
 });

@@ -1,5 +1,6 @@
 import type { Transaction } from "../types/index.js";
 import type { CompanyProfile } from "./settingsService.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -30,8 +31,13 @@ function simplifiedNextDue(profile: CompanyProfile, now: Date) {
 export function computeVatPosition(transactions: Transaction[], profile: CompanyProfile, now = new Date()): VatPosition {
   const year = String(now.getFullYear());
   const valid = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date.startsWith(year));
-  const collected = round2(valid.filter((transaction) => transaction.amount_ttc > 0).reduce((sum, transaction) => sum + Math.abs(transaction.vat), 0));
-  const deductible = round2(valid.filter((transaction) => transaction.amount_ttc < 0 && !isVatPayment(transaction)).reduce((sum, transaction) => sum + Math.abs(transaction.vat), 0));
+  const collected = round2(valid.filter((transaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "revenue").reduce((sum, transaction) => sum + Math.abs(transaction.vat), 0));
+  const deductible = round2(valid.reduce((sum, transaction) => {
+    const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
+    if (nature === "expense" && !isVatPayment(transaction)) return sum + Math.abs(transaction.vat);
+    if (nature === "expense_refund") return sum - Math.abs(transaction.vat);
+    return sum;
+  }, 0));
   const payments = round2(valid.filter(isVatPayment).reduce((sum, transaction) => sum + Math.abs(transaction.amount_ttc), 0));
   const opening = Number.isFinite(profile.vatOpeningBalance) ? Math.max(0, Number(profile.vatOpeningBalance)) : 0;
   const netLiability = round2(Math.max(0, opening + collected - deductible - payments));

@@ -2,6 +2,7 @@ import { loadAllTransactions } from "./transactionService.js";
 import { Transaction, Category } from "../types/index.js";
 import { writeFile } from "./fileSystem.js";
 import { format } from "../utils/date.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 export type ReportType = "monthly" | "vat" | "activity";
 
@@ -10,6 +11,11 @@ export interface ReportOptions {
   /** YYYY-MM pour monthly, YYYY-QN pour vat (ex: 2026-Q2), YYYY pour activity */
   period: string;
 }
+
+const natureOf = (transaction: Transaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
+const expenseTotal = (transactions: Transaction[], field: "amount_ttc" | "amount_ht") => transactions.reduce((sum, transaction) => natureOf(transaction) === "expense" ? sum + Math.abs(transaction[field]) : natureOf(transaction) === "expense_refund" ? sum - Math.abs(transaction[field]) : sum, 0);
+const revenueTotal = (transactions: Transaction[], field: "amount_ttc" | "amount_ht") => transactions.filter((transaction) => natureOf(transaction) === "revenue").reduce((sum, transaction) => sum + transaction[field], 0);
+const deductibleVat = (transactions: Transaction[]) => transactions.reduce((sum, transaction) => natureOf(transaction) === "expense" ? sum + Math.abs(transaction.vat) : natureOf(transaction) === "expense_refund" ? sum - Math.abs(transaction.vat) : sum, 0);
 
 /** Génère un rapport Markdown, le sauvegarde et retourne son contenu + chemin. */
 export async function generateReport(options: ReportOptions): Promise<{ content: string; filePath: string }> {
@@ -41,10 +47,11 @@ function buildMonthlyReport(
   month: string // YYYY-MM
 ): { content: string; filePath: string } {
   const txns = all.filter((t) => t.date.startsWith(month));
-  const revenue = txns.filter((t) => t.amount_ttc > 0);
-  const expenses = txns.filter((t) => t.amount_ttc < 0);
-  const totalRev = sum(revenue, "amount_ttc");
-  const totalExp = Math.abs(sum(expenses, "amount_ttc"));
+  const revenue = txns.filter((t) => natureOf(t) === "revenue");
+  const expenses = txns.filter((t) => natureOf(t) === "expense");
+  const expenseRefunds = txns.filter((t) => natureOf(t) === "expense_refund");
+  const totalRev = revenueTotal(txns, "amount_ttc");
+  const totalExp = expenseTotal(txns, "amount_ttc");
   const balance = totalRev - totalExp;
 
   const lines: string[] = [
@@ -79,6 +86,14 @@ function buildMonthlyReport(
     for (const t of expenses) {
       lines.push(`| ${t.date} | ${t.label} | ${t.amount_ttc.toFixed(2)} € | ${t.category} |`);
     }
+    lines.push("");
+  }
+
+  if (expenseRefunds.length > 0) {
+    lines.push("## Avoirs et remboursements fournisseurs", "");
+    lines.push("| Date | Libellé | Montant TTC | Charge diminuée |");
+    lines.push("|---|---|---|---|");
+    for (const t of expenseRefunds) lines.push(`| ${t.date} | ${t.label} | +${t.amount_ttc.toFixed(2)} € | ${t.category} |`);
     lines.push("");
   }
 
@@ -119,8 +134,8 @@ function buildVatReport(
   }
 
   const txns = all.filter((t) => months.some((m) => t.date.startsWith(m)));
-  const vatCollected = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.vat, 0);
-  const vatDeductible = txns.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.vat), 0);
+  const vatCollected = txns.filter((t) => natureOf(t) === "revenue").reduce((s, t) => s + t.vat, 0);
+  const vatDeductible = deductibleVat(txns);
   const vatDue = vatCollected - vatDeductible;
 
   const lines: string[] = [
@@ -144,8 +159,8 @@ function buildVatReport(
 
   for (const m of months) {
     const mt = txns.filter((t) => t.date.startsWith(m));
-    const mc = mt.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.vat, 0);
-    const md = mt.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.vat), 0);
+    const mc = mt.filter((t) => natureOf(t) === "revenue").reduce((s, t) => s + t.vat, 0);
+    const md = deductibleVat(mt);
     lines.push(`### ${m}`);
     lines.push(`- TVA collectée : ${mc.toFixed(2)} €`);
     lines.push(`- TVA déductible : ${md.toFixed(2)} €`);
@@ -169,17 +184,19 @@ function buildActivityReport(
   const byCategory: Partial<Record<Category, number>> = {};
 
   for (const t of txns) {
-    if (t.amount_ttc < 0) {
+    if (natureOf(t) === "expense") {
       byCategory[t.category] = (byCategory[t.category] ?? 0) + Math.abs(t.amount_ttc);
+    } else if (natureOf(t) === "expense_refund") {
+      byCategory[t.category] = (byCategory[t.category] ?? 0) - t.amount_ttc;
     }
   }
 
-  const totalRev = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ttc, 0);
-  const totalExp = txns.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.amount_ttc), 0);
+  const totalRev = revenueTotal(txns, "amount_ttc");
+  const totalExp = expenseTotal(txns, "amount_ttc");
 
   // IS estimé (IS PME France) sur résultat HT
-  const totalRevHt = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ht, 0);
-  const totalExpHt = txns.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.amount_ht), 0);
+  const totalRevHt = revenueTotal(txns, "amount_ht");
+  const totalExpHt = expenseTotal(txns, "amount_ht");
   const resultHt = totalRevHt - totalExpHt;
   const is =
     resultHt <= 0
@@ -231,8 +248,4 @@ function buildActivityReport(
     content: lines.join("\n"),
     filePath: `reports/activite_${year}.md`,
   };
-}
-
-function sum(txns: Transaction[], key: "amount_ttc" | "vat"): number {
-  return txns.reduce((s, t) => s + t[key], 0);
 }

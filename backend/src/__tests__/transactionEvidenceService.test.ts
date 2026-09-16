@@ -15,4 +15,8 @@ describe("transaction evidence", () => {
     expect(needsTransactionEvidence(transaction({ amount_ttc: 120 }))).toBe(false);
     expect(needsTransactionEvidence(transaction({ status: "rejected" }))).toBe(false);
   });
+  it("exige un avoir ou une preuve pour un remboursement fournisseur explicite", () => {
+    expect(needsTransactionEvidence(transaction({ amount_ht: 100, vat: 20, amount_ttc: 120, accountingTreatment: "expense_refund", justified: false }))).toBe(true);
+    expect(needsTransactionEvidence(transaction({ amount_ht: 120, vat: 0, amount_ttc: 120, category: "supplier_advance_refund", accountingTreatment: "supplier_advance_refund", invoiceRef: "REG-ENGIE" }))).toBe(false);
+  });
 });

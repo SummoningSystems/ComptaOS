@@ -12,4 +12,5 @@ describe("transaction evidence", () => {
     expect(needsTransactionEvidence(transaction({ justified: true }))).toBe(false);
   });
   it("n'exige rien pour une recette", () => expect(needsTransactionEvidence(transaction({ amount_ttc: 120 }))).toBe(false));
+  it("demande la preuve d'un avoir fournisseur", () => expect(needsTransactionEvidence(transaction({ amount_ttc: 120, accountingTreatment: "expense_refund" }))).toBe(true));
 });

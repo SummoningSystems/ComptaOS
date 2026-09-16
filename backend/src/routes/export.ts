@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import * as XLSX from "xlsx";
 import { loadAllTransactions } from "../services/transactionService.js";
+import { transactionAccountingNature } from "../services/categoryCatalogService.js";
 
 interface ExportQuery {
   year?: string;
@@ -87,8 +88,11 @@ export async function exportRoutes(app: FastifyInstance) {
       ["Trimestre", "TVA Collectée (€)", "TVA Déductible (€)", "TVA Nette à Reverser (€)"],
       ...quarters.map(({ label, months }) => {
         const qt = txns.filter((t) => months.includes(t.date.slice(5, 7)));
-        const collected = parseFloat(qt.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.vat, 0).toFixed(2));
-        const deductible = parseFloat(qt.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.vat), 0).toFixed(2));
+        const collected = parseFloat(qt.filter((t) => transactionAccountingNature(t.category, t.amount_ttc, t.accountingTreatment) === "revenue").reduce((s, t) => s + t.vat, 0).toFixed(2));
+        const deductible = parseFloat(qt.reduce((s, t) => {
+          const nature = transactionAccountingNature(t.category, t.amount_ttc, t.accountingTreatment);
+          return nature === "expense" ? s + Math.abs(t.vat) : nature === "expense_refund" ? s - Math.abs(t.vat) : s;
+        }, 0).toFixed(2));
         return [label, collected, deductible, parseFloat((collected - deductible).toFixed(2))];
       }),
     ];

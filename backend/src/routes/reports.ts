@@ -3,7 +3,7 @@ import { generateReport, ReportType } from "../services/reportService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { loadCompanyProfile } from "../services/settingsService.js";
 import { computeVatPosition } from "../services/vatPositionService.js";
-import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
+import { loadCategoryCatalog, transactionAccountingNature } from "../services/categoryCatalogService.js";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 
 // ── Helpers PDF partagés ──────────────────────────────────────────────────────
@@ -23,6 +23,12 @@ function dt(page: PDFPage, text: string, x: number, y: number, font: PDFFont, si
 function fmtEur(n: number) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 }
+
+type ClassifiedTransaction = { category: string; amount_ttc: number; accountingTreatment?: "revenue" | "expense_refund" | "supplier_advance_refund" };
+const isRevenue = (transaction: ClassifiedTransaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "revenue";
+const isExpense = (transaction: ClassifiedTransaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "expense";
+const isExpenseRefund = (transaction: ClassifiedTransaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "expense_refund";
+const deductibleVat = <T extends ClassifiedTransaction & { vat: number }>(transactions: T[]) => transactions.reduce((sum, transaction) => isExpense(transaction) ? sum + Math.abs(transaction.vat) : isExpenseRefund(transaction) ? sum - Math.abs(transaction.vat) : sum, 0);
 function pdfHeader(page: PDFPage, title: string, subtitle: string, fontBold: PDFFont, fontReg: PDFFont) {
   page.drawRectangle({ x: 0, y: PAGE_H - 8, width: PAGE_W, height: 8, color: COL_ACCENT });
   dt(page, title, MARGIN, PAGE_H - MARGIN, fontBold, 18, COL_ACCENT);
@@ -78,18 +84,16 @@ export async function reportsRoutes(app: FastifyInstance) {
     const rows = quarters.map(({ label, months }) => {
       const qt = txns.filter((t) => months.includes(t.date.slice(5, 7)));
       const collected = qt
-        .filter((t) => t.amount_ttc > 0)
+        .filter(isRevenue)
         .reduce((s, t) => s + t.vat, 0);
-      const deductible = qt
-        .filter((t) => t.amount_ttc < 0)
-        .reduce((s, t) => s + Math.abs(t.vat), 0);
+      const deductible = deductibleVat(qt);
       return {
         quarter: label,
         collected: parseFloat(collected.toFixed(2)),
         deductible: parseFloat(deductible.toFixed(2)),
         net: parseFloat((collected - deductible).toFixed(2)),
-        revenue: parseFloat(qt.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ttc, 0).toFixed(2)),
-        expenses: parseFloat(qt.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.amount_ttc), 0).toFixed(2)),
+        revenue: parseFloat(qt.filter(isRevenue).reduce((s, t) => s + t.amount_ttc, 0).toFixed(2)),
+        expenses: parseFloat(qt.reduce((s, t) => isExpense(t) ? s + Math.abs(t.amount_ttc) : isExpenseRefund(t) ? s - t.amount_ttc : s, 0).toFixed(2)),
       };
     });
 
@@ -98,7 +102,7 @@ export async function reportsRoutes(app: FastifyInstance) {
       .map((t) => {
         const month = t.date.slice(5, 7);
         const quarter = quarters.find((q) => q.months.includes(month))?.label ?? "T1";
-        const direction: "collected" | "deductible" = t.amount_ttc >= 0 ? "collected" : "deductible";
+        const direction: "collected" | "deductible" = isRevenue(t) ? "collected" : "deductible";
         const inferredVatRate = typeof t.vat_rate === "number"
           ? t.vat_rate
           : Math.abs(t.amount_ht) > 0
@@ -231,10 +235,10 @@ export async function reportsRoutes(app: FastifyInstance) {
       return true;
     });
 
-    const collected  = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.vat, 0);
-    const deductible = txns.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.vat), 0);
+    const collected  = txns.filter(isRevenue).reduce((s, t) => s + t.vat, 0);
+    const deductible = deductibleVat(txns);
     const net        = collected - deductible;
-    const revenue    = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ttc, 0);
+    const revenue    = txns.filter(isRevenue).reduce((s, t) => s + t.amount_ttc, 0);
     const baseHT     = revenue > 0 ? revenue - collected : 0;
 
     const doc      = await PDFDocument.create();

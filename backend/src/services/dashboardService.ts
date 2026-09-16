@@ -6,6 +6,7 @@ import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 import { loadCompanyProfile } from "./settingsService.js";
 import { computeVatPosition } from "./vatPositionService.js";
 import { loadHrStore } from "./hrService.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 function addMonths(isoDate: string, count: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);
@@ -32,7 +33,7 @@ export function buildDashboardForecast(
   const revenueByMonth = new Map(recentMonths.map((month) => [month, 0]));
   for (const transaction of transactions) {
     const month = transaction.date.slice(0, 7);
-    if (transaction.status !== "rejected" && transaction.amount_ttc > 0 && revenueByMonth.has(month)) {
+    if (transaction.status !== "rejected" && transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "revenue" && revenueByMonth.has(month)) {
       revenueByMonth.set(month, (revenueByMonth.get(month) ?? 0) + transaction.amount_ttc);
     }
   }
@@ -98,18 +99,25 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     const month = txn.date.slice(0, 7); // YYYY-MM
     if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
 
-    if (txn.amount_ttc >= 0) {
+    const nature = transactionAccountingNature(txn.category, txn.amount_ttc, txn.accountingTreatment);
+    if (nature === "revenue") {
       monthlyMap[month].revenue += txn.amount_ttc;
       accountingRevenue += txn.amount_ht;
-    } else {
+    } else if (nature === "expense") {
       monthlyMap[month].expenses += Math.abs(txn.amount_ttc);
       accountingExpenses += Math.abs(txn.amount_ht);
+    } else if (nature === "expense_refund") {
+      monthlyMap[month].expenses -= txn.amount_ttc;
+      accountingExpenses -= txn.amount_ht;
     }
 
-    if (txn.amount_ttc < 0) {
+    if (nature === "expense") {
       categoryMap[txn.category] = (categoryMap[txn.category] ?? 0) + Math.abs(txn.amount_ttc);
       vatEstimate -= txn.vat;
-    } else {
+    } else if (nature === "expense_refund") {
+      categoryMap[txn.category] = (categoryMap[txn.category] ?? 0) - txn.amount_ttc;
+      vatEstimate -= txn.vat;
+    } else if (nature === "revenue") {
       vatEstimate += txn.vat;
     }
 

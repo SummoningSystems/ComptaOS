@@ -79,4 +79,18 @@ describe("dashboard bank balance", () => {
     expect(dashboard.monthly_balance.at(-1)?.amount).toBe(1072.13);
     expect(dashboard.forecast[0]?.balance).toBeGreaterThan(1000);
   });
+
+  it("déduit un avoir fournisseur des charges sans le compter comme recette", async () => {
+    state.transactions = [
+      { id: "expense", date: "2026-08-01", label: "ENGIE", amount_ht: -100, amount_ttc: -120, vat: -20, category: "utilities", status: "validated", account: "7" },
+      { id: "credit", date: "2026-08-10", label: "Avoir ENGIE", amount_ht: 25, amount_ttc: 30, vat: 5, category: "utilities", accountingTreatment: "expense_refund", status: "validated", account: "7" },
+    ];
+
+    const dashboard = await computeDashboard("2026");
+
+    expect(dashboard.accounting_revenue).toBe(0);
+    expect(dashboard.accounting_expenses).toBe(75);
+    expect(dashboard.accounting_result).toBe(-75);
+    expect(dashboard.monthly_expenses[0]?.amount).toBe(90);
+  });
 });

@@ -30,6 +30,7 @@ export interface Transaction {
   cardHolder?: string;
   invoiceRef?: string;
   reconciled?: boolean;
+  accountingTreatment?: "revenue" | "expense_refund" | "supplier_advance_refund";
 }
 
 export interface Invoice {

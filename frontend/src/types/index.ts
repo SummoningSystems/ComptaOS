@@ -41,6 +41,7 @@ export interface Transaction {
   cardHolder?: string;
   invoiceRef?: string;
   reconciled?: boolean;
+  accountingTreatment?: "revenue" | "expense_refund" | "supplier_advance_refund";
 }
 
 export interface FileNode {
@@ -111,7 +112,16 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+export type TabType = "editor" | "dashboard" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "annual-closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+
+export interface AnnualThirdParty { id: string; kind: "supplier" | "client"; name: string; accountNumber: string; notes?: string }
+export interface AnnualThirdPartyDocument { id: string; kind: "purchase" | "sale"; thirdPartyId: string; date: string; invoiceRef: string; label: string; amountHt: number; amountVat: number; amountTtc: number; operatingAccount: string; vatAccount: string; thirdPartyAccount: string; paymentTransactionIds: string[]; advanceTransactionIds: string[]; advanceAccount: string; attachment?: string; status: "draft" | "validated" }
+export interface AnnualSettlement { date: string; invoiceRef: string; amountHt: number; amountVat: number; amountTtc: number; supplierAccount: string; expenseAccount: string; vatAccount: string; attachment?: string; status: "draft" | "validated" }
+export interface AnnualSchedule { id: string; supplier: string; label: string; reference: string; startDate: string; endDate: string; advanceAccount: string; transactionIds: string[]; attachment?: string; createdAt: string; settlement?: AnnualSettlement }
+export interface AnnualAdjustment { id: string; year: string; date: string; type: "opening" | "accrual" | "prepaid" | "invoice_not_received" | "invoice_to_issue" | "provision" | "inventory" | "tax" | "other"; label: string; debitAccount: string; debitLabel: string; creditAccount: string; creditLabel: string; amount: number; justification?: string; attachment?: string; status: "draft" | "validated" }
+export interface AnnualAsset { id: string; label: string; acquisitionDate: string; cost: number; residualValue: number; durationYears: number; assetAccount: string; depreciationAccount: string; expenseAccount: string; attachment?: string; disposedDate?: string }
+export interface AnnualFiscalAdjustment { id: string; year: string; kind: "reinstatement" | "deduction"; label: string; amount: number; notes?: string }
+export type AnnualCheckId = "documents" | "bank" | "third_parties" | "inventory" | "assets" | "vat" | "payroll" | "tax" | "review";
 
 export interface Quote {
   id: string;

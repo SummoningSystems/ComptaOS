@@ -408,6 +408,8 @@ const CATEGORY_COLORS: Record<Category, string> = {
   rent: "bg-teal-900 text-teal-300",
   legal: "bg-indigo-900 text-indigo-300",
   insurance: "bg-sky-900 text-sky-300",
+  supplier_advance_refund: "bg-emerald-900 text-emerald-300",
+  supplier_compensation: "bg-green-900 text-green-300",
   misc: "bg-gray-700 text-gray-300",
 };
 
@@ -506,7 +508,17 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     }
   }
 
-  async function handleCategoryChange(id: string, category: Category) {    const updated = await updateTransaction(id, { category });
+  async function handleCategoryChange(id: string, category: Category) {
+    const current = transactions.find((transaction) => transaction.id === id);
+    const selectedCategory = categories.find((item) => item.id === category);
+    const accountingTreatment = current && current.amount_ttc >= 0
+      ? category === "supplier_advance_refund" ? "supplier_advance_refund" as const
+        : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
+      : current?.accountingTreatment;
+    const patch = category === "supplier_advance_refund" && current
+      ? { category, accountingTreatment, vat_rate: 0, vat: 0, amount_ht: current.amount_ttc, vat_splits: [] }
+      : { category, accountingTreatment };
+    const updated = await updateTransaction(id, patch);
     setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
     setAttachmentMessage({ type: "success", text: "Catégorie enregistrée. ComptaOS mémorisera ce fournisseur pour les prochaines transactions similaires." });
   }
@@ -1214,9 +1226,11 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                               <td className="px-2 py-1.5">
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
-                                  <optgroup label={txn.amount_ttc >= 0 ? "Catégories de recettes" : "Catégories de dépenses"}>
-                                    {categories.filter((c) => c.kind === "both" || c.kind === (txn.amount_ttc >= 0 ? "revenue" : "expense") || c.id === txn.category).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                                  </optgroup>
+                                  {txn.amount_ttc >= 0 ? <>
+                                    <optgroup label="Remboursement d'acompte (sans TVA)">{categories.filter((c) => c.id === "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                                    <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
+                                    <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                                  </> : <optgroup label="Catégories de dépenses">{categories.filter((c) => c.kind === "both" || c.kind === "expense" || c.id === txn.category).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

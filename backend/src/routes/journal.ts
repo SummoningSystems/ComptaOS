@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { loadAllTransactions } from "../services/transactionService.js";
-import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
+import { loadCategoryCatalog, transactionAccountingNature } from "../services/categoryCatalogService.js";
 
 /** Map catégorie → comptes PCG débit/crédit */
 const PCG_MAP: Record<string, { debit: string; credit: string; label: string }> = {
@@ -38,12 +38,29 @@ export async function journalRoutes(app: FastifyInstance) {
 
     const entries = filtered.map((t) => {
       const pcg = PCG_MAP[t.category] ?? PCG_MAP["misc"];
-      const isRevenue = t.amount_ttc > 0;
+      const nature = transactionAccountingNature(t.category, t.amount_ttc, t.accountingTreatment);
       const abs = Math.abs(t.amount_ttc);
       const absHt = Math.abs(t.amount_ht);
       const absVat = Math.abs(t.vat);
 
-      if (isRevenue) {
+      if (nature === "supplier_advance_refund") {
+        return {
+          date: t.date, label: t.label, account_debit: "512000", account_credit: "409100",
+          account_vat: undefined, amount_ht: parseFloat(abs.toFixed(2)), amount_vat: 0,
+          amount_ttc: parseFloat(abs.toFixed(2)), category: t.category,
+          pcg_label: "Fournisseurs - avances et acomptes versés", reconciled: t.reconciled ?? false, txn_id: t.id,
+        };
+      }
+      if (nature === "expense_refund") {
+        const configuredAccount = categoryAccounts.get(t.category) ?? { number: pcg.debit, label: pcg.label };
+        return {
+          date: t.date, label: t.label, account_debit: "512000", account_credit: configuredAccount.number,
+          account_vat: absVat > 0 ? "445660" : undefined, amount_ht: parseFloat(absHt.toFixed(2)),
+          amount_vat: parseFloat(absVat.toFixed(2)), amount_ttc: parseFloat(abs.toFixed(2)), category: t.category,
+          pcg_label: `Avoir - ${configuredAccount.label}`, reconciled: t.reconciled ?? false, txn_id: t.id,
+        };
+      }
+      if (nature === "revenue") {
         const configuredAccount = categoryAccounts.get(t.category);
         const revenueAccount = configuredAccount?.number.startsWith("7") ? configuredAccount : { number: "706000", label: "Prestations de services" };
         return {

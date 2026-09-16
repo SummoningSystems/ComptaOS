@@ -46,6 +46,8 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
     return isNaN(n) ? null : n;
   }
 
+  const positiveAmount = (parseAmount(amountRaw) ?? 0) >= 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -56,6 +58,11 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
     const vatFactor = vatRate / 100;
     const amount_ht = amount_ttc / (1 + vatFactor);
     const vat = amount_ttc - amount_ht;
+    const selectedCategory = categories.find((item) => item.id === category);
+    const accountingTreatment = amount_ttc >= 0
+      ? category === "supplier_advance_refund" ? "supplier_advance_refund" as const
+        : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
+      : undefined;
 
     const txn: Omit<Transaction, "id"> = {
       date,
@@ -72,6 +79,7 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
       notes: notes.trim() || undefined,
       invoiceRef: invoiceRef.trim() || undefined,
       justified: false,
+      accountingTreatment,
     };
 
     setSaving(true);
@@ -166,15 +174,14 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
               <label className="block text-[10px] text-vscode-muted mb-0.5">Catégorie</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as Category)}
+                onChange={(e) => { const next = e.target.value as Category; setCategory(next); if (next === "supplier_advance_refund") setVatRate(0); }}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
               >
-                <optgroup label="Recettes">
-                  {categories.filter((c) => c.kind === "revenue" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </optgroup>
-                <optgroup label="Dépenses">
-                  {categories.filter((c) => c.kind === "expense" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </optgroup>
+                {positiveAmount ? <>
+                  <optgroup label="Remboursement d'acompte (sans TVA)">{categories.filter((c) => c.id === "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                  <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
+                  <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                </> : <optgroup label="Dépense">{categories.filter((c) => c.kind === "expense" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>}
               </select>
             </div>
             <div>

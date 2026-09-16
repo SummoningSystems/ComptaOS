@@ -45,6 +45,8 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("vehicle", "Véhicules et carburant", "625100", "Voyages et déplacements"),
   builtin("interest", "Intérêts et frais financiers", "661000", "Charges d'intérêts"),
   builtin("misc", "Divers (dépense)", "658000", "Charges diverses de gestion courante"),
+  builtin("supplier_advance_refund", "Remboursement d'acompte fournisseur", "409100", "Fournisseurs - avances et acomptes versés", "revenue"),
+  builtin("supplier_compensation", "Indemnité ou dédommagement reçu", "758000", "Indemnités et autres produits de gestion courante", "revenue"),
   builtin("service_revenue", "Prestations de services facturées", "706000", "Prestations de services", "revenue"),
   builtin("goods_sales", "Ventes de marchandises", "707000", "Ventes de marchandises", "revenue"),
   builtin("product_sales", "Ventes de produits fabriqués", "701000", "Ventes de produits finis", "revenue"),
@@ -67,6 +69,16 @@ function customCategories(): CategoryDefinition[] {
 
 export function loadCategoryCatalog(): CategoryDefinition[] {
   return [...BUILTIN_CATEGORIES, ...customCategories()].map((item) => ({ ...item, account: { ...item.account } }));
+}
+
+export type TransactionAccountingNature = "expense" | "revenue" | "expense_refund" | "supplier_advance_refund" | "neutral";
+
+export function transactionAccountingNature(categoryId: string, amountTtc: number, treatment?: "revenue" | "expense_refund" | "supplier_advance_refund"): TransactionAccountingNature {
+  if (amountTtc < 0) return "expense";
+  if (amountTtc === 0) return "neutral";
+  if (treatment) return treatment;
+  if (categoryId === "supplier_advance_refund") return "supplier_advance_refund";
+  return "revenue";
 }
 
 export function upsertCustomCategory(input: Omit<CategoryDefinition, "builtin">): CategoryDefinition {

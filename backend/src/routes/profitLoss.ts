@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { Category } from "../types/index.js";
-import { loadCategoryCatalog } from "../services/categoryCatalogService.js";
+import { loadCategoryCatalog, transactionAccountingNature } from "../services/categoryCatalogService.js";
 
 const CATEGORY_LABELS: Record<Category, string> = {
   hosting: "Hébergement",
@@ -47,10 +47,13 @@ export async function profitLossRoutes(app: FastifyInstance) {
 
       for (const t of txns) {
         const cat = t.category ?? "misc";
-        if (t.amount_ht > 0) {
+        const nature = transactionAccountingNature(cat, t.amount_ttc, t.accountingTreatment);
+        if (nature === "revenue") {
           revenue[cat] = (revenue[cat] ?? 0) + t.amount_ht;
-        } else {
+        } else if (nature === "expense") {
           expenses[cat] = (expenses[cat] ?? 0) + Math.abs(t.amount_ht);
+        } else if (nature === "expense_refund") {
+          expenses[cat] = (expenses[cat] ?? 0) - t.amount_ht;
         }
       }
 
@@ -59,8 +62,10 @@ export async function profitLossRoutes(app: FastifyInstance) {
       for (const t of txns) {
         const m = t.date.slice(0, 7); // "YYYY-MM"
         if (!monthly[m]) monthly[m] = { revenue: 0, expenses: 0 };
-        if (t.amount_ht > 0) monthly[m].revenue += t.amount_ht;
-        else monthly[m].expenses += Math.abs(t.amount_ht);
+        const nature = transactionAccountingNature(t.category, t.amount_ttc, t.accountingTreatment);
+        if (nature === "revenue") monthly[m].revenue += t.amount_ht;
+        else if (nature === "expense") monthly[m].expenses += Math.abs(t.amount_ht);
+        else if (nature === "expense_refund") monthly[m].expenses -= t.amount_ht;
       }
 
       const totalRevenue = Object.values(revenue).reduce((s, v) => s + v, 0);

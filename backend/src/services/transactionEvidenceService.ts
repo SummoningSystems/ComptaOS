@@ -1,4 +1,5 @@
 import type { Transaction } from "../types/index.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 export function hasTransactionEvidence(transaction: Transaction): boolean {
   const attachments = new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])].filter(Boolean));
@@ -6,5 +7,6 @@ export function hasTransactionEvidence(transaction: Transaction): boolean {
 }
 
 export function needsTransactionEvidence(transaction: Transaction): boolean {
-  return transaction.status !== "rejected" && transaction.amount_ttc < 0 && !hasTransactionEvidence(transaction);
+  const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
+  return transaction.status !== "rejected" && ["expense", "expense_refund", "supplier_advance_refund"].includes(nature) && !hasTransactionEvidence(transaction);
 }

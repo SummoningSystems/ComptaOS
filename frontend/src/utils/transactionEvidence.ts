@@ -6,5 +6,6 @@ export function hasTransactionEvidence(transaction: Transaction): boolean {
 }
 
 export function needsTransactionEvidence(transaction: Transaction): boolean {
-  return transaction.status !== "rejected" && transaction.amount_ttc < 0 && !hasTransactionEvidence(transaction);
+  const isSupplierRefund = transaction.amount_ttc > 0 && (transaction.accountingTreatment === "expense_refund" || transaction.accountingTreatment === "supplier_advance_refund" || transaction.category === "supplier_advance_refund");
+  return transaction.status !== "rejected" && (transaction.amount_ttc < 0 || isSupplierRefund) && !hasTransactionEvidence(transaction);
 }

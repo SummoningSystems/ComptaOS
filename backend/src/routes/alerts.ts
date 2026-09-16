@@ -3,6 +3,7 @@ import { getTransactionLoadIssues, loadAllTransactions } from "../services/trans
 import { loadBudgets } from "../services/settingsService.js";
 import { loadPendingReceipts } from "../services/receiptInboxService.js";
 import { needsTransactionEvidence } from "../services/transactionEvidenceService.js";
+import { transactionAccountingNature } from "../services/categoryCatalogService.js";
 
 export interface SystemAlert {
   id: string;
@@ -120,8 +121,11 @@ export async function alertsRoutes(app: FastifyInstance) {
 
     // 5. TVA à reverser importante
     const vatDue = validTxns.reduce((s, t) => {
-      if (t.amount_ttc > 0) return s + t.vat;
-      return s - t.vat;
+      const nature = transactionAccountingNature(t.category, t.amount_ttc, t.accountingTreatment);
+      if (nature === "revenue") return s + Math.abs(t.vat);
+      if (nature === "expense") return s - Math.abs(t.vat);
+      if (nature === "expense_refund") return s + Math.abs(t.vat);
+      return s;
     }, 0);
     if (vatDue > 1000) {
       alerts.push({ id: "vat_due", level: "info", category: "TVA", message: `TVA collectée estimée : ${vatDue.toFixed(2)} € — pensez à provisionner` });

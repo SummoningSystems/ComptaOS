@@ -4,6 +4,7 @@ import { Transaction } from "../types/index.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { AccountingAccount, AccountingConfig, loadCompanyProfile } from "./settingsService.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 export interface AccountingLine {
   journalCode: string; journalLabel: string; entryNumber: string; entryDate: string;
@@ -17,6 +18,12 @@ export interface AccountBalance { accountNumber: string; accountLabel: string; d
 export interface AccountingPreview {
   year: string; eligibleCount: number; excludedCount: number; lines: AccountingLine[];
   balances: AccountBalance[]; anomalies: AccountingAnomaly[]; totalDebit: number; totalCredit: number; balanced: boolean;
+}
+export interface AccountingPreviewOptions {
+  advanceAccounts?: Record<string, AccountingAccount>;
+  evidenceTransactionIds?: string[];
+  extraLines?: AccountingLine[];
+  extraAnomalies?: AccountingAnomaly[];
 }
 
 const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -34,10 +41,11 @@ function vatParts(transaction: Transaction, expectedVat: number): Array<{ rate?:
   return parts.filter((part) => part.amount !== 0);
 }
 
-export function buildAccountingPreview(transactions: Transaction[], config: AccountingConfig, year: string): AccountingPreview {
+export function buildAccountingPreview(transactions: Transaction[], config: AccountingConfig, year: string, options: AccountingPreviewOptions = {}): AccountingPreview {
   const inYear = transactions.filter((transaction) => transaction.date.startsWith(year) && transaction.status !== "rejected");
   const eligible = inYear.filter((transaction) => transaction.status === "validated" && transaction.reconciled === true);
   const anomalies: AccountingAnomaly[] = [];
+  anomalies.push(...(options.extraAnomalies ?? []));
   const accounts = [config.bank, config.revenue, config.vatDeductible, config.vatCollected, ...Object.values(config.categories)];
   for (const account of accounts) if (!validAccount(account)) anomalies.push({ severity: "blocking", code: "INVALID_ACCOUNT", message: `Compte PCG invalide : ${account.number || "non renseigné"} (${account.label || "sans libellé"}).` });
   const profile = loadCompanyProfile();
@@ -51,13 +59,30 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     if (Math.abs(round(transaction.amount_ht + transaction.vat - transaction.amount_ttc)) > 0.01) anomalies.push({ severity: "blocking", code: "VAT_MISMATCH", message: "HT + TVA ne correspond pas au TTC.", transactionId: transaction.id });
     const attachments = [...new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])])];
     for (const attachment of attachments) if (!existsSync(join(getWorkspaceRoot(), "attachments", basename(attachment)))) anomalies.push({ severity: "blocking", code: "MISSING_ATTACHMENT", message: `Le justificatif ${attachment} est introuvable.`, transactionId: transaction.id });
-    if (needsTransactionEvidence(transaction)) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
+    if (needsTransactionEvidence(transaction) && !options.evidenceTransactionIds?.includes(transaction.id)) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
     const base = { journalCode: "BQ", journalLabel: "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
     const ht = Math.abs(round(transaction.amount_ht)); const vat = Math.abs(round(transaction.vat)); const ttc = Math.abs(round(transaction.amount_ttc));
-    if (transaction.amount_ttc < 0) {
+    const advanceAccount = options.advanceAccounts?.[transaction.id];
+    if (transaction.amount_ttc < 0 && advanceAccount) {
+      lines.push(line(base, advanceAccount, `${transaction.label} - acompte fournisseur`, ttc, 0));
+      lines.push(line(base, config.bank, `${transaction.label} - règlement acompte`, 0, ttc));
+    } else if (transaction.amount_ttc < 0) {
       lines.push(line(base, config.categories[transaction.category], `${transaction.label} - HT`, ht, 0));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, part.amount, 0));
       lines.push(line(base, config.bank, `${transaction.label} - TTC`, 0, ttc));
+    } else if (advanceAccount) {
+      lines.push(line(base, config.bank, `${transaction.label} - encaissement`, ttc, 0));
+      lines.push(line(base, advanceAccount, `${transaction.label} - compte tiers`, 0, ttc));
+    } else if (transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "supplier_advance_refund") {
+      const refundAccount = config.categories[transaction.category] ?? { number: "409100", label: "Fournisseurs - avances et acomptes versés" };
+      if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_ADVANCE_REFUND", message: "Un remboursement d'acompte fournisseur ne doit pas porter de TVA sur le mouvement bancaire.", transactionId: transaction.id });
+      lines.push(line(base, config.bank, `${transaction.label} - remboursement reçu`, ttc, 0));
+      lines.push(line(base, refundAccount, `${transaction.label} - remboursement d'acompte fournisseur`, 0, ttc));
+    } else if (transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "expense_refund") {
+      const expenseAccount = config.categories[transaction.category];
+      lines.push(line(base, config.bank, `${transaction.label} - remboursement reçu`, ttc, 0));
+      lines.push(line(base, expenseAccount, `${transaction.label} - avoir sur charge`, 0, ht));
+      for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - correction TVA déductible${part.rate === undefined ? "" : ` ${part.rate} %`}`, 0, part.amount));
     } else {
       const configuredCategory = config.categories[transaction.category];
       const revenueAccount = configuredCategory?.number.startsWith("7") ? configuredCategory : config.revenue;
@@ -69,6 +94,7 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     const debit = round(entryLines.reduce((sum, item) => sum + item.debit, 0)); const credit = round(entryLines.reduce((sum, item) => sum + item.credit, 0));
     if (debit !== credit) anomalies.push({ severity: "blocking", code: "UNBALANCED_ENTRY", message: `Écriture déséquilibrée : débit ${debit.toFixed(2)} €, crédit ${credit.toFixed(2)} €.`, transactionId: transaction.id });
   });
+  lines.push(...(options.extraLines ?? []).filter((item) => item.entryDate.startsWith(year)));
   const balanceMap = new Map<string, AccountBalance>();
   for (const item of lines) { const current = balanceMap.get(item.accountNumber) ?? { accountNumber: item.accountNumber, accountLabel: item.accountLabel, debit: 0, credit: 0, balance: 0 }; current.debit = round(current.debit + item.debit); current.credit = round(current.credit + item.credit); current.balance = round(current.debit - current.credit); balanceMap.set(item.accountNumber, current); }
   const totalDebit = round(lines.reduce((sum, item) => sum + item.debit, 0)); const totalCredit = round(lines.reduce((sum, item) => sum + item.credit, 0));

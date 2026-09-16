@@ -45,6 +45,29 @@ describe("dossier expert-comptable", () => {
     expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "707000", credit: 100 })]));
   });
 
+  it("comptabilise un remboursement d'acompte fournisseur au 4091 sans produit", () => {
+    const preview = buildAccountingPreview([transaction({ id: "refund", label: "Remboursement ENGIE", category: "supplier_advance_refund", amount_ht: 25, vat: 0, amount_ttc: 25 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "512100", debit: 25 }), expect.objectContaining({ accountNumber: "409100", credit: 25 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("7"))).toBe(false);
+  });
+
+  it("comptabilise un avoir fournisseur comme diminution de charge et de TVA déductible", () => {
+    const preview = buildAccountingPreview([transaction({ id: "credit", label: "Avoir ENGIE", category: "utilities", accountingTreatment: "expense_refund", amount_ht: 20, vat: 5, amount_ttc: 25 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "512100", debit: 25 }), expect.objectContaining({ accountNumber: "606100", credit: 20 }), expect.objectContaining({ accountNumber: "445660", credit: 5 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("7"))).toBe(false);
+  });
+
+  it("conserve une indemnité réelle dans un compte de produit", () => {
+    const preview = buildAccountingPreview([transaction({ id: "compensation", label: "Indemnité fournisseur", category: "supplier_compensation", amount_ht: 25, vat: 0, amount_ttc: 25 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "758000", credit: 25 })]));
+  });
+
+  it("comptabilise un prélèvement lié à un échéancier comme acompte fournisseur", () => {
+    const preview = buildAccountingPreview([transaction({ id: "engie", label: "ENGIE", amount_ht: -100, vat: 0, amount_ttc: -100, invoiceRef: undefined })], defaultAccountingConfig(), "2026", { advanceAccounts: { engie: { number: "409100", label: "Acomptes ENGIE" } }, evidenceTransactionIds: ["engie"] });
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "409100", debit: 100 }), expect.objectContaining({ accountNumber: "512100", credit: 100 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("6"))).toBe(false);
+  });
+
   it("signale les catégories imprécises et les écritures incohérentes", () => {
     const preview = buildAccountingPreview([transaction({ category: "misc", amount_ht: -25 })], defaultAccountingConfig(), "2026");
     expect(preview.anomalies).toEqual(expect.arrayContaining([expect.objectContaining({ code: "UNCATEGORIZED" }), expect.objectContaining({ code: "VAT_MISMATCH" }), expect.objectContaining({ code: "UNBALANCED_ENTRY" })]));
