@@ -19,7 +19,9 @@ const deductibleVat = (transactions: Transaction[]) => transactions.reduce((sum,
 
 /** Génère un rapport Markdown, le sauvegarde et retourne son contenu + chemin. */
 export async function generateReport(options: ReportOptions): Promise<{ content: string; filePath: string }> {
-  const transactions = await loadAllTransactions();
+  // Une transaction rejetée représente notamment un doublon explicitement ignoré.
+  // Elle reste conservée dans l'historique, mais ne doit jamais alimenter un rapport comptable.
+  const transactions = (await loadAllTransactions()).filter((transaction) => transaction.status !== "rejected");
 
   let content: string;
   let filePath: string;
