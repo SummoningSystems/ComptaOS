@@ -73,7 +73,7 @@ In Structure, **Disposition** offers:
 - **Hiérarchie**: parent companies above their participations, with each entity shown once.
   Multiple parents are supported; hierarchy cycles are rejected in this prototype.
 
-Use **Ajuster la carte** to fit the whole diagram, or the zoom selector and scrollbars.
+Use the zoom selector and scrollbars to navigate the diagram.
 When adding/editing a company, choose Entreprise, Holding, SCI or Autre.
 In **+ Relation**, choose **Entreprise → participation dans une entreprise**,
 then the parent under De and the held company under Vers. The inspector shows

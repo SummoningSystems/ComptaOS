@@ -146,7 +146,6 @@ test("arrange floating nodes and model a holding with company participations",as
   await expect(holding).toHaveCSS("left",(moved.x+10)+"px");
   await page.getByLabel("Zoom de la carte").selectOption("0.75");
   await holding.click();
-  await page.getByRole("button",{name:"Ajuster la carte"}).click();
   await page.screenshot({path:testInfo.outputPath("free-desktop.png"),fullPage:true});
   await page.getByLabel("Disposition de la carte").selectOption("hierarchy");
   await expect(holding).toContainText("Holding");

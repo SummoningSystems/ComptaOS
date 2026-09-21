@@ -40,12 +40,11 @@ export function structurePositions(entities:Entity[],relations:Relation[],layout
   rows.forEach((row,level)=>row.forEach((e,i)=>result.set(e.id,{x:24+(widest-row.length*270)/2+i*270,y:60+level*155})));
   return result;
 }
-export function StructureMap({entities,visible,relations,layout,zoom,onZoom,selected,linked,onSelect}:{
-  entities:Entity[];visible:Entity[];relations:Relation[];layout:Layout;zoom:number;onZoom:(zoom:number)=>void;selected:string;linked:Set<string>;onSelect:(id:string)=>void;
+export function StructureMap({entities,visible,relations,layout,zoom,selected,linked,onSelect}:{
+  entities:Entity[];visible:Entity[];relations:Relation[];layout:Layout;zoom:number;selected:string;linked:Set<string>;onSelect:(id:string)=>void;
 }) {
   const {positions:saved,move}=useEcosystem();
   const marker=useId();
-  const viewport=useRef<HTMLDivElement>(null);
   const positions=structurePositions(entities,relations,layout,saved);
   const drag=useRef<{id:string;pointer:number;client:Point;origin:Point;moved:boolean}|null>(null);
   const suppressClick=useRef(false);
@@ -61,14 +60,9 @@ export function StructureMap({entities,visible,relations,layout,zoom,onZoom,sele
     drag.current=null;setPreview(null);
   }
   return <>
-    <div className="eco-actions" style={{marginBottom:10}}><button onClick={()=>{
-      const area=viewport.current;if(!area)return;
-      onZoom(Math.max(.25,Math.min(1,(area.clientWidth-6)/width,(area.clientHeight-6)/height)));
-      area.scrollTo(0,0);
-    }}>Ajuster la carte</button></div>
     {layout==="free"&&<p className="eco-map-instructions">Déplacez les éléments librement. Au clavier : flèches pour déplacer l’élément sélectionné, Maj pour un pas plus grand. Positions enregistrées dans ce navigateur.</p>}
     {layout==="hierarchy"&&<p className="eco-map-instructions">Les entreprises mères apparaissent au-dessus de leurs participations. Les personnes et les comptes restent visibles.</p>}
-    <div ref={viewport} className="eco-map-scroll" aria-label="Carte des relations"><div style={{width:width*zoom,height:height*zoom}}>
+    <div className="eco-map-scroll" aria-label="Carte des relations"><div style={{width:width*zoom,height:height*zoom}}>
       <div className={"eco-map "+(layout==="free"?"eco-map-free":"")} style={{width,height,transform:"scale("+zoom+")"}}>
         <svg width={width} height={height} aria-label="Liens de propriété, d’activité et de participation">
           <defs><marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--vscode-accent)"/></marker></defs>
