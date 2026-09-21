@@ -7,7 +7,6 @@ import {
   gitSyncPull,
   deleteGitSync,
   type GitSyncStatus,
-  type GitSyncConfig,
   type GitProvider,
 } from "../../api/client";
 

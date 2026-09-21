@@ -83,9 +83,6 @@ export function Dashboard() {
       expenses: data.monthly_expenses.find((r) => r.month === m)?.amount ?? 0,
     }));
 
-  const totalRevenue = data.monthly_revenue.reduce((s, r) => s + r.amount, 0);
-  const totalExpenses = data.monthly_expenses.reduce((s, r) => s + r.amount, 0);
-
   // KPIs calculés depuis les transactions brutes
   const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
   const validTxns = transactions.filter((t) => t.status !== "rejected");

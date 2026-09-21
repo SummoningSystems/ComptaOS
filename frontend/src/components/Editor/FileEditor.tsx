@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchFileContent, rawFileUrl, saveFileContent } from "../../api/client";
 import { useAppStore } from "../../stores/appStore";
 import { PdfPreview } from "./PdfPreview";
@@ -37,14 +37,14 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [path, previewKind]);
+  }, [path, previewKind, markDirty, tabId]);
 
   function handleChange(value: string) {
     setContent(value);
     markDirty(tabId, value !== originalRef.current);
   }
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaving(true);
     try {
       await saveFileContent(path, content);
@@ -55,7 +55,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     } finally {
       setSaving(false);
     }
-  }
+  }, [path, content, markDirty, tabId]);
 
   // Ctrl+S / Cmd+S
   useEffect(() => {
@@ -67,7 +67,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [content]);
+  }, [handleSave]);
 
   if (previewKind) {
     const url = rawFileUrl(path);

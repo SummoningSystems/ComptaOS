@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import { lstatSync, realpathSync } from "fs";
 import path from "path";
 import { FileNode } from "../types/index.js";
 import { getActiveCompanyPath } from "./companiesService.js";
@@ -7,12 +8,36 @@ export function getWorkspaceRoot(): string {
   return getActiveCompanyPath();
 }
 
-/** Résout un chemin relatif au workspace en chemin absolu (protège contre path traversal). */
+export class WorkspacePathError extends Error {
+  statusCode = 403;
+
+  constructor() {
+    super("Accès interdit hors du workspace");
+  }
+}
+
+/** Résout un chemin relatif sans traversée ni lien symbolique. */
 export function resolveSafe(relativePath: string): string {
-  const base = getActiveCompanyPath();
+  if (typeof relativePath !== "string" || !relativePath || path.isAbsolute(relativePath)) {
+    throw new WorkspacePathError();
+  }
+
+  const base = realpathSync(getActiveCompanyPath());
   const resolved = path.resolve(base, relativePath);
-  if (!resolved.startsWith(path.resolve(base))) {
-    throw new Error("Accès interdit hors du workspace");
+  const withinBase = path.relative(base, resolved);
+  if (withinBase === ".." || withinBase.startsWith(".." + path.sep) || path.isAbsolute(withinBase)) {
+    throw new WorkspacePathError();
+  }
+
+  let current = base;
+  for (const part of withinBase.split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    try {
+      if (lstatSync(current).isSymbolicLink()) throw new WorkspacePathError();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      throw error;
+    }
   }
   return resolved;
 }

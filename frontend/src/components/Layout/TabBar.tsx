@@ -10,7 +10,7 @@ const TAB_ICONS: Record<string, string> = {
 };
 
 export function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab, closeTabs, reorderTabs } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, closeTabs, reorderTabs } = useAppStore();
   const dragIdRef = useRef<string | null>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const menuRef = useRef<HTMLDivElement>(null);

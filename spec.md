@@ -1,6 +1,8 @@
 # Spécification Fonctionnelle — ComptaOS
 > Rétro-ingénierie exhaustive · 1er juin 2026
 
+> Document historique : le README, les manifests et le code décrivent le comportement actuel. La connexion bancaire utilise désormais Powens, même si la conception initiale ci-dessous mentionne GoCardless.
+
 ## Vision produit
 
 Application web **local-first** inspirée de VS Code / Obsidian pour gérer sa comptabilité professionnelle via des fichiers texte structurés (`.md`, `.yaml`, `.json`, `.csv`), enrichis par une IA copilote. Les données restent la propriété de l'utilisateur, versionnées dans un dépôt Git.

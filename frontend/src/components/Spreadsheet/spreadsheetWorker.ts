@@ -12,16 +12,6 @@ import { HyperFormula } from "hyperformula";
 
 // ── Helpers (dupliqués ici pour être auto-contenus dans le worker) ──────────
 
-function colLetter(i: number): string {
-  let s = "";
-  let n = i + 1;
-  while (n > 0) {
-    s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
-    n = Math.floor((n - 1) / 26);
-  }
-  return s;
-}
-
 function parseCell(key: string): { col: number; row: number } | null {
   const m = key.match(/^([A-Z]+)(\d+)$/);
   if (!m) return null;

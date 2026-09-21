@@ -20,29 +20,6 @@ interface PLData { year: string; prevYear: string; current: YearData; previous: 
 function fmt(n: number) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
 }
-function delta(curr: number, prev: number) {
-  if (prev === 0) return null;
-  const pct = ((curr - prev) / Math.abs(prev)) * 100;
-  return pct;
-}
-
-function KPI({ label, value, prev, positive = true }: { label: string; value: number; prev: number; positive?: boolean }) {
-  const d = delta(value, prev);
-  const isUp = value >= prev;
-  const good = positive ? isUp : !isUp;
-  return (
-    <div className="bg-vscode-panel border border-vscode-border rounded-lg p-4 flex flex-col gap-1">
-      <span className="text-xs text-vscode-muted">{label}</span>
-      <span className="text-xl font-semibold text-vscode-text">{fmt(value)}</span>
-      {d !== null && (
-        <span className={`text-xs font-medium ${good ? "text-green-400" : "text-red-400"}`}>
-          {isUp ? "▲" : "▼"} {Math.abs(d).toFixed(1)} % vs {String(parseInt(label.includes("N") ? "0" : "0"))}
-        </span>
-      )}
-    </div>
-  );
-}
-
 export function ProfitLossView() {
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [data, setData] = useState<PLData | null>(null);
@@ -69,7 +46,6 @@ export function ProfitLossView() {
   const { current, previous } = data;
 
   // Données pour graphique mensuel
-  const monthLabels = current.monthly.map((m) => m.month.slice(5)); // "01" → "01"
 
   // Comparaison N vs N-1 pour les catégories charges
   const expenseComparison = current.expenses.map((row) => {

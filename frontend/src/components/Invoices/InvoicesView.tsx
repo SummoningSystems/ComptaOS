@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { OutgoingInvoice, Category } from "../../types";
+import { OutgoingInvoice } from "../../types";
 import { fetchInvoices, createInvoice, updateInvoice, deleteInvoice, downloadInvoicePdf } from "../../api/client";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
@@ -65,7 +65,6 @@ export function InvoicesView() {
   }
 
   function openEdit(inv: OutgoingInvoice) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...rest } = inv;
     setForm(rest);
     setEditingId(id);

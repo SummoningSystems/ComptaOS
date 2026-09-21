@@ -49,10 +49,11 @@ test.describe("Recette métier complète", () => {
     // 4. Export du grand livre et vérification du contenu comptable.
     await page.getByTitle("Analyses & Export").click();
     await page.getByRole("button", { name: /Export$/i }).click();
+    await page.getByText("Exports tableur historiques").click();
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: /télécharger CSV/i }).click();
+    await page.getByRole("button", { name: "CSV", exact: true }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe(`compta_${year}.csv`);
+    expect(download.suggestedFilename()).toBe(`compta-${year}.csv`);
 
     const downloadPath = await download.path();
     expect(downloadPath).not.toBeNull();

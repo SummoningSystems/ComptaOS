@@ -679,7 +679,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   function toggleOne(id: string) {
     setSelected((prev) => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) s.delete(id); else s.add(id);
       return s;
     });
   }
@@ -696,7 +696,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   function toggleCollapse(key: string) {
     setCollapsed((prev) => {
       const s = new Set(prev);
-      s.has(key) ? s.delete(key) : s.add(key);
+      if (s.has(key)) s.delete(key); else s.add(key);
       return s;
     });
   }
@@ -848,7 +848,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
           suggestions={smartSuggestions}
           selected={smartSelected}
           applying={smartApplying}
-          onToggle={(id) => setSmartSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; })}
+          onToggle={(id) => setSmartSelected((prev) => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; })}
           onToggleAll={() => setSmartSelected((prev) =>
             prev.size === smartSuggestions.length ? new Set() : new Set(smartSuggestions.map((s) => s.id))
           )}

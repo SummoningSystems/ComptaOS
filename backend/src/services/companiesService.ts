@@ -1,5 +1,5 @@
-import { readFileSync, mkdirSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { readFileSync, mkdirSync, existsSync, realpathSync } from "fs";
+import { join, resolve, relative, isAbsolute, sep } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
 
 const ROOT = resolve(process.env.WORKSPACE_PATH ?? join(process.cwd(), "..", "workspace"));
@@ -71,7 +71,21 @@ export function getActiveCompanyPath(): string {
   const activeId = getActiveCompanyId();
   const company = (activeId ? companies.find((c) => c.id === activeId) : null) ?? companies[0];
 
-  _activeCompanyPath = resolve(ROOT, company.path);
+  if (typeof company.path !== "string" || isAbsolute(company.path)) {
+    throw new Error("Chemin d'entreprise invalide");
+  }
+  const candidate = resolve(ROOT, company.path);
+  const relativePath = relative(ROOT, candidate);
+  if (relativePath === ".." || relativePath.startsWith(".." + sep) || isAbsolute(relativePath)) {
+    throw new Error("Chemin d'entreprise hors du workspace");
+  }
+  const canonicalRoot = realpathSync(ROOT);
+  const canonicalCompany = realpathSync(candidate);
+  const canonicalRelative = relative(canonicalRoot, canonicalCompany);
+  if (canonicalRelative === ".." || canonicalRelative.startsWith(".." + sep) || isAbsolute(canonicalRelative)) {
+    throw new Error("Chemin d'entreprise hors du workspace");
+  }
+  _activeCompanyPath = canonicalCompany;
   return _activeCompanyPath;
 }
 

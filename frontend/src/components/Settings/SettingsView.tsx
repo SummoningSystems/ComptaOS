@@ -17,30 +17,6 @@ import {
 } from "../../api/client";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  hosting: "Hébergement",
-  software: "Logiciel",
-  salary: "Salaire",
-  subcontracting: "Sous-traitance",
-  professional_fees: "Conseil et honoraires",
-  external_services: "Autres prestations",
-  travel: "Transport",
-  restaurant: "Restaurant",
-  food: "Alimentaire",
-  taxes: "Impôts/Taxes",
-  equipment: "Matériel",
-  subscription: "Abonnement",
-  rent: "Loyer",
-  legal: "Juridique",
-  insurance: "Assurance",
-  misc: "Divers",
-};
-
 export function SettingsView() {
   const { categories, allCategories, reload: reloadCategories } = useCategoryCatalog();
   const [rules, setRules] = useState<CategoryRule[]>([]);

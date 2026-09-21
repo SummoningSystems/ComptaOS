@@ -106,7 +106,8 @@ export function HistoryView() {
     }
   }
 
-  useEffect(() => { loadLog(); }, []);
+  // Load the initial history once; subsequent refreshes use the explicit reload action.
+  useEffect(() => { void loadLog(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     let list = commits;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../api/client";
 
 interface JournalEntry {
@@ -37,7 +37,7 @@ export function JournalView() {
   const [search, setSearch] = useState("");
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ year });
@@ -49,9 +49,9 @@ export function JournalView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [year, month]);
 
-  useEffect(() => { load(); }, [year, month]);
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -70,7 +70,6 @@ export function JournalView() {
   }, [data, search, onlyUnreconciled]);
 
   const totalDebit  = filtered.reduce((s, e) => s + e.amount_ttc, 0);
-  const totalCredit = totalDebit;
 
   function handlePrint() { window.print(); }
 

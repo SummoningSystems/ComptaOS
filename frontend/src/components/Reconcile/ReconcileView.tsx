@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
@@ -41,7 +41,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
   const total = transactions.length;
   const pending = total - reconciled;
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setSelected(new Set());
     setError("");
@@ -57,9 +57,9 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [month]);
 
-  useEffect(() => { load(); }, [month]);
+  useEffect(() => { void load(); }, [load]);
 
   async function toggleOne(id: string, value: boolean) {
     setSaving(true);

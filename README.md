@@ -1,4 +1,4 @@
-﻿# ComptaOS
+# ComptaOS
 
 > **Le VS Code de la comptabilité.** Local-first, open-source, IA copilote intégrée.
 
@@ -22,12 +22,11 @@ Vos données comptables vous appartiennent. Pas de cloud imposé, pas de lock-in
 | 📈 Bilan / P&L | Compte de résultat PCG, export PDF |
 | 🏦 Trésorerie | Prévisionnel de trésorerie, tableau de flux |
 | 🔗 Rapprochement | Import relevé bancaire, matching automatique |
-| 🏦 PSD2 / Open Banking | Connexion bancaire directe via GoCardless (50 banques+) |
-| 🤖 IA Copilote | Suggestions de catégorie, analyse des dépenses (Anthropic / Mistral) |
+| 🏦 PSD2 / Open Banking | Connexion bancaire directe via Powens (configuration requise) |
+| IA Copilote | Suggestions et analyse avec une clé fournisseur configurée |
 | 📋 Multi-entreprises | Gérez plusieurs structures en parallèle |
 | 🔒 Chiffrement | AES-256-GCM — vos données chiffrées, clé jamais stockée |
 | 🧩 Plugins | Système d'extensions (vm sandbox), marketplace à venir |
-| 📱 PWA | Installable comme app, fonctionne offline |
 | 🖥️ Electron | Application desktop native Windows / macOS / Linux |
 | 📅 Frais récurrents | Abonnements et charges périodiques automatiques |
 | 🗂️ Tiers | Gestion clients / fournisseurs |
@@ -38,11 +37,15 @@ Vos données comptables vous appartiennent. Pas de cloud imposé, pas de lock-in
 | 📄 Modèles | Bibliothèque de modèles de documents |
 | 📤 Export | FEC, CSV, XLSX, PDF |
 | 📜 Historique | Audit trail avec Git |
-| 🔍 OCR PDF | Import automatique de factures PDF |
+| OCR PDF | Extraction PDF avec un worker local ou un fournisseur configuré |
+
+Les intégrations Powens, IA et OCR ne fonctionnent qu'après configuration de leurs services. Le navigateur web nécessite une connexion au serveur ; l'ancien service worker hors ligne a été retiré.
 
 ---
 
 ## 🚀 Démarrage rapide
+
+Le script d'installation installe les dépendances racine, backend et frontend depuis leurs lockfiles.
 
 ```bash
 # 1. Cloner et installer
@@ -63,11 +66,13 @@ npm run dev
 npm run electron:build
 ```
 
-**Prérequis :** Node.js 20.19+ (production : 20.19.5), npm 10+
+**Prérequis :** Node.js 20.19+ (production : 20.19.5), npm 10+. Sous PowerShell, utilisez `Copy-Item backend/.env.example backend/.env` à la place de `cp`.
 
 ---
 
-## 💼 Plans
+## 💼 Offres envisagées
+
+Pro et Pro+ sont en liste d'attente. Le tableau décrit les offres prévues, pas des fonctionnalités livrées ou des installateurs publiés.
 
 | | Open-source (Gratuit) | Pro — 39 € | Pro+ — 9 €/mois |
 |---|:---:|:---:|:---:|
@@ -91,12 +96,12 @@ npm run electron:build
 
 ```
 ComptaOS/
-├── backend/          # Fastify 4 + TypeScript (ESM) — port 3001
+├── backend/          # Fastify 5 + TypeScript (ESM) — port 3001
 │   ├── src/
 │   │   ├── routes/   # invoices, vat, reports, banking, stripe, license…
 │   │   └── services/ # fileSystem, licenseService, stripeService, bankingService…
 │   └── .env.example
-├── frontend/         # React 18 + Vite 5 + TailwindCSS 3 + Zustand
+├── frontend/         # React 18 + Vite 7 + TailwindCSS 3 + Zustand
 │   └── src/
 │       ├── components/  # 25+ vues (Dashboard, Invoices, Banking…)
 │       └── stores/      # appStore (Zustand)
@@ -119,8 +124,8 @@ Copiez `backend/.env.example` vers `backend/.env` et remplissez :
 | `WORKSPACE_PATH` | `../workspace` | Chemin du workspace de données |
 | `PORT` | `3001` | Port du backend |
 | `LOCAL_API_KEY` | _(vide)_ | Clé API optionnelle pour sécuriser l'accès local |
-| `AUTH_ENABLED` | `false` | Active l'authentification JWT ; obligatoire sur une instance Internet |
-| `HTTPS_ONLY` | `false` | Ajoute l'attribut `Secure` au cookie JWT |
+| `AUTH_ENABLED` | `true` dans `.env.example` | Active l'authentification JWT ; obligatoire sur une instance Internet |
+| `HTTPS_ONLY` | `true` dans `.env.example` | Ajoute l'attribut `Secure` au cookie JWT |
 | `JWT_SECRET` | _(généré localement)_ | Secret JWT persistant ; à fournir par l'environnement en production |
 | `ANTHROPIC_API_KEY` | _(vide)_ | Clé Anthropic pour l'IA copilote |
 | `MISTRAL_API_KEY` | _(vide)_ | Clé Mistral (alternative) |
@@ -133,7 +138,7 @@ Copiez `backend/.env.example` vers `backend/.env` et remplissez :
 | `POWENS_CLIENT_SECRET` | _(vide)_ | Secret client Powens |
 | `POWENS_USER_TOKEN` | _(vide)_ | Jeton utilisateur Powens persistant optionnel |
 
-> Pour le mode développement, seul `WORKSPACE_PATH` est obligatoire. Les autres variables activent des fonctionnalités optionnelles.
+> `WORKSPACE_PATH` a une valeur par défaut ; configurez-le pour choisir l'emplacement des données. Le fichier d'exemple active l'authentification et demande la création du premier utilisateur. La connexion bancaire, l'IA et l'OCR demandent une configuration ou un worker supplémentaire. Le frontend web actuel ne fournit pas de mode hors ligne.
 
 ---
 
@@ -143,12 +148,11 @@ Copiez `backend/.env.example` vers `backend/.env` et remplissez :
 - [x] Factures / Devis avec relances automatiques
 - [x] Export PDF TVA (CA3) + Bilan comptable
 - [x] Système de plugins (sandbox vm)
-- [x] PWA installable + mode offline
 - [x] Chiffrement AES-256-GCM du workspace
 - [x] Spreadsheet avec Web Worker (HyperFormula)
 - [x] Application Electron (desktop natif)
 - [x] Tests E2E Playwright
-- [x] Connexion bancaire PSD2 (GoCardless)
+- [x] Intégration bancaire PSD2 (Powens, configuration requise)
 - [x] Système de licence + waitlist
 - [x] Intégration Stripe (paiements Pro / Pro+)
 - [ ] Installateur natif (sans Node.js requis)
@@ -169,13 +173,14 @@ Les contributions sont les bienvenues ! Lisez [CONTRIBUTING.md](CONTRIBUTING.md)
 # Fork + clone
 git clone https://github.com/SummoningSystems/ComptaOS.git
 
-# Créer une branche
-git checkout -b feat/ma-fonctionnalite
+# Créer une branche depuis develop
+git switch develop
+git switch -c feat/ma-fonctionnalite
 
 # Lancer les tests
 npm run test:e2e
 
-# Ouvrir une Pull Request sur main
+# Ouvrir une Pull Request vers develop ; master est protégé
 ```
 
 ---

@@ -130,7 +130,7 @@ export async function uploadAttachment(
   let compression: CompressionResult;
   try {
     compression = await compressAttachment(file);
-  } catch (error) {
+  } catch {
     if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("Cette photo HEIC ne peut pas être lue par ce navigateur. Choisissez JPEG dans les réglages de l'appareil ou convertissez la photo.");
     compression = { file, compressed: false, originalBytes: file.size, uploadedBytes: file.size, savedPercent: 0 };
   }
@@ -162,7 +162,7 @@ export async function uploadPendingReceipt(file: File, options?: { skipOcr?: boo
   let compression: CompressionResult;
   try {
     compression = await compressAttachment(file);
-  } catch (error) {
+  } catch {
     if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("Cette photo HEIC ne peut pas être lue par ce navigateur. Choisissez JPEG dans les réglages de l'appareil ou convertissez la photo.");
     compression = { file, compressed: false, originalBytes: file.size, uploadedBytes: file.size, savedPercent: 0 };
   }

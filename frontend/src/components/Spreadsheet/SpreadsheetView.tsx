@@ -103,11 +103,6 @@ function formatNumber(val: number, fmt?: CellFormat["numberFormat"]): string {
   return Number.isInteger(val) ? String(val) : val.toFixed(2);
 }
 
-function buildHF(_sheet: SpreadsheetSheet, _vars: Record<string, number>) {
-  // Remplacé par Web Worker — ne pas utiliser directement
-  throw new Error("Utiliser le Web Worker via recompute()");
-}
-
 /** Ajuste les références de cellules dans une formule lors d'une copie/déplacement */
 function adjustFormula(formula: string, deltaRow: number, deltaCol: number): string {
   if (!formula.startsWith("=")) return formula;

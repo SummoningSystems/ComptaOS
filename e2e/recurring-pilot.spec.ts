@@ -20,7 +20,7 @@ test("pilote un frais annuel et simule sa réduction", async ({ page }) => {
   const row = page.getByRole("row").filter({ hasText: label });
   await expect(row).toContainText("100 €/mois");
   await row.locator("select").selectOption("reduce");
-  await row.locator('input[type="number"]').fill("600");
+  await row.locator('input[inputmode="decimal"]').fill("600");
   await expect(row).toContainText("50 €/mois");
   await expect(page.getByText(/600.*économisés|Économie simulée/i).first()).toBeVisible();
 

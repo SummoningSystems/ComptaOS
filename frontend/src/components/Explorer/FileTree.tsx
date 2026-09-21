@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileNode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { fetchFileTree } from "../../api/client";
@@ -85,7 +85,7 @@ export function FileTree() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -96,11 +96,11 @@ export function FileTree() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [setFileTree]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   return (
     <div className="flex flex-col h-full">

@@ -7,7 +7,7 @@ ComptaOS est une application de gestion et de préparation comptable local-first
 ## Architecture générale
 
 - `backend/` : API Fastify et logique métier TypeScript.
-- `frontend/` : interface React/Vite, état global Zustand et PWA.
+- `frontend/` : interface React/Vite, état global Zustand.
 - `electron/` : processus principal desktop qui démarre le backend local puis charge l'interface.
 - `workspace/` : données métier locales par entreprise, principalement en YAML et JSON, ignorées par le dépôt applicatif.
 - `e2e/` : scénarios Playwright.
@@ -15,9 +15,9 @@ ComptaOS est une application de gestion et de préparation comptable local-first
 ## Technologies principales
 
 - Node.js 20+ attendu par le README et la CI.
-- TypeScript strict, Fastify 4 et modules ESM côté backend.
-- React 18, Vite 5, Tailwind CSS et Zustand côté frontend.
-- Electron 31 pour l'application desktop.
+- TypeScript strict, Fastify 5 et modules ESM côté backend.
+- React 18, Vite 7, Tailwind CSS et Zustand côté frontend.
+- Electron 43 pour l'application desktop.
 - Vitest pour les tests unitaires et Playwright pour les tests de bout en bout.
 
 ## Sources de référence

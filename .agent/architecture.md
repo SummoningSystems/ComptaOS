@@ -6,7 +6,7 @@ ComptaOS est composé d'un frontend React qui consomme une API HTTP Fastify. Le 
 
 Deux modes d'exécution partagent ce socle :
 
-- Web/PWA : Vite sert le frontend en développement et proxifie `/api` vers Fastify.
+- Web : Vite sert le frontend en développement et proxifie `/api` vers Fastify.
 - Electron : le processus principal démarre le build backend sur un port local libre, définit un workspace sous `userData`, attend `/api/health`, puis ouvre une `BrowserWindow` sur le backend.
 
 En production, Fastify peut servir `frontend/dist` avec un fallback SPA. Le frontend accepte aussi un `BASE_PATH` Vite, utilisé pour le déploiement sous `/comptaos/`.
@@ -40,6 +40,6 @@ Les transactions illisibles sont exclues du calcul, journalisées et exposées c
 - `LOCAL_API_KEY` active un contrôle optionnel par en-tête ou paramètre.
 - `AUTH_ENABLED=true` active une authentification JWT par cookie HTTP-only via les routes d'authentification.
 - En production, le cookie JWT reçoit automatiquement l'attribut `Secure`.
-- `resolveSafe` interdit les accès en dehors du workspace actif.
+- `resolveSafe` rejette la traversée et les liens symboliques dans les chemins de fichiers demandés.
 - Les secrets d'intégration proviennent des variables d'environnement ou de fichiers locaux non destinés au dépôt.
 - Les fichiers locaux d'authentification et de banque sont validés et écrits atomiquement avec des permissions restrictives ; le `.gitignore` du workspace les exclut de la synchronisation Git.

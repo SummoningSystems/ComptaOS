@@ -65,10 +65,6 @@ export function QuotesView() {
     setEditingId(id);
   }
 
-  function recalcTtc(ht: number, vatRate: number) {
-    return parseFloat((ht * (1 + vatRate / 100)).toFixed(2));
-  }
-
   async function handleSave() {
     if (editingId === "new") {
       const created = await createQuote({ ...form, id: crypto.randomUUID() } as Quote);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData, type VatTransactionDetail } from "../../api/client";
+import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData } from "../../api/client";
 import type { Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
@@ -240,7 +240,7 @@ function SplitEditor({
         >+ Ajouter un taux</button>
 
         <span className={`text-xs font-mono ${isValid ? "text-green-400" : "text-orange-400"}`}>
-          {isValid ? "✓ Équilibré" : `Restant : ${Math.abs(remaining).toFixed(2)} €`}
+          {isValid ? "✓ Équilibré" : `Restant : ${Math.abs(remaining).toFixed(2)} €`}
         </span>
 
         <div className="ml-auto flex gap-2">

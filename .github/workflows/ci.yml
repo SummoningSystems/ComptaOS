@@ -68,4 +68,4 @@ jobs:
         run: npm ci --prefix frontend
 
       - name: Lint frontend
-        run: npm run lint --prefix frontend --if-present
+        run: npm run lint --prefix frontend
