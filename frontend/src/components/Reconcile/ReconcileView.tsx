@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface ReconcileTransaction {
@@ -25,6 +25,8 @@ const ISSUE_LABELS: Record<ReconciliationIssue, string> = {
 const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
+ const {api}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<ReconcileTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +59,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [api, month]);
 
   useEffect(() => { void load(); }, [load]);
 

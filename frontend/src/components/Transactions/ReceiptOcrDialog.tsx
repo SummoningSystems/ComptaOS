@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { fetchAttachmentBlob, type ReceiptOcrProposal } from "../../api/client";
+import {type ReceiptOcrProposal} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import type { Category, Transaction } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
@@ -10,6 +11,8 @@ const CONFIDENCE_LABELS: Record<ReceiptOcrProposal["confidence"], string> = { hi
 interface Props { transaction: Transaction; proposal: ReceiptOcrProposal; onApply: (values: { category: Category; invoiceRef?: string; vatSplits: Array<{ rate: number; amountTtc: number }> }) => Promise<void>; onClose: () => void }
 
 export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Props) {
+ const {fetchAttachmentBlob}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const filename = transaction.attachments?.at(-1) ?? transaction.attachment;
   const [previewUrl, setPreviewUrl] = useState("");
@@ -35,7 +38,7 @@ export function ReceiptOcrDialog({ transaction, proposal, onApply, onClose }: Pr
       else URL.revokeObjectURL(objectUrl);
     }).catch(() => { if (active) setPreviewError("Impossible d’afficher la pièce justificative."); });
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [filename, isPdf]);
+  }, [fetchAttachmentBlob, filename, isPdf]);
 
   const splitTotal = Math.round(splits.reduce((sum, split) => sum + split.amountTtc, 0) * 100) / 100;
   const balanced = Math.abs(splitTotal - bankTotal) < 0.01;

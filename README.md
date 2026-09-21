@@ -10,6 +10,16 @@
 
 Vos données comptables vous appartiennent. Pas de cloud imposé, pas de lock-in, pas d'abonnement obligatoire. ComptaOS tourne entièrement sur votre machine avec une synchronisation Git optionnelle.
 
+## Écosystème financier partagé
+
+L’entrée principale permet d’organiser personnes, entreprises et comptes bancaires
+sur une carte dynamique, avec documents partagés et traitements comptables liés aux
+mouvements. Les outils d’entreprise restent dans leurs onglets.
+
+- [Guide pour configurer votre espace à deux et vos six comptes](docs/ecosystem.md)
+- [Installer le serveur local avec HTTPS et accès LAN](deployment/LOCAL.md)
+
+
 ---
 
 ## ✨ Fonctionnalités

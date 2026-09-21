@@ -10,7 +10,8 @@ const ACTIVE_FILE = join(ROOT, "_active.json");
 
 export interface Company {
   id: string;
-  kind?: "business" | "household";
+  kind?: "business" | "household" | "ecosystem";
+  ecosystemId?: string;
   memberIds?: string[];
   name: string;
   /** Chemin relatif depuis ROOT vers le dossier de l'entreprise (ex: "." ou "companies/co_abc123") */

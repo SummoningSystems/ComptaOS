@@ -24,13 +24,15 @@ if(status.body.needsSetup){assert.equal((await request("/api/auth/setup","POST",
 const login=await request("/api/auth/login","POST",credentials);assert.equal(login.status,200);
 assert(login.cookies.some(value=>value.includes("Secure")&&value.includes("HttpOnly")));
 cookie=login.cookies[0].split(";")[0];
-let workspaces=await request("/api/workspaces");
-if(!workspaces.body.some(w=>w.kind==="household")){
-  const created=await request("/api/workspaces","POST",{name:"Container household",kind:"household",people:["Alice","Bob"]});
-  assert.equal(created.status,201);workspaces=await request("/api/workspaces");
+let spaces=await request("/api/ecosystems");
+if(!spaces.body.length){
+  const created=await request("/api/ecosystems","POST",{name:"Container ecosystem"});
+  assert.equal(created.status,201);assert.equal(created.body.entities.length,0);
+  const saved=await request("/api/ecosystems/"+created.body.id+"/commands","POST",{revision:0,action:"entity",entity:{id:"alice",kind:"person",name:"Alice"}});
+  assert.equal(saved.status,200);spaces=await request("/api/ecosystems");
 }
-const household=workspaces.body.find(w=>w.kind==="household");
-const state=await request("/api/workspaces/"+household.id+"/household");assert.equal(state.status,200);assert.equal(state.body.accounts.length,6);
+const endpoint="/api/ecosystems/"+spaces.body[0].id;
+const state=await request(endpoint);assert.equal(state.status,200);assert.equal(state.body.entities[0].name,"Alice");
 const backup=await request("/api/backups","POST",{});assert.equal(backup.status,200);assert(backup.body.lastSuccess);
-cookie="";assert.equal((await request("/api/workspaces/"+household.id+"/household")).status,401);
-console.log("HTTPS, secure login, persisted household and backup smoke checks passed.");
+cookie="";assert.equal((await request(endpoint)).status,401);
+console.log("HTTPS, secure login, persisted ecosystem and backup smoke checks passed.");

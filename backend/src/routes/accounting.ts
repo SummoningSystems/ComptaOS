@@ -1,3 +1,6 @@
+import {loadEcosystem,currentEcosystemCompany} from "../services/ecosystemService.js";
+import {documentBytes} from "../services/ecosystemDocuments.js";
+import type {Transaction} from "../types/index.js";
 import { createReadStream, existsSync } from "fs";
 import { basename, join } from "path";
 import { FastifyInstance } from "fastify";
@@ -7,6 +10,13 @@ import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAccountingConfig, loadCompanyProfile, saveAccountingConfig, AccountingConfig, defaultAccountingConfig } from "../services/settingsService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { activeClosing } from "../services/closingService.js";
+
+async function appendSharedEvidence(archive:InstanceType<typeof ZipArchive>,transactions:Transaction[]) {
+  const company=currentEcosystemCompany();if(!company)return;
+  const s=await loadEcosystem(company.ecosystemId!);
+  const ids=new Set(transactions.flatMap(t=>t.documentIds??[]));
+  for(const doc of s.documents.filter(d=>ids.has(d.id)))archive.append(await documentBytes(s,doc),{name:"justificatifs/"+doc.id+"-"+doc.fileName.replace(/[^a-zA-Z0-9._-]/g,"_")});
+}
 
 async function context(year: string) {
   const config = loadAccountingConfig();
@@ -66,6 +76,7 @@ export async function accountingRoutes(app: FastifyInstance) {
         if (existsSync(path)) archive.append(createReadStream(path), { name: `justificatifs/${transaction.id}-${safeName.replace(/[^a-zA-Z0-9._-]/g, "_")}` });
       }
     }
+    await appendSharedEvidence(archive,transactions.filter(t=>preview.lines.some(l=>l.transactionId===t.id)));
     void archive.finalize();
     return reply.send(archive);
   });
@@ -86,6 +97,7 @@ export async function accountingRoutes(app: FastifyInstance) {
       const safeName = basename(filename); const attachmentPath = join(getWorkspaceRoot(), "attachments", safeName); const key = `${transaction.id}-${safeName}`;
       if (!added.has(key) && existsSync(attachmentPath)) { added.add(key); archive.append(createReadStream(attachmentPath), { name: `justificatifs/${key.replace(/[^a-zA-Z0-9._-]/g, "_")}` }); }
     }
+    await appendSharedEvidence(archive,transactions.filter(t=>preview.lines.some(l=>l.transactionId===t.id)));
     void archive.finalize(); return reply.send(archive);
   });
 }

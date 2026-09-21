@@ -1,5 +1,6 @@
+import {useCallback} from "react";
 import { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface Plugin {
   name: string;
@@ -11,11 +12,13 @@ interface Plugin {
 }
 
 export function PluginsView() {
+ const {api}=useWorkspaceApi();
+
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [toasting, setToasting] = useState<string | null>(null);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get<Plugin[]>("/plugins");
@@ -25,9 +28,9 @@ export function PluginsView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [api]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function toggle(plugin: Plugin) {
     const action = plugin.enabled ? "disable" : "enable";

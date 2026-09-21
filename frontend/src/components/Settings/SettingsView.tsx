@@ -2,22 +2,15 @@ import { useEffect, useState } from "react";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 import { CategoryRule, TreasuryAlert, Category, AiConfig, AiConfigStatus, AiProvider, CompanyProfile } from "../../types";
 import { GitSyncPanel } from "./GitSyncPanel";
-import { api } from "../../api/client";
-import {
-  fetchCategoryRules,
-  saveCategoryRules,
-  fetchTreasuryAlert,
-  saveTreasuryAlert,
-  fetchAiConfig,
-  saveAiConfig,
-  fetchCompanyProfile,
-  saveCompanyProfile,
-  createCategory,
-  deleteCategory,
-} from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 export function SettingsView() {
+ const {fetchCategoryRules,saveCategoryRules,fetchTreasuryAlert,saveTreasuryAlert,fetchAiConfig,saveAiConfig,fetchCompanyProfile,saveCompanyProfile,createCategory,deleteCategory}=useWorkspaceApi();
+
+ const {api}=useWorkspaceApi();
+
   const { categories, allCategories, reload: reloadCategories } = useCategoryCatalog();
   const [rules, setRules] = useState<CategoryRule[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false });
@@ -59,7 +52,7 @@ export function SettingsView() {
     api.get<{ enabled: boolean }>("/encryption/status").then(({ data }) => {
       setEncEnabled(data.enabled);
     }).catch(() => {});
-  }, []);
+  }, [api, fetchAiConfig, fetchCategoryRules, fetchCompanyProfile, fetchTreasuryAlert]);
 
   async function handleSaveRules(updated: CategoryRule[]) {
     setRules(updated);

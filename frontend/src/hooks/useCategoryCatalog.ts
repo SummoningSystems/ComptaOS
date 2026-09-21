@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchCategories } from "../api/client";
+import {useWorkspaceApi} from '../api/WorkspaceApi';
 import type { CategoryDefinition } from "../types";
 
 export const FALLBACK_CATEGORIES: CategoryDefinition[] = [
@@ -21,13 +21,15 @@ FALLBACK_CATEGORIES.push(
     .map(([id, label]) => ({ id, label, account: { number: "", label: "" }, kind: "revenue" as const, builtin: true, active: true })),
 );
 
-let cached: CategoryDefinition[] | null = null;
+const cache = new WeakMap<() => Promise<CategoryDefinition[]>, CategoryDefinition[]>();
 
 export function useCategoryCatalog() {
-  const [categories, setCategories] = useState<CategoryDefinition[]>(cached ?? FALLBACK_CATEGORIES);
+ const {fetchCategories}=useWorkspaceApi();
+
+  const [categories, setCategories] = useState<CategoryDefinition[]>(cache.get(fetchCategories) ?? FALLBACK_CATEGORIES);
   const reload = useCallback(async () => {
-    try { cached = await fetchCategories(); setCategories(cached); } catch { /* fallback keeps the UI usable */ }
-  }, []);
+    try { const result = await fetchCategories(); cache.set(fetchCategories,result); setCategories(result); } catch { /* fallback keeps the UI usable */ }
+  }, [fetchCategories]);
   useEffect(() => { void reload(); }, [reload]);
   return { categories: categories.filter((item) => item.active), allCategories: categories, reload };
 }

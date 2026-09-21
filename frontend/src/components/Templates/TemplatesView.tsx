@@ -1,6 +1,7 @@
+import {useCallback} from "react";
 import { useEffect, useState } from "react";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface TransactionTemplate {
@@ -29,6 +30,8 @@ const EMPTY: Omit<TransactionTemplate, "id"> = {
 };
 
 export function TemplatesView() {
+ const {api}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [templates, setTemplates] = useState<TransactionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +41,7 @@ export function TemplatesView() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get<TransactionTemplate[]>("/templates");
@@ -48,9 +51,9 @@ export function TemplatesView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [api]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function handleSave() {
     if (!form.name.trim() || !form.label.trim()) return;

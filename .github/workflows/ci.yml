@@ -47,8 +47,8 @@ jobs:
       - name: Ecosystem UX prototype
         run: npx playwright test --config playwright.ecosystem.config.ts
 
-      - name: Two-user household workflow
-        run: npx playwright test --config playwright.household.config.ts
+      - name: Two-user financial ecosystem workflow
+        run: npx playwright test --config playwright.ecosystem-live.config.ts
 
       - name: End-to-end accounting workflow
         run: npm run test:e2e
@@ -95,7 +95,7 @@ jobs:
             sleep 1
           done
           test -s /tmp/comptaos-ca.crt
-      - name: Verify HTTPS, authentication, household and backup
+      - name: Verify HTTPS, authentication, ecosystem and backup
         run: node deployment/smoke-local.mjs
       - name: Restart and verify persistence
         run: |

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchFileContent, rawFileUrl, saveFileContent } from "../../api/client";
-import { useAppStore } from "../../stores/appStore";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
 import { PdfPreview } from "./PdfPreview";
 
 interface FileEditorProps {
@@ -9,6 +9,8 @@ interface FileEditorProps {
 }
 
 export function FileEditor({ tabId, path }: FileEditorProps) {
+ const {fetchFileContent,rawFileUrl,saveFileContent}=useWorkspaceApi();
+
   const { markDirty } = useAppStore();
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [path, previewKind, markDirty, tabId]);
+  }, [path, previewKind, markDirty, tabId, fetchFileContent]);
 
   function handleChange(value: string) {
     setContent(value);
@@ -55,7 +57,7 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     } finally {
       setSaving(false);
     }
-  }, [path, content, markDirty, tabId]);
+  }, [saveFileContent, path, content, markDirty, tabId]);
 
   // Ctrl+S / Cmd+S
   useEffect(() => {

@@ -1,21 +1,7 @@
+import {useCallback} from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  attachmentUrl,
-  deletePendingReceipt,
-  fetchPendingReceipts,
-  fetchPendingReceiptBatchOcr,
-  linkPendingReceipt,
-  linkPendingReceiptGroup,
-  linkPendingReceiptToMany,
-  rotatePendingReceipt,
-  transformPendingReceipt,
-  updatePendingReceiptOcr,
-  startPendingReceiptBatchOcr,
-  uploadPendingReceipt,
-  type PendingReceipt,
-  type ReceiptOcrProposal,
-  type BatchOcrProgress,
-} from "../../api/client";
+import {type PendingReceipt,type ReceiptOcrProposal,type BatchOcrProgress} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { PendingReceiptEditor } from "./PendingReceiptEditor";
 import type { Transaction } from "../../types";
 
@@ -111,6 +97,8 @@ export function suggestSplitPaymentMatches(receipts: PendingReceipt[], transacti
 }
 
 export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
+ const {attachmentUrl,deletePendingReceipt,fetchPendingReceipts,fetchPendingReceiptBatchOcr,linkPendingReceipt,linkPendingReceiptGroup,linkPendingReceiptToMany,rotatePendingReceipt,transformPendingReceipt,updatePendingReceiptOcr,startPendingReceiptBatchOcr,uploadPendingReceipt}=useWorkspaceApi();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [receipts, setReceipts] = useState<PendingReceipt[]>([]);
   const [targetByReceipt, setTargetByReceipt] = useState<Record<string, string>>({});
@@ -127,11 +115,7 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
   const splitSuggestions = useMemo(() => suggestSplitPaymentMatches(receipts, transactions), [receipts, transactions]);
   const quality = useMemo(() => ({ successful: receipts.filter((item) => item.ocr.status === "success").length, corrected: receipts.filter((item) => item.ocr.validatedAt).length, failed: receipts.filter((item) => item.ocr.status === "error").length }), [receipts]);
 
-  useEffect(() => {
-    Promise.all([fetchPendingReceipts(), fetchPendingReceiptBatchOcr()]).then(([items, progress]) => { setReceipts(items); if (progress.running) void monitorBatch(progress); }).catch(() => setError("Impossible de charger les justificatifs en attente."));
-  }, []);
-
-  async function monitorBatch(initial: BatchOcrProgress) {
+  const monitorBatch=useCallback(async (initial: BatchOcrProgress) => {
     let progress = initial; let refreshedAt = -1;
     while (true) {
       setImportProgress({ phase: "ocr", ...progress });
@@ -141,7 +125,12 @@ export function PendingReceiptsPanel({ transactions, onLinked }: Props) {
       progress = await fetchPendingReceiptBatchOcr();
     }
     setLastBatch(progress); setImportProgress(null);
-  }
+  }, [fetchPendingReceiptBatchOcr, fetchPendingReceipts]);
+useEffect(() => {
+    Promise.all([fetchPendingReceipts(), fetchPendingReceiptBatchOcr()]).then(([items, progress]) => { setReceipts(items); if (progress.running) void monitorBatch(progress); }).catch(() => setError("Impossible de charger les justificatifs en attente."));
+  }, [fetchPendingReceiptBatchOcr, fetchPendingReceipts, monitorBatch]);
+
+
 
   async function analyzeReceipts(items: PendingReceipt[]) {
     if (!items.length) return;

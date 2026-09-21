@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, apiUrl } from "../../api/client";
-import { useAppStore } from "../../stores/appStore";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
 import type { TabType } from "../../types";
 
 interface ClosingRecord { month: string; status: "closed" | "reopened"; closedAt: string; closedBy: string; fingerprint: string; transactionCount: number; reopenedAt?: string; reopenReason?: string }
@@ -8,6 +8,8 @@ interface ClosingData { month: string; transactionCount: number; completed: numb
 const TITLES: Partial<Record<TabType, string>> = { banking: "Connexion bancaire", transactions: "Transactions", vat: "TVA", reconcile: "Rapprochement", export: "Export" };
 
 export function ClosingView() {
+ const {api,apiUrl}=useWorkspaceApi();
+
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [data, setData] = useState<ClosingData | null>(null);
   const [history, setHistory] = useState<ClosingRecord[]>([]);
@@ -15,7 +17,7 @@ export function ClosingView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const openTab = useAppStore((state) => state.openTab);
-  const load = useCallback(async () => { setLoading(true); try { const [state, records] = await Promise.all([api.get<ClosingData>("/closing", { params: { month } }), api.get<ClosingRecord[]>("/closing/history")]); setData(state.data); setHistory(records.data); } finally { setLoading(false); } }, [month]);
+  const load = useCallback(async () => { setLoading(true); try { const [state, records] = await Promise.all([api.get<ClosingData>("/closing", { params: { month } }), api.get<ClosingRecord[]>("/closing/history")]); setData(state.data); setHistory(records.data); } finally { setLoading(false); } }, [api, month]);
   useEffect(() => { void load(); const refresh = () => { if (document.visibilityState === "visible") void load(); }; document.addEventListener("visibilitychange", refresh); return () => document.removeEventListener("visibilitychange", refresh); }, [load]);
   function correct(step: ClosingData["steps"][number]) { if (!step.action) return; const path = new URLSearchParams({ month, ...(step.filter ? { filter: step.filter } : {}) }).toString(); openTab({ id: `${step.action}-${month}-${step.id}`, type: step.action, title: `${TITLES[step.action] ?? step.label} · ${month}`, path }); }
   async function close() { setBusy(true); setError(""); try { await api.post("/closing/close", { month }); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Clôture impossible"); } finally { setBusy(false); } }

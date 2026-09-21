@@ -1,5 +1,7 @@
+import {useCallback} from "react";
 import { useEffect, useState } from "react";
-import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData } from "../../api/client";
+import {type VatQuarterData,type VatSummaryData} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import type { Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
@@ -265,6 +267,8 @@ function SplitEditor({
 }
 
 function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total: VatSummaryData["total"]; year: string }) {
+ const {apiUrl}=useWorkspaceApi();
+
   const [selectedQ, setSelectedQ] = useState<string>("annual");
 
   const activeData = selectedQ === "annual"
@@ -368,6 +372,8 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
 }
 
 export function VatView() {
+ const {fetchVatSummary,updateTransaction}=useWorkspaceApi();
+
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
   const [data, setData] = useState<VatSummaryData | null>(null);
@@ -376,7 +382,7 @@ export function VatView() {
   const [savingIds, setSavingIds] = useState<string[]>([]);
   const [splitEditId, setSplitEditId] = useState<string | null>(null);
 
-  async function load(y: string) {
+  const load=useCallback(async (y: string) => {
     setLoading(true);
     try {
       const summary = await fetchVatSummary(y);
@@ -384,7 +390,7 @@ export function VatView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchVatSummary]);
 
   async function saveDetailPatch(id: string, patch: { label?: string; category?: Category; vat_rate?: number; vat_splits?: VatSplit[] }) {
     setSavingIds((current) => current.includes(id) ? current : [...current, id]);
@@ -396,7 +402,7 @@ export function VatView() {
     }
   }
 
-  useEffect(() => { load(year); }, [year]);
+  useEffect(() => { load(year); }, [load, year]);
 
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 

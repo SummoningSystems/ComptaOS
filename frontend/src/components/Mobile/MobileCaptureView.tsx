@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { deletePendingReceipt, fetchPendingReceipts, fetchTransactions, linkPendingReceipt, updateTransaction, uploadAttachment, uploadPendingReceipt, type PendingReceipt, type ReceiptOcrProposal } from "../../api/client";
+import {type PendingReceipt,type ReceiptOcrProposal} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import type { Category, Transaction } from "../../types";
 import { ReceiptOcrDialog } from "../Transactions/ReceiptOcrDialog";
 
 interface Props { onOpenDesktop: () => void; onLogout?: () => Promise<void> }
 
 export function MobileCaptureView({ onOpenDesktop, onLogout }: Props) {
+ const {deletePendingReceipt,fetchPendingReceipts,fetchTransactions,linkPendingReceipt,updateTransaction,uploadAttachment,uploadPendingReceipt}=useWorkspaceApi();
+
   const directInputRef = useRef<HTMLInputElement>(null);
   const inboxInputRef = useRef<HTMLInputElement>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -25,7 +28,7 @@ export function MobileCaptureView({ onOpenDesktop, onLogout }: Props) {
       setTransactions(expenses); setReceipts(pending);
       setSelectedId(expenses.find((item) => !item.attachment)?.id ?? expenses[0]?.id ?? "");
     }).catch(() => setError("Impossible de charger les transactions ou les justificatifs.")).finally(() => setLoading(false));
-  }, []);
+  }, [fetchPendingReceipts, fetchTransactions]);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();

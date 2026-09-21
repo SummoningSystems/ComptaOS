@@ -1,4 +1,4 @@
-# Shared household server
+# Shared financial ecosystem server
 
 ## Install
 
@@ -22,33 +22,30 @@ docker compose --env-file deployment/local.env -f deployment/compose.local.yml c
 
 Import this certificate into the trusted root certificate store on each device/browser.
 Keep Caddy's private keys in its volume. Open https://localhost or https://YOUR_LAN_IP,
-create the first user, choose **Nouveau foyer**, and enter both people's names.
-In **Membres**, create an administrator invitation and share the displayed link with
-your partner. Existing users can also be added there.
-
+create the first user, then **Créer l’écosystème**. Add people, companies and accounts
+from **Structure**. In **Application**, create a member invitation and share the link
+with your partner. See the [step-by-step ecosystem guide](../docs/ecosystem.md).
 Both users see all accounts and transactions. Person names describe financial
 ownership and do not create login accounts. The package uses one application instance;
 do not scale it or share the writable data volume between servers.
 
 ## First statement
 
-1. Rename/configure the six proposed accounts in **Comptes**.
+1. Add the desired accounts in **Structure** (no fixed count).
 2. Optionally enter the balance at the beginning of your first imported day.
 3. Import CSV, OFX or QIF into its destination account. Preview before confirming.
 4. Review possible duplicates; identical purchases on different accounts are retained.
 5. Adjust expense allocations and match internal transfers.
-6. Compare the household and professional views.
+6. Open the professional allocation’s accounting treatment in its company tab.
 
-Figures are gross cash tracking, not VAT or statutory accounting. Existing business
-workspaces retain their dedicated workflows. Forecasts never generate bank movements.
-All new household data is EUR.
-
-Receipts stay local. An optional OCR worker can be configured with OCR_LOCAL_URL;
-household OCR calls only that worker and returns text for manual review.
+Allocations track financial purpose; company accounting is explicitly reviewed.
+Recurring forecasts never generate bank movements. The ecosystem uses EUR.
+Powens synchronization is manual and requires your own configured provider credentials.
+Shared receipts stay local. Optional OCR uses only `OCR_LOCAL_URL`.
 
 ## Backups and restore
 
-Backups run daily and retain 14 days in a separate volume. **Membres** shows the
+Backups run daily and retain 14 days in a separate volume. **Application** shows the
 last success/error and offers an immediate backup. The archive includes receipts,
 authentication, metadata, and transaction history. Git alone excludes receipts and
 is not a complete backup.
@@ -82,7 +79,7 @@ Archives contain private financial and login data; restrict access to copied arc
 
 Use Git to obtain the tested release, create a backup, rebuild, and restart with
 Compose. Keep the previous Git commit and its matching backup for rollback.
-Household files use schemaVersion 1; existing company files are not moved into it.
+Ecosystem files use schemaVersion 1. Existing household/company data is retained and is not automatically migrated. Start a fresh ecosystem after taking a backup.
 Do not deploy this package through the existing public-server scripts.
 
 Check status and logs:

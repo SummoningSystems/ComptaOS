@@ -1,6 +1,7 @@
+import {useCallback} from "react";
 import { useEffect, useState } from "react";
-import { api } from "../../api/client";
-import { useAppStore } from "../../stores/appStore";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
 import type { TabType } from "../../types";
 
 interface SystemAlert {
@@ -22,12 +23,14 @@ const CATEGORY_ORDER = ["Intégrité des données", "Doublons", "Justificatifs",
 const TAB_TITLES: Partial<Record<TabType, string>> = { transactions: "Transactions", reconcile: "Rapprochement", vat: "TVA", treasury: "Trésorerie", budgets: "Budgets", export: "Export" };
 
 export function AlertsView() {
+ const {api}=useWorkspaceApi();
+
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SystemAlert["level"] | "all">("all");
   const openTab = useAppStore((state) => state.openTab);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get<{ alerts: SystemAlert[]; count: number }>("/alerts");
@@ -37,9 +40,9 @@ export function AlertsView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [api]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const filtered = filter === "all" ? alerts : alerts.filter((a) => a.level === filter);
   const counts = { error: alerts.filter((a) => a.level === "error").length, warn: alerts.filter((a) => a.level === "warn").length, info: alerts.filter((a) => a.level === "info").length };

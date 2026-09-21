@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useAppStore } from "../../stores/appStore";
-import { api, fetchPnl, PnlData } from "../../api/client";
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
+import {PnlData} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 type ReportType = "monthly" | "vat" | "activity" | "pnl";
 
@@ -92,6 +93,8 @@ function PeriodPicker({
 }
 
 export function ReportsView() {
+ const {api,fetchPnl}=useWorkspaceApi();
+
   const { openTab } = useAppStore();
   const [activeTab, setActiveTab] = useState<ReportType>("monthly");
   const [vatMode, setVatMode] = useState<"quarter" | "year">("quarter");

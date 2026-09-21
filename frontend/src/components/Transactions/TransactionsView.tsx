@@ -1,7 +1,9 @@
+import {useCallback} from "react";
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit } from "../../types";
 import { needsTransactionEvidence } from "../../utils/transactionEvidence";
-import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
+import {type ReceiptOcrProposal} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
@@ -417,6 +419,8 @@ type WorkFilter = "unjustified" | "misc" | "pending" | "duplicates" | "receipt-i
 const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
 
 export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilter; month?: string }) {
+ const {api,analyzeAttachment,fetchTransactions,updateTransaction,deleteTransaction,deleteTransactions,createTransaction,uploadAttachment,deleteAttachment,attachmentUrl,bulkUpdateStatus,fetchSmartSuggestions,applySmartCategories}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -459,7 +463,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   const [ocrReview, setOcrReview] = useState<{ transaction: Transaction; proposal: ReceiptOcrProposal } | null>(null);
   const [multiInvoiceTransaction, setMultiInvoiceTransaction] = useState<Transaction | null>(null);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
       const [data, tags] = await Promise.all([fetchTransactions(), fetchAllTags()]);
@@ -481,9 +485,9 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchTransactions]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function handleSmartCategorize() {
     const { suggestions } = await fetchSmartSuggestions();

@@ -1,3 +1,4 @@
+import {errorText} from "./liveStore";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StructureMap } from "./StructureMap";
 import { prototypeId, kinds, symbols, useEcosystem, validRelation, openScope, ROOT, type Entity, type EntityKind, type Relation } from "./model";
@@ -10,23 +11,23 @@ export function Dialog({title,children,onClose}:{title:string;children:ReactNode
   </dialog>;
 }
 export function AddEntity({kind,onClose,onCreated}:{kind:EntityKind;onClose:()=>void;onCreated:(id:string)=>void}) {
-  const {save}=useEcosystem();const [name,setName]=useState("");const [usage,setUsage]=useState("Courant personnel");const [companyType,setCompanyType]=useState("Entreprise");
-  return <Dialog title={"Ajouter · "+kinds[kind]} onClose={onClose}><form onSubmit={e=>{
-    e.preventDefault();if(!name.trim())return;const id=prototypeId();save({id,kind,name:name.trim(),...(kind==="account"?{usage}:kind==="company"?{companyType}:{})});onCreated(id);onClose();
+  const [error,setError]=useState("");const {save}=useEcosystem();const [name,setName]=useState("");const [usage,setUsage]=useState("Courant personnel");const [companyType,setCompanyType]=useState("Entreprise");
+  return <Dialog title={"Ajouter · "+kinds[kind]} onClose={onClose}><form onSubmit={async e=>{
+    e.preventDefault();if(!name.trim())return;const id=prototypeId();try{await save({id,kind,name:name.trim(),...(kind==="account"?{usage}:kind==="company"?{companyType}:{})});onCreated(id);onClose();}catch(e){setError(errorText(e));}
   }}>
     <label>Nom<input autoFocus required value={name} onChange={e=>setName(e.target.value)} placeholder={kind==="account"?"Ex. Livret commun":kind==="company"?"Ex. Nouvelle activité":"Prénom"}/></label>
     {kind==="company"&&<label>Type d’entreprise<select value={companyType} onChange={e=>setCompanyType(e.target.value)}>{["Entreprise","Holding","SCI","Autre"].map(t=><option key={t}>{t}</option>)}</select></label>}
     {kind==="account"&&<label>Usage<select value={usage} onChange={e=>setUsage(e.target.value)}>{["Courant personnel","Professionnel","Charges fixes","Quotidien","Épargne","Autre"].map(s=><option key={s}>{s}</option>)}</select></label>}
     <p className="eco-muted">Vous pourrez relier cet élément aux personnes, entreprises et comptes de votre choix.</p>
-    <footer><button type="button" onClick={onClose}>Annuler</button><button className="eco-primary">Ajouter</button></footer>
+    <p role="alert">{error}</p><footer><button type="button" onClick={onClose}>Annuler</button><button className="eco-primary">Ajouter</button></footer>
   </form></Dialog>;
 }
 export function AddRelation({onClose}:{onClose:()=>void}) {
-  const {entities,relations,connect}=useEcosystem();const [kind,setKind]=useState<Relation["kind"]>("holder");const [from,setFrom]=useState("");const [to,setTo]=useState("");
+  const [error,setError]=useState("");const {entities,relations,connect}=useEcosystem();const [kind,setKind]=useState<Relation["kind"]>("holder");const [from,setFrom]=useState("");const [to,setTo]=useState("");
   const candidate={kind,from,to};const duplicate=relations.some(r=>r.kind===kind&&r.from===from&&r.to===to);
   const sources=entities.filter(e=>kind==="holder"?e.kind!=="account":kind==="activity"?e.kind==="person":kind==="subsidiary"?e.kind==="company":e.kind==="account");
   const targets=entities.filter(e=>kind==="holder"?e.kind==="account":e.kind==="company");
-  return <Dialog title="Créer une relation" onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(!validRelation(candidate,entities,relations)||duplicate)return;connect(candidate);onClose();}}>
+  return <Dialog title="Créer une relation" onClose={onClose}><form onSubmit={async e=>{e.preventDefault();if(!validRelation(candidate,entities,relations)||duplicate)return;try{await connect(candidate);onClose();}catch(e){setError(errorText(e));}}}>
     <label>Relation<select value={kind} onChange={e=>{setKind(e.target.value as Relation["kind"]);setFrom("");setTo("");}}>
       <option value="holder">Est titulaire du compte</option><option value="activity">Exerce dans l’entreprise</option><option value="usage">Compte utilisé pour l’entreprise</option><option value="subsidiary">Entreprise → participation dans une entreprise</option>
     </select></label>
@@ -34,20 +35,20 @@ export function AddRelation({onClose}:{onClose:()=>void}) {
     <label>Vers<select required value={to} onChange={e=>setTo(e.target.value)}><option value="">Choisir…</option>{targets.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
     <p className="eco-muted">{kind==="subsidiary"?"De : entreprise mère (ex. holding). Vers : entreprise détenue (ex. SCI). La flèche va de la mère vers la participation.":"Pour un compte joint, ajoutez une relation de titulaire pour chaque personne."}</p>
     {kind==="subsidiary"&&from&&to&&!validRelation(candidate,entities,relations)&&<p role="alert">Cette relation créerait une boucle dans la hiérarchie.</p>}
-    {duplicate&&<p role="alert">Cette relation existe déjà.</p>}
+    {error&&<p role="alert">{error}</p>}{duplicate&&<p role="alert">Cette relation existe déjà.</p>}
     <footer><button type="button" onClick={onClose}>Annuler</button><button className="eco-primary" disabled={!validRelation(candidate,entities,relations)||duplicate}>Créer la relation</button></footer>
   </form></Dialog>;
 }
 function Inspector({entity,onSelect,onConnect}:{entity:Entity;onSelect:(id:string)=>void;onConnect:()=>void}) {
-  const {entities,relations,save,disconnect}=useEcosystem();const [name,setName]=useState(entity.name);const [usage,setUsage]=useState(entity.usage??"Courant personnel");const [saved,setSaved]=useState(false);const [companyType,setCompanyType]=useState(entity.companyType??"Entreprise");
+  const [error,setError]=useState("");const {entities,relations,save,disconnect}=useEcosystem();const [name,setName]=useState(entity.name);const [usage,setUsage]=useState(entity.usage??"Courant personnel");const [saved,setSaved]=useState(false);const [companyType,setCompanyType]=useState(entity.companyType??"Entreprise");
   const links=relations.filter(r=>r.from===entity.id||r.to===entity.id);
   return <aside className="eco-inspector" aria-label="Propriétés de l’élément">
     <div className="eco-eyebrow">{kinds[entity.kind]}</div><h2>{entity.name}</h2>
-    <form onSubmit={e=>{e.preventDefault();if(name.trim()){save({...entity,name:name.trim(),...(entity.kind==="account"?{usage}:entity.kind==="company"?{companyType}:{})});setSaved(true);}}}>
+    <form onSubmit={async e=>{e.preventDefault();if(name.trim()){try{await save({...entity,name:name.trim(),...(entity.kind==="account"?{usage}:entity.kind==="company"?{companyType}:{})});setSaved(true);}catch(e){setError(errorText(e));}}}}>
       <label>Nom de l’élément<input required value={name} onChange={e=>{setName(e.target.value);setSaved(false);}}/></label>
       {entity.kind==="company"&&<label>Type d’entreprise<select value={companyType} onChange={e=>{setCompanyType(e.target.value);setSaved(false);}}>{["Entreprise","Holding","SCI","Autre"].map(t=><option key={t}>{t}</option>)}</select></label>}
       {entity.kind==="account"&&<label>Usage<select value={usage} onChange={e=>{setUsage(e.target.value);setSaved(false);}}>{["Courant personnel","Professionnel","Charges fixes","Quotidien","Épargne","Autre"].map(s=><option key={s}>{s}</option>)}</select></label>}
-      <button type="submit">Enregistrer les propriétés</button>{saved&&<p role="status" className="eco-muted">Propriétés enregistrées.</p>}
+      {error&&<p role="alert">{error}</p>}<button type="submit">Enregistrer les propriétés</button>{saved&&<p role="status" className="eco-muted">Propriétés enregistrées.</p>}
     </form>
     <h3>Relations · {links.length}</h3>
     {!links.length&&<p className="eco-muted">Aucune relation. Reliez cet élément pour l’intégrer à votre structure.</p>}

@@ -17,17 +17,17 @@ test("guide et bloque le rapprochement tant que la transaction est incomplete", 
     reconciled: false,
   };
 
-  await request.post("http://127.0.0.1:3001/api/workspaces/default/transactions", {
+  await request.post("/api/workspaces/default/transactions", {
     data: { ...base, id: blockedId, label: `RAPPROCHEMENT INCOMPLET ${suffix}`, category: "misc", status: "pending", justified: false },
   });
-  await request.post("http://127.0.0.1:3001/api/workspaces/default/transactions", {
+  await request.post("/api/workspaces/default/transactions", {
     data: { ...base, id: readyId, label: `RAPPROCHEMENT PRET ${suffix}`, category: "restaurant", status: "validated", justified: true },
   });
 
-  const rejected = await request.patch(`http://127.0.0.1:3001/api/workspaces/default/reconcile/${blockedId}`, { data: { reconciled: true } });
+  const rejected = await request.patch(`/api/workspaces/default/reconcile/${blockedId}`, { data: { reconciled: true } });
   expect(rejected.status()).toBe(409);
 
-  await page.goto("/?workspace=default");
+  await page.goto("/?legacy=1&workspace=default");
   await page.getByRole("button", { name: /Rapprochement$/i }).click();
 
   const blockedRow = page.getByRole("row").filter({ hasText: `RAPPROCHEMENT INCOMPLET ${suffix}` });

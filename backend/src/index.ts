@@ -1,3 +1,4 @@
+import { ecosystemsRoutes } from "./routes/ecosystems.js";
 import "dotenv/config";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -71,6 +72,7 @@ if (LOCAL_API_KEY) {
 const AUTH_ENABLED = process.env.AUTH_ENABLED === "true";
 registerMaintenance(app);
 registerAccessControl(app);
+await app.register(ecosystemsRoutes, { prefix: "/api/ecosystems" });
 
 async function registerBusinessRoutes(app: FastifyInstance, prefix: string) {
 await app.register(filesRoutes, { prefix: prefix + "/files" });

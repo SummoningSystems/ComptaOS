@@ -60,33 +60,39 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     const attachments = [...new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])])];
     for (const attachment of attachments) if (!existsSync(join(getWorkspaceRoot(), "attachments", basename(attachment)))) anomalies.push({ severity: "blocking", code: "MISSING_ATTACHMENT", message: `Le justificatif ${attachment} est introuvable.`, transactionId: transaction.id });
     if (needsTransactionEvidence(transaction) && !options.evidenceTransactionIds?.includes(transaction.id)) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
-    const base = { journalCode: "BQ", journalLabel: "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
+    const funding = transaction.settlement ? {number:transaction.settlement.accountNumber,label:transaction.settlement.label} : config.bank;
+    const base = { journalCode: transaction.settlement?.journalCode ?? "BQ", journalLabel: transaction.settlement?.journalLabel ?? "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
     const ht = Math.abs(round(transaction.amount_ht)); const vat = Math.abs(round(transaction.vat)); const ttc = Math.abs(round(transaction.amount_ttc));
     const advanceAccount = options.advanceAccounts?.[transaction.id];
-    if (transaction.amount_ttc < 0 && advanceAccount) {
+    if (transaction.transferId) {
+      const opposite=transaction.settlement?.transferAccount;
+      if(!opposite||!validAccount(opposite)){anomalies.push({severity:"blocking",code:"TRANSFER_ACCOUNT",message:"Compte opposé du virement requis.",transactionId:transaction.id});return;}
+      lines.push(line(base,funding,transaction.label,transaction.amount_ttc>0?ttc:0,transaction.amount_ttc<0?ttc:0));
+      lines.push(line(base,opposite,transaction.label,transaction.amount_ttc<0?ttc:0,transaction.amount_ttc>0?ttc:0));
+    } else if (transaction.amount_ttc < 0 && advanceAccount) {
       lines.push(line(base, advanceAccount, `${transaction.label} - acompte fournisseur`, ttc, 0));
-      lines.push(line(base, config.bank, `${transaction.label} - règlement acompte`, 0, ttc));
+      lines.push(line(base, funding, `${transaction.label} - règlement acompte`, 0, ttc));
     } else if (transaction.amount_ttc < 0) {
       lines.push(line(base, config.categories[transaction.category], `${transaction.label} - HT`, ht, 0));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, part.amount, 0));
-      lines.push(line(base, config.bank, `${transaction.label} - TTC`, 0, ttc));
+      lines.push(line(base, funding, `${transaction.label} - TTC`, 0, ttc));
     } else if (advanceAccount) {
-      lines.push(line(base, config.bank, `${transaction.label} - encaissement`, ttc, 0));
+      lines.push(line(base, funding, `${transaction.label} - encaissement`, ttc, 0));
       lines.push(line(base, advanceAccount, `${transaction.label} - compte tiers`, 0, ttc));
     } else if (transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "supplier_advance_refund") {
       const refundAccount = config.categories[transaction.category] ?? { number: "409100", label: "Fournisseurs - avances et acomptes versés" };
       if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_ADVANCE_REFUND", message: "Un remboursement d'acompte fournisseur ne doit pas porter de TVA sur le mouvement bancaire.", transactionId: transaction.id });
-      lines.push(line(base, config.bank, `${transaction.label} - remboursement reçu`, ttc, 0));
+      lines.push(line(base, funding, `${transaction.label} - remboursement reçu`, ttc, 0));
       lines.push(line(base, refundAccount, `${transaction.label} - remboursement d'acompte fournisseur`, 0, ttc));
     } else if (transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "expense_refund") {
       const expenseAccount = config.categories[transaction.category];
-      lines.push(line(base, config.bank, `${transaction.label} - remboursement reçu`, ttc, 0));
+      lines.push(line(base, funding, `${transaction.label} - remboursement reçu`, ttc, 0));
       lines.push(line(base, expenseAccount, `${transaction.label} - avoir sur charge`, 0, ht));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - correction TVA déductible${part.rate === undefined ? "" : ` ${part.rate} %`}`, 0, part.amount));
     } else {
       const configuredCategory = config.categories[transaction.category];
       const revenueAccount = configuredCategory?.number.startsWith("7") ? configuredCategory : config.revenue;
-      lines.push(line(base, config.bank, `${transaction.label} - TTC`, ttc, 0));
+      lines.push(line(base, funding, `${transaction.label} - TTC`, ttc, 0));
       lines.push(line(base, revenueAccount, `${transaction.label} - HT`, 0, ht));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatCollected, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, 0, part.amount));
     }

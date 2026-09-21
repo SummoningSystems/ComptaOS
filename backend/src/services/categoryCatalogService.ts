@@ -16,6 +16,7 @@ const builtin = (id: string, label: string, number: string, accountLabel: string
   ({ id, label, account: { number, label: accountLabel }, kind, builtin: true, active: true });
 
 export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
+  builtin("internal_transfer", "Virement interne", "580000", "Virements internes", "both"),
   builtin("telecom", "Internet et télécommunications", "626000", "Frais postaux et télécommunications"),
   builtin("hosting", "Hébergement web et cloud", "626000", "Hébergement et services en ligne"),
   builtin("software", "Logiciels et licences", "615600", "Maintenance et logiciels"),
@@ -74,6 +75,7 @@ export function loadCategoryCatalog(): CategoryDefinition[] {
 export type TransactionAccountingNature = "expense" | "revenue" | "expense_refund" | "supplier_advance_refund" | "neutral";
 
 export function transactionAccountingNature(categoryId: string, amountTtc: number, treatment?: "revenue" | "expense_refund" | "supplier_advance_refund"): TransactionAccountingNature {
+  if (categoryId === "internal_transfer") return "neutral";
   if (amountTtc < 0) return "expense";
   if (amountTtc === 0) return "neutral";
   if (treatment) return treatment;

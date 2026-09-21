@@ -17,21 +17,18 @@ import {
   CompanyProfile,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
-
-// En production (base path configuré dans vite.config.ts), l'API est sous BASE_URL/api
 export function buildApiUrl(basePath: string, path = ""): string {
   const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
   const normalizedPath = path.replace(/^\/+/, "");
   return `${normalizedBase}api${normalizedPath ? `/${normalizedPath}` : ""}`;
 }
-
 export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
 let workspaceId = new URLSearchParams(window.location.search).get("workspace") ?? "";
 let preferenceKey = "comptaos_workspace_local";
 export function currentWorkspaceId() { return workspaceId; }
 function scopedPath(path: string) {
   const clean = path.replace(/^\//, "");
-  if (!workspaceId || /^(auth|companies|workspaces|health|backups|license|waitlist|stripe)(\/|$)/.test(clean)) return clean;
+  if (!workspaceId || /^(auth|companies|workspaces|ecosystems|health|backups|license|waitlist|stripe)(\/|$)/.test(clean)) return clean;
   return "workspaces/" + encodeURIComponent(workspaceId) + "/" + clean;
 }
 api.interceptors.request.use(config => { config.url = scopedPath(config.url ?? ""); return config; });
@@ -55,7 +52,11 @@ export function selectWorkspace(id: string) {
   url.searchParams.set("workspace", id);
   window.history.replaceState(null, "", url);
 }
-
+export function apiUrl(path: string): string {
+  return buildApiUrl(import.meta.env.BASE_URL, scopedPath(path));
+}
+const _apiKey = localStorage.getItem("comptaos_api_key");
+if (_apiKey) api.defaults.headers.common["X-API-Key"] = _apiKey;
 export interface ReceiptOcrProposal {
   supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountVat?: number; amountTtc: number;
   category: Transaction["category"]; vatSplits: Array<{ rate: number; amountHt?: number; amountVat?: number; amountTtc: number }>;
@@ -63,19 +64,102 @@ export interface ReceiptOcrProposal {
 }
 export interface AttachmentOcrResult { status: "success" | "unavailable" | "error"; proposal?: ReceiptOcrProposal; automaticProposal?: ReceiptOcrProposal; rawText?: string; validatedAt?: string; message?: string }
 export interface PendingReceipt { id: string; filename: string; originalName: string; mimetype: string; createdAt: string; ocr: AttachmentOcrResult }
-
-/** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
-export function apiUrl(path: string): string {
-  return buildApiUrl(import.meta.env.BASE_URL, scopedPath(path));
+export interface BatchOcrProgress { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string }
+export interface ReconciliationResult { transaction: Transaction; transactions: Transaction[]; proposal?: ReceiptOcrProposal; appliedProposal: boolean }
+export interface SmartSuggestion {
+  id: string;
+  label: string;
+  amount_ttc: number;
+  suggestedCategory: string;
+  suggestedVatRate?: number;
+  confidenceLevel: "high" | "medium" | "low";
+  confidenceScore: number;
+  matchedKeyword: string;
+  reason: string;
 }
-
-// Injecte automatiquement X-API-Key si configurée (stockée dans localStorage)
-const _apiKey = localStorage.getItem("comptaos_api_key");
-if (_apiKey) api.defaults.headers.common["X-API-Key"] = _apiKey;
-
-// ── OCR ───────────────────────────────────────────────────────────────────────
-
-export async function uploadInvoicePdf(file: File): Promise<{
+export type GitProvider = "github" | "gitlab" | "gitea" | "custom" | "local";
+export interface GitSyncStatus {
+  configured: boolean;
+  provider?: GitProvider;
+  remoteUrl?: string;
+  branch?: string;
+  hasToken: boolean;
+  ahead: number;
+  behind: number;
+  local: { ready: boolean; error?: string; uncommitted: number; lastCommit?: string; lastAutoCommitAt?: string };
+  localDestinationAllowed: boolean;
+}
+export interface GitSyncConfig {
+  provider: GitProvider;
+  remoteUrl: string;
+  token?: string;
+  branch: string;
+}
+export interface PnlLine {
+  account: string;
+  label: string;
+  amount: number;
+  count: number;
+}
+export interface PnlData {
+  year: string;
+  produits: PnlLine[];
+  charges: PnlLine[];
+  total_produits: number;
+  total_charges: number;
+  resultat_brut: number;
+  is_estimate: number;
+  resultat_net: number;
+}
+export interface VatTransactionDetail {
+  id: string;
+  date: string;
+  label: string;
+  category: string;
+  amount_ttc: number;
+  amount_ht: number;
+  vat: number;
+  vat_rate: number;
+  vat_splits: { rate: number; amount_ttc: number }[];
+  direction: "collected" | "deductible";
+  quarter: string;
+}
+export interface VatQuarterData {
+  quarter: string;
+  collected: number;
+  deductible: number;
+  net: number;
+  revenue: number;
+  expenses: number;
+}
+export interface VatSummaryData {
+  year: string;
+  quarters: VatQuarterData[];
+  total: { collected: number; deductible: number; net: number };
+  regime?: import("../types").CompanyProfile["vatRegime"];
+  referenceYear?: number;
+  referenceAmount?: number;
+  reserve?: number;
+  payments?: number;
+  nextDue?: { period: string; label: string; estimatedAmount: number; provisional: boolean };
+  details: VatTransactionDetail[];
+}
+export interface GitCommit {
+  hash: string;
+  shortHash: string;
+  date: string;
+  message: string;
+  author: string;
+  filesChanged: number;
+}
+export function createWorkspaceApi(workspaceId: string) {
+ const revisions=new Map<string,number>();
+ const api=axios.create({baseURL:buildApiUrl(import.meta.env.BASE_URL)});
+ if(_apiKey)api.defaults.headers.common['X-API-Key']=_apiKey;
+ const scoped=(path:string)=>{const clean=path.replace(/^\//,'');return !workspaceId || /^(auth|companies|workspaces|ecosystems|health|backups|license|waitlist|stripe)(\/|$)/.test(clean)?clean:'workspaces/'+encodeURIComponent(workspaceId)+'/'+clean;};
+ api.interceptors.request.use(config=>{config.url=scoped(config.url??'');return config;});
+ const apiUrl=(path:string)=>buildApiUrl(import.meta.env.BASE_URL,scoped(path));
+ async function uploadInvoicePdf(file: File): Promise<{
   invoice: Partial<import("../types").Invoice>;
   rawText: string;
 }> {
@@ -86,72 +170,57 @@ export async function uploadInvoicePdf(file: File): Promise<{
   });
   return data;
 }
-
-// ── Files ────────────────────────────────────────────────────────────────────
-
-export async function fetchFileTree(): Promise<FileNode[]> {
+async function fetchFileTree(): Promise<FileNode[]> {
   const { data } = await api.get<FileNode[]>("/files");
   return data;
 }
-
-export async function fetchFileContent(path: string): Promise<string> {
+async function fetchFileContent(path: string): Promise<string> {
   const { data } = await api.get<{ content: string }>("/files/content", {
     params: { path },
   });
   return data.content;
 }
-
-export async function saveFileContent(path: string, content: string): Promise<void> {
+async function saveFileContent(path: string, content: string): Promise<void> {
   await api.put("/files/content", { path, content });
 }
-
-export async function deleteFile(path: string): Promise<void> {
+async function deleteFile(path: string): Promise<void> {
   await api.delete("/files", { params: { path } });
 }
-
-export async function createDirectory(path: string): Promise<void> {
+async function createDirectory(path: string): Promise<void> {
   await api.post("/files/directory", { path });
 }
-
-export async function renameNode(oldPath: string, newPath: string): Promise<void> {
+async function renameNode(oldPath: string, newPath: string): Promise<void> {
   await api.post("/files/rename", { oldPath, newPath });
 }
-
-// ── Transactions ──────────────────────────────────────────────────────────────
-
-export async function fetchTransactions(): Promise<Transaction[]> {
+async function fetchTransactions(): Promise<Transaction[]> {
   const { data } = await api.get<Transaction[]>("/transactions");
+  for(const transaction of data)if(transaction.revision!==undefined)revisions.set(transaction.id,transaction.revision);
   return data;
 }
-
-export async function updateTransaction(id: string, patch: Partial<Transaction>): Promise<Transaction> {
-  const { data } = await api.patch<Transaction>(`/transactions/${id}`, patch);
+async function updateTransaction(id: string, patch: Partial<Transaction>): Promise<Transaction> {
+  const { data } = await api.patch<Transaction>(`/transactions/${id}`, {revision:revisions.get(id),...patch});
+  if(data.revision!==undefined)revisions.set(id,data.revision);
   return data;
 }
-
-export async function deleteTransaction(id: string): Promise<void> {
+async function deleteTransaction(id: string): Promise<void> {
   await api.delete(`/transactions/${id}`);
 }
-
-export async function deleteTransactions(ids: string[]): Promise<void> {
+async function deleteTransactions(ids: string[]): Promise<void> {
   await api.delete("/transactions", { data: { ids } });
 }
-
-export async function bulkUpdateStatus(
+async function bulkUpdateStatus(
   ids: string[],
   status: Transaction["status"]
 ): Promise<{ updated: number }> {
   const { data } = await api.patch<{ updated: number }>("/transactions/bulk-status", { ids, status });
   return data;
 }
-
-export async function createTransaction(txn: Omit<Transaction, "id">): Promise<Transaction> {
+async function createTransaction(txn: Omit<Transaction, "id">): Promise<Transaction> {
   const id = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const { data } = await api.post<Transaction>("/transactions", { id, ...txn });
   return data;
 }
-
-export async function uploadAttachment(
+async function uploadAttachment(
   txnId: string,
   file: File,
   options?: { skipOcr?: boolean; signal?: AbortSignal },
@@ -172,22 +241,18 @@ export async function uploadAttachment(
   });
   return { ...data, compression };
 }
-
-export async function analyzeAttachment(txnId: string, signal?: AbortSignal): Promise<{ transaction: Transaction; ocr: AttachmentOcrResult }> {
+async function analyzeAttachment(txnId: string, signal?: AbortSignal): Promise<{ transaction: Transaction; ocr: AttachmentOcrResult }> {
   const { data } = await api.post(`/attachments/analyze/${txnId}`, undefined, { signal });
   return data;
 }
-
-export function rawFileUrl(path: string): string {
+function rawFileUrl(path: string): string {
   return `${apiUrl("files/raw")}?path=${encodeURIComponent(path)}`;
 }
-
-export async function fetchPendingReceipts(): Promise<PendingReceipt[]> {
+async function fetchPendingReceipts(): Promise<PendingReceipt[]> {
   const { data } = await api.get<PendingReceipt[]>("/attachments/inbox");
   return data;
 }
-
-export async function uploadPendingReceipt(file: File, options?: { skipOcr?: boolean }): Promise<{ receipt: PendingReceipt; compression: CompressionResult }> {
+async function uploadPendingReceipt(file: File, options?: { skipOcr?: boolean }): Promise<{ receipt: PendingReceipt; compression: CompressionResult }> {
   let compression: CompressionResult;
   try {
     compression = await compressAttachment(file);
@@ -199,342 +264,226 @@ export async function uploadPendingReceipt(file: File, options?: { skipOcr?: boo
   const { data } = await api.post<PendingReceipt>("/attachments/inbox", form, { headers: { "Content-Type": "multipart/form-data" }, params: options?.skipOcr ? { skipOcr: "true" } : undefined });
   return { receipt: data, compression };
 }
-
-export async function analyzePendingReceipt(receiptId: string): Promise<PendingReceipt> {
+async function analyzePendingReceipt(receiptId: string): Promise<PendingReceipt> {
   const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/analyze`);
   return data;
 }
-
-export async function updatePendingReceiptOcr(receiptId: string, proposal: ReceiptOcrProposal): Promise<PendingReceipt> {
+async function updatePendingReceiptOcr(receiptId: string, proposal: ReceiptOcrProposal): Promise<PendingReceipt> {
   const { data } = await api.patch<PendingReceipt>(`/attachments/inbox/${receiptId}/ocr`, { proposal: { supplier: proposal.supplier, date: proposal.date, invoice_ref: proposal.invoiceRef, amount_ht: proposal.amountHt, amount_vat: proposal.amountVat, amount_ttc: proposal.amountTtc, category: proposal.category, confidence: "high", vat_splits: proposal.vatSplits.map((row) => ({ rate: row.rate, amount_ht: row.amountHt, amount_vat: row.amountVat, amount_ttc: row.amountTtc })) } });
   return data;
 }
-
-export async function rotatePendingReceipt(receiptId: string, degrees: -90 | 90 | 180): Promise<PendingReceipt> {
+async function rotatePendingReceipt(receiptId: string, degrees: -90 | 90 | 180): Promise<PendingReceipt> {
   const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/rotate`, { degrees });
   return data;
 }
-export async function transformPendingReceipt(receiptId: string, operation: "enhance" | "crop"): Promise<PendingReceipt> {
+async function transformPendingReceipt(receiptId: string, operation: "enhance" | "crop"): Promise<PendingReceipt> {
   const { data } = await api.post<PendingReceipt>(`/attachments/inbox/${receiptId}/transform`, { operation }); return data;
 }
-
-export interface BatchOcrProgress { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string }
-export async function startPendingReceiptBatchOcr(ids?: string[]): Promise<BatchOcrProgress> {
+async function startPendingReceiptBatchOcr(ids?: string[]): Promise<BatchOcrProgress> {
   const { data } = await api.post<BatchOcrProgress>("/attachments/inbox/analyze-batch", ids ? { ids } : {});
   return data;
 }
-export async function fetchPendingReceiptBatchOcr(): Promise<BatchOcrProgress> {
+async function fetchPendingReceiptBatchOcr(): Promise<BatchOcrProgress> {
   const { data } = await api.get<BatchOcrProgress>("/attachments/inbox/analyze-batch");
   return data;
 }
-
-export interface ReconciliationResult { transaction: Transaction; transactions: Transaction[]; proposal?: ReceiptOcrProposal; appliedProposal: boolean }
-export async function linkPendingReceipt(receiptId: string, transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+async function linkPendingReceipt(receiptId: string, transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
   const { data } = await api.post<ReconciliationResult>(`/attachments/inbox/${receiptId}/link`, { transactionId, applyProposal: true, ...match });
   return data;
 }
-
-export async function linkPendingReceiptGroup(receiptIds: string[], transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+async function linkPendingReceiptGroup(receiptIds: string[], transactionId: string, match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
   const { data } = await api.post<ReconciliationResult>("/attachments/inbox/link-group", { receiptIds, transactionId, ...match }); return data;
 }
-
-export async function linkPendingReceiptToMany(receiptId: string, transactionIds: string[], match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
+async function linkPendingReceiptToMany(receiptId: string, transactionIds: string[], match?: { score?: number; reasons?: string[] }): Promise<ReconciliationResult> {
   const { data } = await api.post<ReconciliationResult>(`/attachments/inbox/${receiptId}/link-many`, { transactionIds, ...match }); return data;
 }
-
-export async function deletePendingReceipt(receiptId: string): Promise<void> {
+async function deletePendingReceipt(receiptId: string): Promise<void> {
   await api.delete(`/attachments/inbox/${receiptId}`);
 }
-
-export async function deleteAttachment(txnId: string, filename: string): Promise<Transaction> {
+async function deleteAttachment(txnId: string, filename: string): Promise<Transaction> {
   const { data } = await api.delete<{ transaction: Transaction }>(`/attachments/${txnId}`, {
     data: { filename },
   });
   return data.transaction;
 }
-
-export function attachmentUrl(filename: string): string {
+function attachmentUrl(filename: string): string {
   return apiUrl(`/attachments/file/${encodeURIComponent(filename)}`);
 }
-
-export async function fetchAttachmentBlob(filename: string): Promise<Blob> {
+async function fetchAttachmentBlob(filename: string): Promise<Blob> {
   const { data } = await api.get<Blob>(`/attachments/file/${encodeURIComponent(filename)}`, { responseType: "blob" });
   return data;
 }
-
-export async function fetchAttachmentObjectUrl(filename: string): Promise<string> {
+async function fetchAttachmentObjectUrl(filename: string): Promise<string> {
   return URL.createObjectURL(await fetchAttachmentBlob(filename));
 }
-
-// ── Import CSV ────────────────────────────────────────────────────────────────
-
-export async function previewCsv(content: string): Promise<{
+async function previewCsv(content: string): Promise<{
   columns: string[];
   samples: string[][];
 }> {
   const { data } = await api.post("/import/preview", { content });
   return data;
 }
-
-export async function importCsv(
+async function importCsv(
   content: string,
   mapping: CsvMappingConfig
 ): Promise<{ imported: number; skipped: number; transactions: Transaction[] }> {
   const { data } = await api.post("/import/csv", { content, mapping });
   return data;
 }
-
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-
-export async function fetchDashboard(year?: string): Promise<DashboardData> {
+async function fetchDashboard(year?: string): Promise<DashboardData> {
   const { data } = await api.get<DashboardData>("/dashboard", { params: year ? { year } : undefined });
   return data;
 }
-
-// ── Frais récurrents manuels ──────────────────────────────────────────────────
-
-export async function fetchManualRecurring(): Promise<ManualRecurring[]> {
+async function fetchManualRecurring(): Promise<ManualRecurring[]> {
   const { data } = await api.get<ManualRecurring[]>("/recurring/manual");
   return data;
 }
-
-export async function saveManualRecurring(entries: ManualRecurring[]): Promise<void> {
+async function saveManualRecurring(entries: ManualRecurring[]): Promise<void> {
   await api.put("/recurring/manual", entries);
 }
-
-export async function fetchHrEmployees(): Promise<import("../types").HrEmployee[]> {
+async function fetchHrEmployees(): Promise<import("../types").HrEmployee[]> {
   const { data } = await api.get<import("../types").HrEmployee[]>("/hr/employees");
   return data;
 }
-
-export async function saveHrEmployees(entries: import("../types").HrEmployee[]): Promise<void> {
+async function saveHrEmployees(entries: import("../types").HrEmployee[]): Promise<void> {
   await api.put("/hr/employees", entries);
 }
-
-export async function fetchHrWorkspace(): Promise<import("../types").HrStore> {
+async function fetchHrWorkspace(): Promise<import("../types").HrStore> {
   const { data } = await api.get<import("../types").HrStore>("/hr/workspace"); return data;
 }
-export async function saveHrWorkspace(store: import("../types").HrStore): Promise<void> { await api.put("/hr/workspace", store); }
-export async function uploadHrDocument(employeeId: string, type: import("../types").HrDocumentType, month: string, file: File): Promise<import("../types").HrDocument> {
+async function saveHrWorkspace(store: import("../types").HrStore): Promise<void> { await api.put("/hr/workspace", store); }
+async function uploadHrDocument(employeeId: string, type: import("../types").HrDocumentType, month: string, file: File): Promise<import("../types").HrDocument> {
   const form = new FormData(); form.append("file", file); const { data } = await api.post(`/hr/documents/${employeeId}`, form, { params: { type, month: month || undefined }, headers: { "Content-Type": "multipart/form-data" } }); return data;
 }
-export async function deleteHrDocument(id: string): Promise<void> { await api.delete(`/hr/documents/${id}`); }
-export async function linkHrPayslip(id: string, transactionId?: string): Promise<void> { await api.post(`/hr/documents/${id}/link`, { transactionId }); }
-
-// ── Paramètres (règles + alerte) ──────────────────────────────────────────────────────
-
-export async function fetchCategoryRules(): Promise<CategoryRule[]> {
+async function deleteHrDocument(id: string): Promise<void> { await api.delete(`/hr/documents/${id}`); }
+async function linkHrPayslip(id: string, transactionId?: string): Promise<void> { await api.post(`/hr/documents/${id}/link`, { transactionId }); }
+async function fetchCategoryRules(): Promise<CategoryRule[]> {
   const { data } = await api.get<CategoryRule[]>("/settings/category-rules");
   return data;
 }
-
-export async function saveCategoryRules(rules: CategoryRule[]): Promise<void> {
+async function saveCategoryRules(rules: CategoryRule[]): Promise<void> {
   await api.put("/settings/category-rules", rules);
 }
-
-export async function fetchTreasuryAlert(): Promise<TreasuryAlert> {
+async function fetchTreasuryAlert(): Promise<TreasuryAlert> {
   const { data } = await api.get<TreasuryAlert>("/settings/treasury-alert");
   return data;
 }
-
-export async function saveTreasuryAlert(alert: TreasuryAlert): Promise<void> {
+async function saveTreasuryAlert(alert: TreasuryAlert): Promise<void> {
   await api.put("/settings/treasury-alert", alert);
 }
-
-// ── Factures clients ───────────────────────────────────────────────────────────────────
-
-export async function fetchInvoices(): Promise<OutgoingInvoice[]> {
+async function fetchInvoices(): Promise<OutgoingInvoice[]> {
   const { data } = await api.get<OutgoingInvoice[]>("/invoices/");
   return data;
 }
-
-export async function createInvoice(inv: Omit<OutgoingInvoice, "id"> & { id?: string }): Promise<OutgoingInvoice> {
+async function createInvoice(inv: Omit<OutgoingInvoice, "id"> & { id?: string }): Promise<OutgoingInvoice> {
   const { data } = await api.post<OutgoingInvoice>("/invoices/", inv);
   return data;
 }
-
-export async function updateInvoice(id: string, inv: OutgoingInvoice): Promise<OutgoingInvoice> {
+async function updateInvoice(id: string, inv: OutgoingInvoice): Promise<OutgoingInvoice> {
   const { data } = await api.put<OutgoingInvoice>(`/invoices/${id}`, inv);
   return data;
 }
-
-export async function deleteInvoice(id: string): Promise<void> {
+async function deleteInvoice(id: string): Promise<void> {
   await api.delete(`/invoices/${id}`);
 }
-
-// ── Devis ─────────────────────────────────────────────────────────────────────
-
-export async function fetchQuotes(): Promise<Quote[]> {
+async function fetchQuotes(): Promise<Quote[]> {
   const { data } = await api.get<Quote[]>("/quotes/");
   return data;
 }
-
-export async function createQuote(q: Quote): Promise<Quote> {
+async function createQuote(q: Quote): Promise<Quote> {
   const { data } = await api.post<Quote>("/quotes/", q);
   return data;
 }
-
-export async function updateQuote(id: string, q: Quote): Promise<Quote> {
+async function updateQuote(id: string, q: Quote): Promise<Quote> {
   const { data } = await api.put<Quote>(`/quotes/${id}`, q);
   return data;
 }
-
-export async function deleteQuote(id: string): Promise<void> {
+async function deleteQuote(id: string): Promise<void> {
   await api.delete(`/quotes/${id}`);
 }
-
-export async function convertQuoteToInvoice(id: string): Promise<OutgoingInvoice> {
+async function convertQuoteToInvoice(id: string): Promise<OutgoingInvoice> {
   const { data } = await api.post<OutgoingInvoice>(`/quotes/${id}/convert`);
   return data;
 }
-
-// ── Configuration IA ─────────────────────────────────────────────────────
-
-export async function fetchAiConfig(): Promise<AiConfigStatus> {
+async function fetchAiConfig(): Promise<AiConfigStatus> {
   const { data } = await api.get<AiConfigStatus>("/settings/ai");
   return data;
 }
-
-export async function saveAiConfig(config: AiConfig): Promise<void> {
+async function saveAiConfig(config: AiConfig): Promise<void> {
   await api.put("/settings/ai", config);
 }
-
-// ── Budgets par catégorie ─────────────────────────────────────────────────────
-
-export async function fetchBudgets(): Promise<CategoryBudget[]> {
+async function fetchBudgets(): Promise<CategoryBudget[]> {
   const { data } = await api.get<CategoryBudget[]>("/settings/budgets");
   return data;
 }
-
-export async function saveBudgets(budgets: CategoryBudget[]): Promise<void> {
+async function saveBudgets(budgets: CategoryBudget[]): Promise<void> {
   await api.put("/settings/budgets", budgets);
 }
-
-// ── Entreprises (multi-dossiers) ──────────────────────────────────────────────
-
-export async function fetchCompanies(): Promise<Company[]> {
+async function fetchCompanies(): Promise<Company[]> {
   const { data } = await api.get<Company[]>("/companies");
   return data;
 }
-
-export async function fetchActiveCompany(): Promise<Company | null> {
+async function fetchActiveCompany(): Promise<Company | null> {
   const list = await fetchCompanies();
   return list.find(c => c.id === workspaceId) ?? list[0] ?? null;
 }
-
-export async function setActiveCompanyApi(companyId: string): Promise<void> {
+async function setActiveCompanyApi(companyId: string): Promise<void> {
   await api.put("/companies/active", { companyId });
   selectWorkspace(companyId);
 }
-
-export async function createCompanyApi(name: string): Promise<Company> {
+async function createCompanyApi(name: string): Promise<Company> {
   const { data } = await api.post<Company>("/companies", { name });
   return data;
 }
-
-// ── Smart catégorisation ───────────────────────────────────────────────────────
-
-export interface SmartSuggestion {
-  id: string;
-  label: string;
-  amount_ttc: number;
-  suggestedCategory: string;
-  suggestedVatRate?: number;
-  confidenceLevel: "high" | "medium" | "low";
-  confidenceScore: number;
-  matchedKeyword: string;
-  reason: string;
-}
-
-export async function fetchSmartSuggestions(): Promise<{ suggestions: SmartSuggestion[]; learnedPatterns: number }> {
+async function fetchSmartSuggestions(): Promise<{ suggestions: SmartSuggestion[]; learnedPatterns: number }> {
   const { data } = await api.get<{ suggestions: SmartSuggestion[]; learnedPatterns: number }>("/transactions/smart-categorize");
   return data;
 }
-
-// ── Synchronisation git distante ──────────────────────────────────────────────
-
-export type GitProvider = "github" | "gitlab" | "gitea" | "custom" | "local";
-
-export interface GitSyncStatus {
-  configured: boolean;
-  provider?: GitProvider;
-  remoteUrl?: string;
-  branch?: string;
-  hasToken: boolean;
-  ahead: number;
-  behind: number;
-  local: { ready: boolean; error?: string; uncommitted: number; lastCommit?: string; lastAutoCommitAt?: string };
-  localDestinationAllowed: boolean;
-}
-
-export async function fetchCategories(): Promise<CategoryDefinition[]> {
+async function fetchCategories(): Promise<CategoryDefinition[]> {
   const { data } = await api.get<CategoryDefinition[]>("/settings/categories");
   return data;
 }
-
-export async function createCategory(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
+async function createCategory(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
   const { data } = await api.post<CategoryDefinition>("/settings/categories", category);
   return data;
 }
-
-export async function updateCategoryDefinition(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
+async function updateCategoryDefinition(category: Omit<CategoryDefinition, "builtin">): Promise<CategoryDefinition> {
   const { data } = await api.put<CategoryDefinition>(`/settings/categories/${category.id}`, category);
   return data;
 }
-
-export async function deleteCategory(id: string): Promise<void> {
+async function deleteCategory(id: string): Promise<void> {
   await api.delete(`/settings/categories/${id}`);
 }
-
-export interface GitSyncConfig {
-  provider: GitProvider;
-  remoteUrl: string;
-  token?: string;
-  branch: string;
-}
-
-export async function fetchGitSyncStatus(): Promise<GitSyncStatus> {
+async function fetchGitSyncStatus(): Promise<GitSyncStatus> {
   const { data } = await api.get<GitSyncStatus>("/git/sync");
   return data;
 }
-
-export async function configureGitSync(config: GitSyncConfig): Promise<void> {
+async function configureGitSync(config: GitSyncConfig): Promise<void> {
   await api.post("/git/sync/configure", config);
 }
-
-export async function testGitSync(config: Omit<GitSyncConfig, "provider"> & { provider?: GitProvider }): Promise<{ ok: boolean; error?: string }> {
+async function testGitSync(config: Omit<GitSyncConfig, "provider"> & { provider?: GitProvider }): Promise<{ ok: boolean; error?: string }> {
   const { data } = await api.post<{ ok: boolean; error?: string }>("/git/sync/test", config);
   return data;
 }
-
-export async function gitSyncPush(): Promise<{ ok: boolean; message: string }> {
+async function gitSyncPush(): Promise<{ ok: boolean; message: string }> {
   const { data } = await api.post<{ ok: boolean; message: string }>("/git/sync/push");
   return data;
 }
-
-export async function gitSyncPull(): Promise<{ ok: boolean; message: string }> {
+async function gitSyncPull(): Promise<{ ok: boolean; message: string }> {
   const { data } = await api.post<{ ok: boolean; message: string }>("/git/sync/pull");
   return data;
 }
-
-export async function deleteGitSync(): Promise<void> {
+async function deleteGitSync(): Promise<void> {
   await api.delete("/git/sync");
 }
-
-// ── Profil entreprise ─────────────────────────────────────────────────────────
-
-export async function fetchCompanyProfile(): Promise<CompanyProfile> {
+async function fetchCompanyProfile(): Promise<CompanyProfile> {
   const { data } = await api.get<CompanyProfile>("/settings/profile");
   return data;
 }
-
-export async function saveCompanyProfile(profile: CompanyProfile): Promise<void> {
+async function saveCompanyProfile(profile: CompanyProfile): Promise<void> {
   await api.put("/settings/profile", profile);
 }
-
-// ── Téléchargement PDF facture ────────────────────────────────────────────────
-
-export async function downloadInvoicePdf(id: string, number: string): Promise<void> {
+async function downloadInvoicePdf(id: string, number: string): Promise<void> {
   const { data } = await api.get(`/invoices/${id}/pdf`, { responseType: "blob" });
   const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
   const a = document.createElement("a");
@@ -543,95 +492,109 @@ export async function downloadInvoicePdf(id: string, number: string): Promise<vo
   a.click();
   URL.revokeObjectURL(url);
 }
-
-export async function applySmartCategories(changes: { id: string; category: string; vat_rate?: number }[]): Promise<{ updated: number }> {
+async function applySmartCategories(changes: { id: string; category: string; vat_rate?: number }[]): Promise<{ updated: number }> {
   const { data } = await api.post<{ updated: number }>("/transactions/smart-categorize/apply", { changes });
   return data;
 }
-
-// ── Compte de résultat (P&L) ──────────────────────────────────────────────────
-
-export interface PnlLine {
-  account: string;
-  label: string;
-  amount: number;
-  count: number;
-}
-
-export interface PnlData {
-  year: string;
-  produits: PnlLine[];
-  charges: PnlLine[];
-  total_produits: number;
-  total_charges: number;
-  resultat_brut: number;
-  is_estimate: number;
-  resultat_net: number;
-}
-
-export interface VatTransactionDetail {
-  id: string;
-  date: string;
-  label: string;
-  category: string;
-  amount_ttc: number;
-  amount_ht: number;
-  vat: number;
-  vat_rate: number;
-  vat_splits: { rate: number; amount_ttc: number }[];
-  direction: "collected" | "deductible";
-  quarter: string;
-}
-
-export interface VatQuarterData {
-  quarter: string;
-  collected: number;
-  deductible: number;
-  net: number;
-  revenue: number;
-  expenses: number;
-}
-
-export interface VatSummaryData {
-  year: string;
-  quarters: VatQuarterData[];
-  total: { collected: number; deductible: number; net: number };
-  regime?: import("../types").CompanyProfile["vatRegime"];
-  referenceYear?: number;
-  referenceAmount?: number;
-  reserve?: number;
-  payments?: number;
-  nextDue?: { period: string; label: string; estimatedAmount: number; provisional: boolean };
-  details: VatTransactionDetail[];
-}
-
-export async function fetchVatSummary(year: string): Promise<VatSummaryData> {
+async function fetchVatSummary(year: string): Promise<VatSummaryData> {
   const { data } = await api.get<VatSummaryData>(`/reports/vat-summary?year=${year}`);
   return data;
 }
-
-export async function fetchPnl(year: string): Promise<PnlData> {
+async function fetchPnl(year: string): Promise<PnlData> {
   const { data } = await api.get<PnlData>(`/reports/pnl?year=${year}`);
   return data;
 }
-
-// ── Git / Historique ──────────────────────────────────────────────────────────
-
-export interface GitCommit {
-  hash: string;
-  shortHash: string;
-  date: string;
-  message: string;
-  author: string;
-  filesChanged: number;
-}
-
-export async function fetchGitLog(): Promise<{ commits: GitCommit[]; initialized: boolean }> {
+async function fetchGitLog(): Promise<{ commits: GitCommit[]; initialized: boolean }> {
   const { data } = await api.get<{ commits: GitCommit[]; initialized: boolean }>("/git/log");
   return data;
 }
-
-export async function fetchGitDiff(hash: string): Promise<string> {
+async function fetchGitDiff(hash: string): Promise<string> {
   const { data } = await api.get<{ diff: string }>(`/git/diff/${hash}`);
   return data.diff;
 }
+return {api,apiUrl,uploadInvoicePdf,fetchFileTree,fetchFileContent,saveFileContent,deleteFile,createDirectory,renameNode,fetchTransactions,updateTransaction,deleteTransaction,deleteTransactions,bulkUpdateStatus,createTransaction,uploadAttachment,analyzeAttachment,rawFileUrl,fetchPendingReceipts,uploadPendingReceipt,analyzePendingReceipt,updatePendingReceiptOcr,rotatePendingReceipt,transformPendingReceipt,startPendingReceiptBatchOcr,fetchPendingReceiptBatchOcr,linkPendingReceipt,linkPendingReceiptGroup,linkPendingReceiptToMany,deletePendingReceipt,deleteAttachment,attachmentUrl,fetchAttachmentBlob,fetchAttachmentObjectUrl,previewCsv,importCsv,fetchDashboard,fetchManualRecurring,saveManualRecurring,fetchHrEmployees,saveHrEmployees,fetchHrWorkspace,saveHrWorkspace,uploadHrDocument,deleteHrDocument,linkHrPayslip,fetchCategoryRules,saveCategoryRules,fetchTreasuryAlert,saveTreasuryAlert,fetchInvoices,createInvoice,updateInvoice,deleteInvoice,fetchQuotes,createQuote,updateQuote,deleteQuote,convertQuoteToInvoice,fetchAiConfig,saveAiConfig,fetchBudgets,saveBudgets,fetchCompanies,fetchActiveCompany,setActiveCompanyApi,createCompanyApi,fetchSmartSuggestions,fetchCategories,createCategory,updateCategoryDefinition,deleteCategory,fetchGitSyncStatus,configureGitSync,testGitSync,gitSyncPush,gitSyncPull,deleteGitSync,fetchCompanyProfile,saveCompanyProfile,downloadInvoicePdf,applySmartCategories,fetchVatSummary,fetchPnl,fetchGitLog,fetchGitDiff};
+}
+export const uploadInvoicePdf = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['uploadInvoicePdf']>) => createWorkspaceApi(workspaceId).uploadInvoicePdf(...args);
+export const fetchFileTree = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchFileTree']>) => createWorkspaceApi(workspaceId).fetchFileTree(...args);
+export const fetchFileContent = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchFileContent']>) => createWorkspaceApi(workspaceId).fetchFileContent(...args);
+export const saveFileContent = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveFileContent']>) => createWorkspaceApi(workspaceId).saveFileContent(...args);
+export const deleteFile = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteFile']>) => createWorkspaceApi(workspaceId).deleteFile(...args);
+export const createDirectory = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createDirectory']>) => createWorkspaceApi(workspaceId).createDirectory(...args);
+export const renameNode = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['renameNode']>) => createWorkspaceApi(workspaceId).renameNode(...args);
+export const fetchTransactions = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchTransactions']>) => createWorkspaceApi(workspaceId).fetchTransactions(...args);
+export const updateTransaction = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['updateTransaction']>) => createWorkspaceApi(workspaceId).updateTransaction(...args);
+export const deleteTransaction = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteTransaction']>) => createWorkspaceApi(workspaceId).deleteTransaction(...args);
+export const deleteTransactions = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteTransactions']>) => createWorkspaceApi(workspaceId).deleteTransactions(...args);
+export const bulkUpdateStatus = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['bulkUpdateStatus']>) => createWorkspaceApi(workspaceId).bulkUpdateStatus(...args);
+export const createTransaction = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createTransaction']>) => createWorkspaceApi(workspaceId).createTransaction(...args);
+export const uploadAttachment = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['uploadAttachment']>) => createWorkspaceApi(workspaceId).uploadAttachment(...args);
+export const analyzeAttachment = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['analyzeAttachment']>) => createWorkspaceApi(workspaceId).analyzeAttachment(...args);
+export const rawFileUrl = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['rawFileUrl']>) => createWorkspaceApi(workspaceId).rawFileUrl(...args);
+export const fetchPendingReceipts = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchPendingReceipts']>) => createWorkspaceApi(workspaceId).fetchPendingReceipts(...args);
+export const uploadPendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['uploadPendingReceipt']>) => createWorkspaceApi(workspaceId).uploadPendingReceipt(...args);
+export const analyzePendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['analyzePendingReceipt']>) => createWorkspaceApi(workspaceId).analyzePendingReceipt(...args);
+export const updatePendingReceiptOcr = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['updatePendingReceiptOcr']>) => createWorkspaceApi(workspaceId).updatePendingReceiptOcr(...args);
+export const rotatePendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['rotatePendingReceipt']>) => createWorkspaceApi(workspaceId).rotatePendingReceipt(...args);
+export const transformPendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['transformPendingReceipt']>) => createWorkspaceApi(workspaceId).transformPendingReceipt(...args);
+export const startPendingReceiptBatchOcr = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['startPendingReceiptBatchOcr']>) => createWorkspaceApi(workspaceId).startPendingReceiptBatchOcr(...args);
+export const fetchPendingReceiptBatchOcr = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchPendingReceiptBatchOcr']>) => createWorkspaceApi(workspaceId).fetchPendingReceiptBatchOcr(...args);
+export const linkPendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['linkPendingReceipt']>) => createWorkspaceApi(workspaceId).linkPendingReceipt(...args);
+export const linkPendingReceiptGroup = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['linkPendingReceiptGroup']>) => createWorkspaceApi(workspaceId).linkPendingReceiptGroup(...args);
+export const linkPendingReceiptToMany = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['linkPendingReceiptToMany']>) => createWorkspaceApi(workspaceId).linkPendingReceiptToMany(...args);
+export const deletePendingReceipt = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deletePendingReceipt']>) => createWorkspaceApi(workspaceId).deletePendingReceipt(...args);
+export const deleteAttachment = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteAttachment']>) => createWorkspaceApi(workspaceId).deleteAttachment(...args);
+export const attachmentUrl = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['attachmentUrl']>) => createWorkspaceApi(workspaceId).attachmentUrl(...args);
+export const fetchAttachmentBlob = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchAttachmentBlob']>) => createWorkspaceApi(workspaceId).fetchAttachmentBlob(...args);
+export const fetchAttachmentObjectUrl = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchAttachmentObjectUrl']>) => createWorkspaceApi(workspaceId).fetchAttachmentObjectUrl(...args);
+export const previewCsv = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['previewCsv']>) => createWorkspaceApi(workspaceId).previewCsv(...args);
+export const importCsv = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['importCsv']>) => createWorkspaceApi(workspaceId).importCsv(...args);
+export const fetchDashboard = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchDashboard']>) => createWorkspaceApi(workspaceId).fetchDashboard(...args);
+export const fetchManualRecurring = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchManualRecurring']>) => createWorkspaceApi(workspaceId).fetchManualRecurring(...args);
+export const saveManualRecurring = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveManualRecurring']>) => createWorkspaceApi(workspaceId).saveManualRecurring(...args);
+export const fetchHrEmployees = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchHrEmployees']>) => createWorkspaceApi(workspaceId).fetchHrEmployees(...args);
+export const saveHrEmployees = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveHrEmployees']>) => createWorkspaceApi(workspaceId).saveHrEmployees(...args);
+export const fetchHrWorkspace = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchHrWorkspace']>) => createWorkspaceApi(workspaceId).fetchHrWorkspace(...args);
+export const saveHrWorkspace = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveHrWorkspace']>) => createWorkspaceApi(workspaceId).saveHrWorkspace(...args);
+export const uploadHrDocument = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['uploadHrDocument']>) => createWorkspaceApi(workspaceId).uploadHrDocument(...args);
+export const deleteHrDocument = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteHrDocument']>) => createWorkspaceApi(workspaceId).deleteHrDocument(...args);
+export const linkHrPayslip = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['linkHrPayslip']>) => createWorkspaceApi(workspaceId).linkHrPayslip(...args);
+export const fetchCategoryRules = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchCategoryRules']>) => createWorkspaceApi(workspaceId).fetchCategoryRules(...args);
+export const saveCategoryRules = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveCategoryRules']>) => createWorkspaceApi(workspaceId).saveCategoryRules(...args);
+export const fetchTreasuryAlert = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchTreasuryAlert']>) => createWorkspaceApi(workspaceId).fetchTreasuryAlert(...args);
+export const saveTreasuryAlert = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveTreasuryAlert']>) => createWorkspaceApi(workspaceId).saveTreasuryAlert(...args);
+export const fetchInvoices = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchInvoices']>) => createWorkspaceApi(workspaceId).fetchInvoices(...args);
+export const createInvoice = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createInvoice']>) => createWorkspaceApi(workspaceId).createInvoice(...args);
+export const updateInvoice = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['updateInvoice']>) => createWorkspaceApi(workspaceId).updateInvoice(...args);
+export const deleteInvoice = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteInvoice']>) => createWorkspaceApi(workspaceId).deleteInvoice(...args);
+export const fetchQuotes = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchQuotes']>) => createWorkspaceApi(workspaceId).fetchQuotes(...args);
+export const createQuote = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createQuote']>) => createWorkspaceApi(workspaceId).createQuote(...args);
+export const updateQuote = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['updateQuote']>) => createWorkspaceApi(workspaceId).updateQuote(...args);
+export const deleteQuote = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteQuote']>) => createWorkspaceApi(workspaceId).deleteQuote(...args);
+export const convertQuoteToInvoice = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['convertQuoteToInvoice']>) => createWorkspaceApi(workspaceId).convertQuoteToInvoice(...args);
+export const fetchAiConfig = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchAiConfig']>) => createWorkspaceApi(workspaceId).fetchAiConfig(...args);
+export const saveAiConfig = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveAiConfig']>) => createWorkspaceApi(workspaceId).saveAiConfig(...args);
+export const fetchBudgets = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchBudgets']>) => createWorkspaceApi(workspaceId).fetchBudgets(...args);
+export const saveBudgets = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveBudgets']>) => createWorkspaceApi(workspaceId).saveBudgets(...args);
+export const fetchCompanies = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchCompanies']>) => createWorkspaceApi(workspaceId).fetchCompanies(...args);
+export const fetchActiveCompany = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchActiveCompany']>) => createWorkspaceApi(workspaceId).fetchActiveCompany(...args);
+export const setActiveCompanyApi = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['setActiveCompanyApi']>) => createWorkspaceApi(workspaceId).setActiveCompanyApi(...args);
+export const createCompanyApi = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createCompanyApi']>) => createWorkspaceApi(workspaceId).createCompanyApi(...args);
+export const fetchSmartSuggestions = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchSmartSuggestions']>) => createWorkspaceApi(workspaceId).fetchSmartSuggestions(...args);
+export const fetchCategories = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchCategories']>) => createWorkspaceApi(workspaceId).fetchCategories(...args);
+export const createCategory = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['createCategory']>) => createWorkspaceApi(workspaceId).createCategory(...args);
+export const updateCategoryDefinition = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['updateCategoryDefinition']>) => createWorkspaceApi(workspaceId).updateCategoryDefinition(...args);
+export const deleteCategory = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteCategory']>) => createWorkspaceApi(workspaceId).deleteCategory(...args);
+export const fetchGitSyncStatus = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchGitSyncStatus']>) => createWorkspaceApi(workspaceId).fetchGitSyncStatus(...args);
+export const configureGitSync = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['configureGitSync']>) => createWorkspaceApi(workspaceId).configureGitSync(...args);
+export const testGitSync = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['testGitSync']>) => createWorkspaceApi(workspaceId).testGitSync(...args);
+export const gitSyncPush = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['gitSyncPush']>) => createWorkspaceApi(workspaceId).gitSyncPush(...args);
+export const gitSyncPull = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['gitSyncPull']>) => createWorkspaceApi(workspaceId).gitSyncPull(...args);
+export const deleteGitSync = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['deleteGitSync']>) => createWorkspaceApi(workspaceId).deleteGitSync(...args);
+export const fetchCompanyProfile = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchCompanyProfile']>) => createWorkspaceApi(workspaceId).fetchCompanyProfile(...args);
+export const saveCompanyProfile = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['saveCompanyProfile']>) => createWorkspaceApi(workspaceId).saveCompanyProfile(...args);
+export const downloadInvoicePdf = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['downloadInvoicePdf']>) => createWorkspaceApi(workspaceId).downloadInvoicePdf(...args);
+export const applySmartCategories = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['applySmartCategories']>) => createWorkspaceApi(workspaceId).applySmartCategories(...args);
+export const fetchVatSummary = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchVatSummary']>) => createWorkspaceApi(workspaceId).fetchVatSummary(...args);
+export const fetchPnl = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchPnl']>) => createWorkspaceApi(workspaceId).fetchPnl(...args);
+export const fetchGitLog = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchGitLog']>) => createWorkspaceApi(workspaceId).fetchGitLog(...args);
+export const fetchGitDiff = (...args: Parameters<ReturnType<typeof createWorkspaceApi>['fetchGitDiff']>) => createWorkspaceApi(workspaceId).fetchGitDiff(...args);

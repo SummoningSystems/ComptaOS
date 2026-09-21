@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileNode } from "../../types";
-import { useAppStore } from "../../stores/appStore";
-import { fetchFileTree } from "../../api/client";
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface FileTreeNodeProps {
   node: FileNode;
@@ -81,6 +81,8 @@ function fileIcon(node: FileNode): string {
 }
 
 export function FileTree() {
+ const {fetchFileTree}=useWorkspaceApi();
+
   const { fileTree, setFileTree } = useAppStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function FileTree() {
     } finally {
       setLoading(false);
     }
-  }, [setFileTree]);
+  }, [fetchFileTree, setFileTree]);
 
   useEffect(() => {
     void load();

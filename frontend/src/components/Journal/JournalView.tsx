@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface JournalEntry {
   date: string;
@@ -30,6 +30,8 @@ function fmt(n: number) {
 }
 
 export function JournalView() {
+ const {api}=useWorkspaceApi();
+
   const [data, setData] = useState<JournalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -49,7 +51,7 @@ export function JournalView() {
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, api]);
 
   useEffect(() => { void load(); }, [load]);
 

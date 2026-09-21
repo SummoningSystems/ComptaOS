@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-export interface WorkspaceContext { id: string; root: string; kind: "business" | "household"; actor: string; role: string }
+export interface WorkspaceContext { id: string; root: string; kind: "business" | "household" | "ecosystem"; actor: string; role: string }
 export const workspaceContext = new AsyncLocalStorage<WorkspaceContext>();
 export const actorContext = new AsyncLocalStorage<{ id: string; role: string }>();
 const queues = new Map<string, Promise<unknown>>();

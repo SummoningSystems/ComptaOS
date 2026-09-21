@@ -15,6 +15,11 @@ export interface VatSplit {
 }
 
 export interface Transaction {
+  revision?: number;
+  documentIds?: string[];
+  transferId?: string;
+  sourceAllocation?: {ecosystemId:string;movementId:string;allocationId:string};
+  settlement?: {accountNumber:string;label:string;journalCode:string;journalLabel:string;payerId?:string;transferAccount?:{number:string;label:string}};
   id: string;
   date: string;
   label: string;
@@ -64,6 +69,7 @@ export interface DashboardData {
   vat_regime?: CompanyProfile["vatRegime"];
   next_vat_due?: { period: string; label: string; estimated_amount: number; provisional: boolean };
   treasury: number;
+  cash_unknown?: boolean;
   transaction_flow: number;
   bank_balance?: number;
   bank_balance_updated_at?: string;
@@ -197,7 +203,7 @@ export interface AiConfigStatus {
 
 export interface Company {
   id: string;
-  kind?: "business" | "household";
+  kind?: "business" | "household" | "ecosystem";
   memberIds?: string[];
   name: string;
   path: string;

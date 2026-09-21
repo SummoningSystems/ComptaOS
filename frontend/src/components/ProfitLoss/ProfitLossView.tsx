@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
-import { api, apiUrl } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => String(CURRENT_YEAR - i));
@@ -21,6 +21,8 @@ function fmt(n: number) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
 }
 export function ProfitLossView() {
+ const {api,apiUrl}=useWorkspaceApi();
+
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [data, setData] = useState<PLData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,7 @@ export function ProfitLossView() {
       .then(({ data }) => setData(data))
       .catch(() => setError("Impossible de charger les données P&L"))
       .finally(() => setLoading(false));
-  }, [year]);
+  }, [api, year]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-full text-vscode-muted text-sm">Chargement…</div>

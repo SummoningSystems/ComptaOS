@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 const EcosystemPrototype = React.lazy(() => import("./components/Ecosystem/EcosystemPrototype"));
-const prototype = new URLSearchParams(window.location.search).get("prototype") === "ecosystem";
+const prototype = import.meta.env.DEV && new URLSearchParams(window.location.search).get("prototype") === "ecosystem";
 import "./index.css";
 
 // Nettoyage de l'ancien service worker Workbox retiré pour éviter de servir

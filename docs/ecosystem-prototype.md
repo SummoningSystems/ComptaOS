@@ -1,3 +1,5 @@
+> The persisted application is now the default entry point. See [the implementation and user guide](ecosystem.md). This page describes the development-only design prototype.
+
 # Ecosystem UX prototype
 
 ## Open

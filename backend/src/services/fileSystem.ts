@@ -29,7 +29,7 @@ export function resolveSafe(relativePath: string): string {
     throw new WorkspacePathError();
   }
 
-  if (withinBase.split(path.sep).some(part => part.startsWith(".") || part.startsWith("_") || ["auth.json", "companies", "workspaces", "banking", "ai_config.json", "git_sync.json", "household.json", "household.pending.json"].includes(part))) throw new WorkspacePathError();
+  if (withinBase.split(path.sep).some(part => part.startsWith(".") || part.startsWith("_") || ["auth.json", "companies", "workspaces", "banking", "ai_config.json", "git_sync.json", "household.json", "ecosystem.json", "ecosystem.pending.json", "documents", "preferences", "household.pending.json"].includes(part))) throw new WorkspacePathError();
   let current = base;
   for (const part of withinBase.split(path.sep).filter(Boolean)) {
     current = path.join(current, part);

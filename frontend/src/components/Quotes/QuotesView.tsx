@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Quote } from "../../types";
-import { fetchQuotes, createQuote, updateQuote, deleteQuote, convertQuoteToInvoice } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const STATUS_LABELS: Record<Quote["status"], string> = {
@@ -41,6 +41,8 @@ const EMPTY_FORM: Omit<Quote, "id"> = {
 };
 
 export function QuotesView() {
+ const {fetchQuotes,createQuote,updateQuote,deleteQuote,convertQuoteToInvoice}=useWorkspaceApi();
+
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
@@ -49,7 +51,7 @@ export function QuotesView() {
 
   useEffect(() => {
     fetchQuotes().then(setQuotes).finally(() => setLoading(false));
-  }, []);
+  }, [fetchQuotes]);
 
   function openNew() {
     setForm({

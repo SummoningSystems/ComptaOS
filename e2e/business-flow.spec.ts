@@ -11,7 +11,7 @@ test.describe("Recette métier complète", () => {
       `${year}-07-15,${transactionLabel},-120.00`,
     ].join("\n");
 
-    await page.goto("/");
+    await page.goto("/?legacy=1");
 
     // 1. Import bancaire CSV avec le mapping automatique.
     await page.getByRole("button", { name: /Import CSV$/i }).click();
@@ -48,7 +48,7 @@ test.describe("Recette métier complète", () => {
 
     // 4. Export du grand livre et vérification du contenu comptable.
     await page.getByTitle("Analyses & Export").click();
-    await page.getByRole("button", { name: /Export$/i }).click();
+    await page.getByRole("button", { name: "⬇ Export", exact: true }).click();
     await page.getByText("Exports tableur historiques").click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "CSV", exact: true }).click();

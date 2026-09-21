@@ -28,8 +28,8 @@ export function TabBar() {
   function popOut(tab: Tab) {
     if (tab.type === "ecosystem") {
       const url = new URL(window.location.href);
-      url.searchParams.set("prototype", "ecosystem");
-      url.searchParams.set("prototypeTab", tab.path ?? "");
+      if (url.searchParams.get("prototype") === "ecosystem") url.searchParams.set("prototypeTab", tab.path ?? "");
+      else url.searchParams.set("ecosystemTab", tab.path ?? "");
       window.open(url, "_blank", "noopener");
       return;
     }

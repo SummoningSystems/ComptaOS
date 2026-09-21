@@ -18,20 +18,23 @@ export function registerAccessControl(app: FastifyInstance) {
         actor = { id: user.id, role: user.role };
       } catch { void reply.code(401).send({ error: "Session expirée ou utilisateur désactivé." }); return; }
     }
-    if (!publicRoute && actor.role === "readonly" && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !["/api/auth/logout","/api/companies/active"].includes(pathname)) {
+    if (!(req.method === "PUT" && /^\/api\/ecosystems\/[^/]+\/preferences$/.test(pathname)) && !publicRoute && actor.role === "readonly" && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !["/api/auth/logout","/api/companies/active"].includes(pathname)) {
       void reply.code(403).send({ error: "Accès en lecture seule." }); return;
     }
     const scoped = /^\/api\/workspaces\/([^/]+)\/(.*)$/.exec(pathname);
-    const globalRoute = /^\/api\/(auth|companies|workspaces|health|backups|license|waitlist|stripe)(\/|$)/.test(pathname);
+    const globalRoute = /^\/api\/(auth|companies|workspaces|ecosystems|health|backups|license|waitlist|stripe)(\/|$)/.test(pathname);
     if (publicRoute || (!scoped && globalRoute)) { actorContext.run(actor, done); return; }
     ensureDefaultCompany();
     const companies = loadCompanies();
     if (!scoped && companies.length !== 1) { void reply.code(400).send({ error: "workspaceId explicite requis." }); return; }
     const company = scoped ? companies.find(c => c.id === scoped[1]) : companies[0];
-    if (!company || (company.memberIds && actor.id !== "local" && !company.memberIds.includes(actor.id))) {
+    const membership = company?.ecosystemId ? companies.find(c => c.id === company.ecosystemId) : company;
+    if (!company || !membership || (membership.memberIds && actor.id !== "local" && !membership.memberIds.includes(actor.id))) {
       void reply.code(403).send({ error: "Espace inaccessible." }); return;
     }
     const resource = scoped?.[2] ?? pathname.replace(/^\/api\//, "");
+    if (company.ecosystemId && /^banking(?:\/|$)/.test(resource)) { void reply.code(409).send({error:"Utilisez les connexions bancaires de l’écosystème."}); return; }
+    if (company.kind === "ecosystem") { void reply.code(403).send({ error: "Utilisez les ressources écosystème." }); return; }
     if (company.kind === "household" && !/^household(?:\/|$)/.test(resource)) {
       void reply.code(403).send({ error: "Fonction réservée aux espaces professionnels." }); return;
     }

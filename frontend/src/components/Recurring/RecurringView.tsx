@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchManualRecurring, fetchTransactions, fetchTreasuryAlert, saveManualRecurring } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { Category, ManualRecurring, Transaction, TreasuryAlert } from "../../types";
 import { addCalendarMonths, buildForecast, detectRecurring, Frequency, monthlyEquivalent, removeManualDuplicates, scenarioAmount } from "./recurringModel";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
@@ -13,13 +13,15 @@ const today = () => new Date().toISOString().slice(0, 10);
 const euros = (value: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 
 export function RecurringView() {
+ const {fetchManualRecurring,fetchTransactions,fetchTreasuryAlert,saveManualRecurring}=useWorkspaceApi();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]); const [manual, setManual] = useState<ManualRecurring[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false }); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
   const [horizon, setHorizon] = useState<3 | 6 | 12>(6); const [view, setView] = useState<"pilot" | "calendar">("pilot");
   const [editingId, setEditingId] = useState<string | null>(null); const [form, setForm] = useState<Partial<ManualRecurring>>({});
   const [ignored, setIgnored] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("compta_dismissed_patterns") ?? "[]") as string[]));
 
-  useEffect(() => { Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert()]).then(([entries, stored, treasuryAlert]) => { setTransactions(entries); setManual(stored); setAlert(treasuryAlert); }).finally(() => setLoading(false)); }, []);
+  useEffect(() => { Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert()]).then(([entries, stored, treasuryAlert]) => { setTransactions(entries); setManual(stored); setAlert(treasuryAlert); }).finally(() => setLoading(false)); }, [fetchManualRecurring, fetchTransactions, fetchTreasuryAlert]);
   const detectedAll = useMemo(() => removeManualDuplicates(detectRecurring(transactions), manual), [transactions, manual]);
   const detected = useMemo(() => detectedAll.filter((item) => !ignored.has(item.key)), [detectedAll, ignored]);
   const currentBalance = useMemo(() => transactions.filter((entry) => entry.status !== "rejected").reduce((sum, entry) => sum + entry.amount_ttc, 0), [transactions]);

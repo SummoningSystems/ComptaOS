@@ -1,14 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import {
-  analyzePendingReceipt,
-  attachmentUrl,
-  deletePendingReceipt,
-  linkPendingReceiptGroup,
-  updatePendingReceiptOcr,
-  uploadPendingReceipt,
-  type PendingReceipt,
-  type ReceiptOcrProposal,
-} from "../../api/client";
+import {type PendingReceipt,type ReceiptOcrProposal} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import type { Transaction } from "../../types";
 import { PendingReceiptEditor } from "./PendingReceiptEditor";
 
@@ -21,6 +13,8 @@ interface Props {
 }
 
 export function MultiInvoiceDialog({ transaction, onComplete, onClose }: Props) {
+ const {analyzePendingReceipt,attachmentUrl,deletePendingReceipt,linkPendingReceiptGroup,updatePendingReceiptOcr,uploadPendingReceipt}=useWorkspaceApi();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [receipts, setReceipts] = useState<PendingReceipt[]>([]);
   const [editing, setEditing] = useState<PendingReceipt | null>(null);

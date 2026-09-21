@@ -1,3 +1,4 @@
+import { ecosystemTransactions, writeEcosystemTransaction, currentEcosystemCompany } from "./ecosystemService.js";
 import { workspaceLock } from "./workspaceContext.js";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -156,6 +157,7 @@ function ensureWatcher() {
 
 /** Charge toutes les transactions depuis les fichiers YAML du dossier transactions/. */
 export async function loadAllTransactions(): Promise<Transaction[]> {
+  const ecosystem = await ecosystemTransactions(); if (ecosystem) return ecosystem;
   ensureWatcher();
   if (cache().data) return cache().data!;
 
@@ -190,6 +192,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
 
 /** Sauvegarde une transaction dans un fichier YAML. */
 export async function saveTransaction(txn: Transaction): Promise<void> {
+  if (await writeEcosystemTransaction(normalizeTransaction(txn))) return;
   return workspaceLock(getWorkspaceRoot(), () => saveTransactionUnlocked(txn));
 }
 async function saveTransactionUnlocked(txn: Transaction): Promise<void> {
@@ -228,6 +231,13 @@ async function findTransactionFile(id: string): Promise<string> {
 
 /** Met à jour une transaction existante. */
 export async function updateTransaction(id: string, patch: Partial<Transaction>): Promise<Transaction> {
+  if (currentEcosystemCompany()) {
+    const current=(await loadAllTransactions()).find(t=>t.id===id);
+    if(!current)throw Object.assign(new Error("Traitement introuvable"),{statusCode:404});
+    const merged={...current,...patch,id:current.id};
+    const updated=["amount_ttc","amount_ht","vat","vat_rate","vat_splits"].some(k=>k in patch)?normalizeTransaction(merged):merged;
+    await writeEcosystemTransaction(updated);return updated;
+  }
   return workspaceLock(getWorkspaceRoot(), () => updateTransactionUnlocked(id, patch));
 }
 async function updateTransactionUnlocked(id: string, patch: Partial<Transaction>): Promise<Transaction> {
@@ -250,6 +260,7 @@ async function updateTransactionUnlocked(id: string, patch: Partial<Transaction>
 
 /** Supprime une transaction. */
 export async function deleteTransaction(id: string): Promise<void> {
+  if (currentEcosystemCompany()) { const t=(await loadAllTransactions()).find(t=>t.id===id);if(t)await writeEcosystemTransaction(t,true);return; }
   return workspaceLock(getWorkspaceRoot(), () => deleteTransactionUnlocked(id));
 }
 async function deleteTransactionUnlocked(id: string): Promise<void> {
