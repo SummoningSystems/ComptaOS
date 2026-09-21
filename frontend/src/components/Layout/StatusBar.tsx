@@ -3,7 +3,7 @@ import { useAppStore } from "../../stores/appStore";
 import { useTheme } from "../../hooks/useTheme";
 import { fetchGitSyncStatus, gitSyncPush, gitSyncPull, type GitSyncStatus } from "../../api/client";
 
-export function StatusBar() {
+export function StatusBar({ prototype = false }: { prototype?: boolean }) {
   const { tabs, activeTabId } = useAppStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const { theme, toggle } = useTheme();
@@ -19,10 +19,11 @@ export function StatusBar() {
   }
 
   useEffect(() => {
+    if (prototype) return;
     loadSync();
     const id = setInterval(loadSync, 60_000); // Rafraîchit toutes les minutes
     return () => clearInterval(id);
-  }, []);
+  }, [prototype]);
 
   async function handlePush() {
     setSyncing("push");
@@ -40,13 +41,14 @@ export function StatusBar() {
 
   return (
     <div className="flex items-center justify-between px-3 h-6 bg-vscode-accent text-white text-xs shrink-0 select-none">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <span className="font-semibold">ComptaOS</span>
-        {activeTab?.path && (
+        {prototype && <span className="truncate">Prototype UX · données fictives · sauvegarde dans ce navigateur</span>}
+        {!prototype && activeTab?.path && (
           <span className="text-blue-100 opacity-80">{activeTab.path}</span>
         )}
       </div>
-      <div className="flex items-center gap-3 opacity-80">
+      <div className="flex items-center gap-3 opacity-80 shrink-0">
         {/* Indicateur de synchronisation git */}
         {sync?.configured && (
           <span className="flex items-center gap-1.5">

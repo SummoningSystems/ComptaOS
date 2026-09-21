@@ -44,6 +44,9 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Ecosystem UX prototype
+        run: npx playwright test --config playwright.ecosystem.config.ts
+
       - name: Two-user household workflow
         run: npx playwright test --config playwright.household.config.ts
 

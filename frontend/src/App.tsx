@@ -1,7 +1,7 @@
 import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
 import { api, fetchCompanies, initializeWorkspace } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
-import { TabBar } from "./components/Layout/TabBar";
+import { WorkspaceLayout } from "./components/Layout/WorkspaceLayout";
 import { StatusBar } from "./components/Layout/StatusBar";
 import { CopilotPanel } from "./components/Copilot/CopilotPanel";
 import { SearchOverlay } from "./components/Search/SearchOverlay";
@@ -52,6 +52,7 @@ function ViewLoading() {
 }
 
 const TAB_LABELS: Record<TabType, string> = {
+  ecosystem:    "Écosystème",
   dashboard:    "Dashboard",
   editor:       "Éditeur",
   import:       "Import",
@@ -316,6 +317,7 @@ export default function App() {
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
           <button className="text-xs text-vscode-accent" onClick={() => setNewHousehold(true)}>+ Nouveau foyer</button>
+          <a className="text-xs text-vscode-accent" href="?prototype=ecosystem">Prototype écosystème</a>
           <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />
         </div>
         <div className="flex-1" />
@@ -401,12 +403,7 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div className="flex flex-1 min-h-0">
-        <Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />
-
-        <div className="flex flex-col flex-1 min-w-0">
-          <TabBar />
-
+      <WorkspaceLayout sidebar={<Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />}>
           <div className="flex-1 min-h-0">
             <ViewErrorBoundary key={activeTab?.id ?? "empty"}>
               {activeTab
@@ -421,8 +418,7 @@ export default function App() {
               }
             </ViewErrorBoundary>
           </div>
-        </div>
-      </div>
+      </WorkspaceLayout>
 
       <StatusBar />
       <CommandPalette />

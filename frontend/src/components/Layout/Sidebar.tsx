@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useAppStore } from "../../stores/appStore";
 import { FileTree } from "../Explorer/FileTree";
-import type { TabType } from "../../types";
+import type { Tab, TabType } from "../../types";
 
-export type SidebarSection = "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
+export type SidebarSection = "ecosystem" | "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
 
 interface SidebarProps {
   activeSection: SidebarSection;
   onSectionChange: (s: SidebarSection) => void;
   pendingCount?: number;
+  ecosystem?: ReactNode;
+  activeItemTitle?: string;
+  onOpenTab?: (tab: Tab) => void;
+  explorerContent?: ReactNode;
 }
 
 type NavItem = { icon: string; label: string; tab: { id: string; title: string; type: TabType }; badge?: number };
@@ -97,10 +101,11 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: SidebarProps) {
+export function Sidebar({ activeSection, onSectionChange, pendingCount = 0, ecosystem, onOpenTab, explorerContent, activeItemTitle }: SidebarProps) {
   const { sidebarWidth, openTab, tabs, activeTabId } = useAppStore();
   const [hovered, setHovered] = useState<SidebarSection | null>(null);
 
+  const navigate = onOpenTab ?? openTab;
   const activeGroup = NAV_GROUPS.find((g) => g.id === activeSection);
 
   return (
@@ -110,10 +115,11 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
     >
       {/* Activity bar */}
       <div className="flex flex-col items-center py-2 gap-0.5 w-10 bg-vscode-panel border-r border-vscode-border shrink-0">
+        {ecosystem && <button title="Écosystème" aria-label="Écosystème" onClick={() => onSectionChange("ecosystem")} className="w-8 h-8 text-vscode-accent text-lg">◈</button>}
         {/* Dashboard direct */}
         <button
           title="Dashboard"
-          onClick={() => { openTab({ id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange("compta"); }}
+          onClick={() => { navigate({ id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange("compta"); }}
           className="w-8 h-8 flex items-center justify-center rounded text-base transition-colors text-vscode-muted hover:text-vscode-text"
         >
           📊
@@ -162,16 +168,17 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
           </div>
         )}
 
-        {activeSection === "explorer" && <FileTree />}
+        {activeSection === "ecosystem" && ecosystem}
+        {activeSection === "explorer" && (explorerContent ?? <FileTree />)}
 
         {activeSection !== "explorer" && activeGroup?.items && (
           <div className="py-1">
             {activeGroup.items.map((item) => {
-              const isActive = tabs.find((t) => t.id === item.tab.id)?.id === activeTabId;
+              const isActive = onOpenTab ? activeItemTitle === item.label : tabs.find((t) => t.id === item.tab.id)?.id === activeTabId;
               return (
                 <button
                   key={item.tab.id}
-                  onClick={() => openTab(item.tab)}
+                  onClick={() => navigate(item.tab)}
                   className={`
                     w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors text-left
                     ${isActive
