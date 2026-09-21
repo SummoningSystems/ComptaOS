@@ -1,16 +1,18 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAppStore } from "../../stores/appStore";
 
 export type EntityKind = "person" | "company" | "account";
-export type Entity = { id: string; kind: EntityKind; name: string; usage?: string };
-export type Relation = { id: string; from: string; to: string; kind: "holder" | "activity" | "usage" };
+export type Entity = { id: string; kind: EntityKind; name: string; usage?: string; companyType?: string };
+export type Relation = { id: string; from: string; to: string; kind: "holder" | "activity" | "usage" | "subsidiary" };
 export type View = "structure" | "flows" | "transactions" | "movement" | "accounting" | "placeholder";
 export type ScopeTab = { view: View; scope: string; record?: string; label?: string; period?: string };
 export const ROOT = "root";
+// getRandomValues also works on HTTP LAN previews, unlike randomUUID.
+export const prototypeId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b=>b.toString(16).padStart(2,"0")).join("");
 export const kinds = { person: "Personne", company: "Entreprise", account: "Compte bancaire" };
 export const symbols = { person: "◯", company: "◇", account: "▣" };
-export const relationLabels = { holder: "Titulaire", activity: "Exerce dans", usage: "Utilisé pour" };
+export const relationLabels = { holder: "Titulaire", activity: "Exerce dans", usage: "Utilisé pour", subsidiary: "Participation dans" };
 const seedEntities: Entity[] = [
   { id: "augustin", kind: "person", name: "Augustin" },
   { id: "partenaire", kind: "person", name: "Partenaire" },
@@ -34,26 +36,45 @@ const seedRelations: Relation[] = [
 ];
 interface Model {
   entities: Entity[]; relations: Relation[];
+  positions: Record<string, {x:number;y:number}>;
+  layout: "columns" | "free" | "hierarchy";
+  setLayout: (layout: Model["layout"]) => void;
+  move: (id:string, position:{x:number;y:number}) => void;
   save: (entity: Entity) => void;
   connect: (relation: Omit<Relation,"id">) => void;
   disconnect: (id: string) => void;
   reset: () => void;
 }
-export function validRelation(relation: Omit<Relation,"id">, entities: Entity[]) {
+export function validRelation(relation: Omit<Relation,"id">, entities: Entity[], relations: Relation[] = []) {
   const a=entities.find(e=>e.id===relation.from),b=entities.find(e=>e.id===relation.to);
   if(!a||!b||a.id===b.id)return false;
+  if(relation.kind==="subsidiary") {
+    if(a.kind!=="company"||b.kind!=="company")return false;
+    const pending=[b.id], visited=new Set<string>();
+    while(pending.length) {
+      const current=pending.pop()!;
+      if(current===a.id)return false;
+      if(visited.has(current))continue;
+      visited.add(current);
+      pending.push(...relations.filter(r=>r.kind==="subsidiary"&&r.from===current).map(r=>r.to));
+    }
+    return true;
+  }
   return relation.kind==="holder" ? (a.kind==="person"||a.kind==="company")&&b.kind==="account"
     : relation.kind==="activity" ? a.kind==="person"&&b.kind==="company"
     : a.kind==="account"&&b.kind==="company";
 }
 export const useEcosystem = create<Model>()(persist((set) => ({
   entities: structuredClone(seedEntities), relations: structuredClone(seedRelations),
+  positions: {}, layout: "columns",
+  setLayout: layout => set({layout}),
+  move: (id,position) => set(s=>({positions:{...s.positions,[id]:position}})),
   save: entity => set(s=>({entities:s.entities.some(e=>e.id===entity.id)?s.entities.map(e=>e.id===entity.id?entity:e):[...s.entities,entity]})),
-  connect: relation => set(s=>validRelation(relation,s.entities)&&!s.relations.some(r=>r.kind===relation.kind&&r.from===relation.from&&r.to===relation.to)
-    ? {relations:[...s.relations,{...relation,id:crypto.randomUUID()}]} : {}),
+  connect: relation => set(s=>validRelation(relation,s.entities,s.relations)&&!s.relations.some(r=>r.kind===relation.kind&&r.from===relation.from&&r.to===relation.to)
+    ? {relations:[...s.relations,{...relation,id:prototypeId()}]} : {}),
   disconnect: id => set(s=>({relations:s.relations.filter(r=>r.id!==id)})),
-  reset: () => set({entities:structuredClone(seedEntities),relations:structuredClone(seedRelations)}),
-}),{name:"comptaos-ecosystem-ux-v1",version:1,partialize:s=>({entities:s.entities,relations:s.relations})}));
+  reset: () => set({positions:{},layout:"columns",entities:structuredClone(seedEntities),relations:structuredClone(seedRelations)}),
+}),{name:"comptaos-ecosystem-ux-v1",version:1,partialize:s=>({entities:s.entities,relations:s.relations,positions:s.positions,layout:s.layout})}));
 
 export function scopeName(scope:string) {
   return scope===ROOT?"Notre foyer":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";

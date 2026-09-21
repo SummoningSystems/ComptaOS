@@ -1,4 +1,4 @@
-﻿# Ecosystem UX prototype
+# Ecosystem UX prototype
 
 ## Open
 
@@ -63,3 +63,22 @@ dynamic joint ownership, browser persistence, scoped navigation, filter retentio
 flow drill-down and the absence of financial API requests. Screenshots are written
 under .artifacts/ecosystem (ignored by Git).
 
+
+## Structure layouts and company hierarchies
+
+In Structure, **Disposition** offers:
+- **Colonnes**: people, companies and bank accounts.
+- **Libre**: drag nodes; arrow keys move the focused node, Shift increases the step.
+  Positions are saved independently of automatic layouts, including across reloads.
+- **Hiérarchie**: parent companies above their participations, with each entity shown once.
+  Multiple parents are supported; hierarchy cycles are rejected in this prototype.
+
+Use **Ajuster la carte** to fit the whole diagram, or the zoom selector and scrollbars.
+When adding/editing a company, choose Entreprise, Holding, SCI or Autre.
+In **+ Relation**, choose **Entreprise → participation dans une entreprise**,
+then the parent under De and the held company under Vers. The inspector shows
+Entreprise mère / Participation détenue, and arrows point from parent to child.
+
+These labels describe the structure only. They do not add legal/tax calculations,
+ownership percentages, or consolidated company accounting to the sample screens.
+Existing prototype data is retained when this update adds position/layout settings.

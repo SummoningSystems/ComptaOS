@@ -86,3 +86,70 @@ test("inspect flows and open the source movement without losing the selected per
   await expect(page.getByRole("button",{name:/Achat mixte · abonnement/})).toHaveCount(2);
 });
 
+
+test("arrange floating nodes and model a holding with company participations",async({page},testInfo)=>{
+  await page.addInitScript(()=>{Object.defineProperty(crypto,"randomUUID",{value:undefined,configurable:true});});
+  await page.goto("/?prototype=ecosystem");
+  const inspector=page.getByRole("complementary",{name:"Propriétés de l’élément"});
+  const dialog=page.getByRole("dialog");
+  for(const [name,kind] of [["Holding familiale","Holding"],["SCI du foyer","SCI"]]){
+    await page.getByRole("button",{name:"+ Ajouter",exact:true}).click();
+    await page.getByRole("button",{name:"◇ Entreprise",exact:true}).click();
+    await dialog.getByLabel("Nom",{exact:true}).fill(name);
+    await dialog.getByRole("combobox",{name:"Type d’entreprise"}).selectOption(kind);
+    await dialog.getByRole("button",{name:"Ajouter",exact:true}).click();
+  }
+  for(const child of ["Studio Augustin","SCI du foyer"]){
+    await inspector.getByRole("button",{name:"+ Relation",exact:true}).click();
+    await dialog.getByRole("combobox",{name:"Relation",exact:true}).selectOption("subsidiary");
+    await dialog.getByRole("combobox",{name:"De",exact:true}).selectOption({label:"Holding familiale"});
+    await dialog.getByRole("combobox",{name:"Vers",exact:true}).selectOption({label:child});
+    await dialog.getByRole("button",{name:"Créer la relation",exact:true}).click();
+  }
+  await page.getByLabel("Disposition de la carte").selectOption("hierarchy");
+  const holding=page.getByRole("button",{name:"Inspecter Holding familiale",exact:true});
+  const sci=page.getByRole("button",{name:"Inspecter SCI du foyer",exact:true});
+  const holdingY=await holding.evaluate(e=>parseFloat((e as HTMLElement).style.top));
+  expect(await sci.evaluate(e=>parseFloat((e as HTMLElement).style.top))).toBeGreaterThan(holdingY);
+  await sci.click();
+  await expect(inspector).toContainText("Entreprise mère");
+  await expect(inspector.getByRole("button",{name:"Holding familiale",exact:true})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("hierarchy-desktop.png"),fullPage:true});
+  await inspector.getByRole("button",{name:"+ Relation",exact:true}).click();
+  await dialog.getByRole("combobox",{name:"Relation",exact:true}).selectOption("subsidiary");
+  await dialog.getByRole("combobox",{name:"De",exact:true}).selectOption({label:"SCI du foyer"});
+  await dialog.getByRole("combobox",{name:"Vers",exact:true}).selectOption({label:"Holding familiale"});
+  await expect(dialog.getByRole("alert")).toContainText("boucle");
+  await expect(dialog.getByRole("button",{name:"Créer la relation",exact:true})).toBeDisabled();
+  await dialog.getByRole("button",{name:"Annuler",exact:true}).click();
+
+  await page.getByLabel("Disposition de la carte").selectOption("free");
+  await page.getByLabel("Zoom de la carte").selectOption("0.75");
+  await holding.scrollIntoViewIfNeeded();
+  const initial=await holding.evaluate(e=>({x:parseFloat((e as HTMLElement).style.left),y:parseFloat((e as HTMLElement).style.top)}));
+  const box=(await holding.boundingBox())!;
+  await page.mouse.move(box.x+60,box.y+25);
+  await page.mouse.down();
+  await page.mouse.move(box.x+135,box.y+70,{steps:12});
+  await page.mouse.up();
+  const moved=await holding.evaluate(e=>({x:parseFloat((e as HTMLElement).style.left),y:parseFloat((e as HTMLElement).style.top)}));
+  expect(moved.x-initial.x).toBeCloseTo(100,0);
+  expect(moved.y-initial.y).toBeCloseTo(60,0);
+  await holding.focus();
+  await holding.press("ArrowRight");
+  await expect(holding).toHaveCSS("left",(moved.x+10)+"px");
+  await page.getByLabel("Disposition de la carte").selectOption("columns");
+  await page.getByLabel("Disposition de la carte").selectOption("free");
+  await expect(holding).toHaveCSS("left",(moved.x+10)+"px");
+  await page.reload();
+  await expect(page.getByLabel("Disposition de la carte")).toHaveValue("free");
+  await expect(holding).toHaveCSS("left",(moved.x+10)+"px");
+  await page.getByLabel("Zoom de la carte").selectOption("0.75");
+  await holding.click();
+  await page.getByRole("button",{name:"Ajuster la carte"}).click();
+  await page.screenshot({path:testInfo.outputPath("free-desktop.png"),fullPage:true});
+  await page.getByLabel("Disposition de la carte").selectOption("hierarchy");
+  await expect(holding).toContainText("Holding");
+  await expect(sci).toContainText("SCI");
+});
+
