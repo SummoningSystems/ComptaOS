@@ -15,6 +15,9 @@ This is the proposed ecosystem experience using the shared ComptaOS work area,
 sidebar, tab bar and theme. It is a browser-only design prototype; the existing
 business/household records and authentication are not changed.
 
+The top-level **Vue d’ensemble** scope covers all people, companies and accounts.
+**Tous les flux** opens the ecosystem-wide flow view.
+
 ## What to evaluate
 
 1. **Structure**: select Commun · Charges. It should appear once, with both people

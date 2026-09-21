@@ -73,7 +73,7 @@ export function Structure({scope}:{scope:string}) {
   const visible=entities.filter(e=>!focus||!selected||linked.has(e.id));
   const columns:EntityKind[]=["person","company","account"];
   return <div className="eco-work">
-    <div className="eco-heading"><div><div className="eco-eyebrow">NOTRE FOYER / ÉCOSYSTÈME</div><h1>Structure financière</h1><p className="eco-muted">Personnes, entreprises et comptes. Sélectionnez un élément pour explorer ses relations.</p></div>
+    <div className="eco-heading"><div><div className="eco-eyebrow">ÉCOSYSTÈME / VUE D’ENSEMBLE</div><h1>Structure financière</h1><p className="eco-muted">Personnes, entreprises et comptes. Sélectionnez un élément pour explorer ses relations.</p></div>
       <div className="eco-actions"><button onClick={()=>openScope({view:"flows",scope})}>Voir les flux ↗</button><div className="eco-menu-wrap"><button className="eco-primary" aria-expanded={menu} onClick={()=>setMenu(!menu)}>+ Ajouter</button>{menu&&<div className="eco-menu">
         {columns.map(kind=><button key={kind} onClick={()=>{setAdd(kind);setMenu(false);}}>{symbols[kind]} {kinds[kind]}</button>)}<button onClick={()=>{setConnect(true);setMenu(false);}}>↔ Relation</button>
       </div>}</div></div>

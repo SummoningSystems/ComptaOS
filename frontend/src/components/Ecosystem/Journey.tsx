@@ -23,7 +23,7 @@ export function Journey({spec}:{spec:ScopeTab}) {
   const graphHeight=Math.max(560,Math.ceil(bankNodes.length/3)*190+190);
   pos.set("clients",{x:315,y:25});pos.set("expenses",{x:315,y:graphHeight-85});
   return <div className="eco-work">
-    <div className="eco-heading"><div><div className="eco-eyebrow">NOTRE FOYER / {scope.toUpperCase()}</div><h1>{title}</h1><p className="eco-muted">{spec.view==="flows"?"Suivez les mouvements entre vos comptes et l’extérieur.":"Aperçu de navigation · exemples fictifs pour valider le parcours."}</p></div><button onClick={()=>openScope({view:"structure",scope:ROOT})}>Retour à la structure ↗</button></div>
+    <div className="eco-heading"><div><div className="eco-eyebrow">ÉCOSYSTÈME / {scope.toUpperCase()}</div><h1>{title}</h1><p className="eco-muted">{spec.view==="flows"?"Suivez les mouvements entre vos comptes et l’extérieur.":"Aperçu de navigation · exemples fictifs pour valider le parcours."}</p></div><button onClick={()=>openScope({view:"structure",scope:ROOT})}>Retour à la structure ↗</button></div>
     {(spec.view==="flows"||spec.view==="transactions")&&<div className="eco-toolbar">
       <label className="eco-inline">Période<select aria-label="Période" value={period} onChange={e=>{setPeriod(e.target.value);setSelected("");}}><option value="2026-09">Septembre 2026</option><option value="2026-08">Août 2026</option></select></label>
       <span className="eco-scope-badge">Périmètre : {scope}</span>
@@ -68,7 +68,7 @@ export function Journey({spec}:{spec:ScopeTab}) {
       </section>
       <aside className="eco-inspector"><div className="eco-eyebrow">CONTEXTE CONSERVÉ</div><h2>Le même mouvement</h2><p className="eco-muted">Le détail bancaire et le traitement professionnel restent liés. Chaque vue garde son propre onglet.</p>
         <button onClick={()=>openMovement(record)}>Mouvement bancaire ↗</button>{record.company&&<button onClick={()=>openScope({view:"placeholder",scope:record.company!,label:"Dashboard"})}>Entreprise · {scopeName(record.company)} ↗</button>}
-        <button onClick={()=>openScope({view:"transactions",scope:spec.view==="accounting"?record.from:spec.scope,period})}>Liste des mouvements ↗</button><button onClick={()=>openScope({view:"flows",scope:ROOT,period})}>Flux · Notre foyer ↗</button>
+        <button onClick={()=>openScope({view:"transactions",scope:spec.view==="accounting"?record.from:spec.scope,period})}>Liste des mouvements ↗</button><button onClick={()=>openScope({view:"flows",scope:ROOT,period})}>Flux · {scopeName(ROOT)} ↗</button>
       </aside>
     </div>:<p className="eco-empty">Cet exemple n’existe pas. Ouvrez un mouvement depuis la liste.</p>)}
     {spec.view==="placeholder"&&<div className="eco-placeholder"><div className="eco-eyebrow">APERÇU · {scope}</div><h2>{spec.label}</h2><p>Emplacement du module {spec.label?.toLowerCase()} pour ce périmètre.</p><p className="eco-muted">La navigation et les onglets sont actifs. Le contenu métier sera repris depuis l’application existante.</p><div className="eco-actions"><button className="eco-primary" onClick={()=>openScope({view:"transactions",scope:spec.scope})}>Explorer les mouvements ↗</button><button onClick={()=>openScope({view:"flows",scope:spec.scope})}>Voir les flux ↗</button></div></div>}

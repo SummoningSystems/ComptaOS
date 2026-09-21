@@ -48,7 +48,7 @@ export default function EcosystemPrototype() {
   const ecosystem=<div className="eco-sidebar-content">
     <div className="eco-sidebar-heading">ÉCOSYSTÈME</div>
     <button onClick={()=>openScope({view:"structure",scope:ROOT})} className={spec.view==="structure"?"eco-nav-active":""}>◈ Structure</button>
-    <button onClick={()=>openScope({view:"flows",scope:ROOT})} className={spec.view==="flows"?"eco-nav-active":""}>⇄ Flux du foyer</button>
+    <button onClick={()=>openScope({view:"flows",scope:ROOT})} className={spec.view==="flows"?"eco-nav-active":""}>⇄ Tous les flux</button>
     <button onClick={()=>openScope({view:"transactions",scope:ROOT})}>☷ Tous les mouvements</button>
     {(["person","company","account"] as const).map(kind=><details open key={kind}><summary>{kind==="person"?"Personnes":kind==="company"?"Entreprises":"Comptes"}</summary>{entities.filter(e=>e.kind===kind).map(e=><button key={e.id} className={spec.scope===e.id?"eco-nav-active":""} onClick={()=>openEntity(e)}><span>{symbols[kind]}</span><span>{e.name}</span></button>)}</details>)}
   </div>;
@@ -56,7 +56,7 @@ export default function EcosystemPrototype() {
     <header className="eco-titlebar flex items-center gap-3 px-4 h-10 bg-vscode-panel border-b border-vscode-border shrink-0">
       <strong className="text-xs text-vscode-muted tracking-wide">ComptaOS</strong>
       <select aria-label="Périmètre actif" value={spec.scope} onChange={e=>{const target=entities.find(n=>n.id===e.target.value);if(target)openEntity(target);else openScope({view:"structure",scope:ROOT});}}>
-        <option value={ROOT}>◈ Notre foyer</option>{(["person","company","account"] as const).map(kind=><optgroup key={kind} label={kinds[kind]}>{entities.filter(e=>e.kind===kind).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>)}
+        <option value={ROOT}>◈ {scopeName(ROOT)}</option>{(["person","company","account"] as const).map(kind=><optgroup key={kind} label={kinds[kind]}>{entities.filter(e=>e.kind===kind).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>)}
       </select>
       <span className="eco-prototype-badge">Prototype · données fictives</span><div className="flex-1"/>
       <button aria-label="Rechercher dans l’écosystème" onClick={()=>setSearch("")}>Rechercher <kbd>Ctrl K</kbd></button><button onClick={()=>setHelp(true)}>Parcours</button><button onClick={()=>setResetOpen(true)}>Réinitialiser</button>

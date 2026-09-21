@@ -77,7 +77,7 @@ export const useEcosystem = create<Model>()(persist((set) => ({
 }),{name:"comptaos-ecosystem-ux-v1",version:1,partialize:s=>({entities:s.entities,relations:s.relations,positions:s.positions,layout:s.layout})}));
 
 export function scopeName(scope:string) {
-  return scope===ROOT?"Notre foyer":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";
+  return scope===ROOT?"Vue d’ensemble":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";
 }
 const titles: Record<View,string> = {structure:"Structure",flows:"Flux",transactions:"Mouvements",movement:"Mouvement",accounting:"Traitement",placeholder:"Aperçu"};
 export function openScope(spec:ScopeTab) {

@@ -56,7 +56,7 @@ test("follow a mixed movement into its enterprise and preserve scoped tabs and f
   await page.getByRole("tab",{name:"Mouvements · Personnel · Augustin",exact:false}).click();
   await expect(page.getByLabel("Rechercher",{exact:true})).toHaveValue("mixte");
   await page.getByLabel("Période",{exact:true}).selectOption("2026-08");
-  await page.getByRole("tab",{name:"Structure · Notre foyer",exact:false}).click();
+  await page.getByRole("tab",{name:"Structure · Vue d’ensemble",exact:false}).click();
   await expect(page.getByRole("button",{name:"Inspecter Personnel · Augustin",exact:true})).toHaveAttribute("aria-pressed","true");
   await page.getByRole("tab",{name:"Mouvements · Personnel · Augustin",exact:false}).click();
   await expect(page.getByLabel("Période",{exact:true})).toHaveValue("2026-08");
@@ -79,7 +79,7 @@ test("inspect flows and open the source movement without losing the selected per
   await page.screenshot({path:testInfo.outputPath("flows-desktop.png"),fullPage:true});
   await page.getByRole("button",{name:"Ouvrir le mouvement ↗",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Détail du mouvement",exact:true})).toBeVisible();
-  await page.getByRole("tab",{name:"Flux · Notre foyer",exact:false}).click();
+  await page.getByRole("tab",{name:"Flux · Vue d’ensemble",exact:false}).click();
   await expect(page.getByRole("heading",{name:"Achat mixte · matériel",exact:true})).toBeVisible();
   await page.getByLabel("Période",{exact:true}).selectOption("2026-08");
   await page.getByRole("button",{name:"Liste des flux",exact:true}).click();
