@@ -1,5 +1,5 @@
 import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
-import { api, fetchCompanies } from "./api/client";
+import { api, fetchCompanies, initializeWorkspace } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
 import { TabBar } from "./components/Layout/TabBar";
 import { StatusBar } from "./components/Layout/StatusBar";
@@ -13,9 +13,11 @@ import { LoginView } from "./components/Auth/LoginView";
 import { SetupView } from "./components/Auth/SetupView";
 import { AcceptInviteView } from "./components/Auth/AcceptInviteView";
 import { fetchAuthStatus, fetchMe, logout, type AuthUser } from "./api/auth";
-import type { TabType } from "./types";
+import type { Company, TabType } from "./types";
 import { MobileCaptureView } from "./components/Mobile/MobileCaptureView";
 
+const HouseholdApp = lazy(() => import("./components/Household/HouseholdApp").then(m => ({ default: m.HouseholdApp })));
+const HouseholdSetup = lazy(() => import("./components/Household/HouseholdSetup").then(m => ({ default: m.HouseholdSetup })));
 const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
 const ImportView = lazy(() => import("./components/Import/ImportView").then((m) => ({ default: m.ImportView })));
@@ -146,6 +148,9 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
 export default function App() {
   // ── TOUS les hooks en premier (Rules of Hooks) ────────────────────────────
   type AuthState = "loading" | "setup" | "login" | "invite" | "app";
+  const [workspace, setWorkspace] = useState<Company | null>(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [newHousehold, setNewHousehold] = useState(new URLSearchParams(window.location.search).get("newHousehold") === "1");
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -179,7 +184,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (authState !== "app") return;
+    if (authState !== "app" || !workspace || workspace.kind === "household") return;
     api.get<{ alerts: { level: string; message: string }[]; count: number }>("/alerts")
       .then(({ data }) => { setAlertCount(data.count); setAlertMessages(data.alerts.slice(0, 5)); })
       .catch(() => {});
@@ -193,7 +198,14 @@ export default function App() {
         setShowCompanyWizard(true);
       }
     });
-  }, [authState]);
+  }, [authState, workspace]);
+
+  useEffect(() => {
+    if (authState !== "app") return;
+    let active = true;
+    initializeWorkspace(currentUser?.id).then(value => { if (active) setWorkspace(value); }).catch(error => { if (active) setWorkspaceError(String(error)); });
+    return () => { active = false; };
+  }, [authState, currentUser?.id]);
 
   // Raccourci Ctrl+K / Cmd+K → ouvre la recherche globale
   useEffect(() => {
@@ -226,6 +238,7 @@ export default function App() {
   async function handleLogout() {
     await logout().catch(() => {});
     setCurrentUser(null);
+    setWorkspace(null);
     setAuthState("login");
     setShowUserMenu(false);
   }
@@ -259,6 +272,10 @@ export default function App() {
   if (authState === "login") {
     return <LoginView onLogin={(user) => { setCurrentUser(user); setAuthState("app"); }} />;
   }
+
+  if (newHousehold) return <Suspense fallback={<ViewLoading />}><HouseholdSetup user={currentUser} onCancel={() => setNewHousehold(false)} /></Suspense>;
+  if (!workspace) return <div className="p-8 text-vscode-text">{workspaceError || "Chargement de l’espace…"}</div>;
+  if (workspace.kind === "household") return <Suspense fallback={<ViewLoading />}><HouseholdApp key={workspace.id} workspace={workspace} user={currentUser} onLogout={handleLogout} onCreate={() => setNewHousehold(true)} /></Suspense>;
 
   // ── Mode fenêtre autonome (?view=<type>) ──────────────────────────────────
   const standaloneView = new URLSearchParams(window.location.search).get("view") as TabType | null;
@@ -298,6 +315,7 @@ export default function App() {
       <div className="flex items-center gap-3 px-4 h-10 bg-vscode-panel border-b border-vscode-border shrink-0 select-none">
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
+          <button className="text-xs text-vscode-accent" onClick={() => setNewHousehold(true)}>+ Nouveau foyer</button>
           <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />
         </div>
         <div className="flex-1" />

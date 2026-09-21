@@ -192,3 +192,21 @@ MIT — Voir [LICENSE](LICENSE)
 ---
 
 *ComptaOS n'est pas un logiciel de comptabilité certifié. Il est conçu comme outil de pilotage et de préparation comptable. Pour vos déclarations officielles, consultez un expert-comptable agréé.*
+
+
+## Foyer partagé et activités freelance
+
+Le mode **Foyer** propose un espace commun avec des connexions individuelles,
+des comptes personnels/professionnels et communs, des affectations mixtes,
+le rapprochement des virements, les contributions, les budgets et les échéances.
+Les imports CSV/OFX/QIF sont associés à un compte et prévisualisés avant validation.
+Les chiffres sont un suivi de trésorerie TTC, sans calcul automatique de TVA.
+
+Choisir **Nouveau foyer**, puis inviter le second utilisateur dans **Membres**.
+Les espaces professionnels existants restent disponibles séparément.
+La sélection d’espace est indépendante entre utilisateurs et fenêtres.
+
+- [Installation locale Docker, HTTPS et sauvegardes](deployment/LOCAL.md)
+- Validation du parcours à deux utilisateurs : npx playwright test --config playwright.household.config.ts
+- Données : transactions YAML, métadonnées JSON versionnées et journal de récupération.
+- Synchronisation bancaire automatique et comptabilité réglementaire dans le foyer : évolutions ultérieures.

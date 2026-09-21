@@ -17,10 +17,10 @@ test("enregistre puis ventile la TVA d'une transaction bancaire", async ({ page,
     status: "pending",
   };
 
-  const created = await request.post("http://127.0.0.1:3001/api/transactions", { data: transaction });
+  const created = await request.post("http://127.0.0.1:3001/api/workspaces/default/transactions", { data: transaction });
   expect(created.ok()).toBeTruthy();
 
-  await page.goto("/");
+  await page.goto("/?workspace=default");
   await page.getByRole("button", { name: /Transactions$/i }).click();
   await page.getByRole("button", { name: /2026.*transaction/i }).click();
   await page.getByRole("button", { name: /Août.*op/i }).click();
@@ -33,7 +33,7 @@ test("enregistre puis ventile la TVA d'une transaction bancaire", async ({ page,
   await vatRate.press("Enter");
   await expect(row.getByText("TVA enregistrée")).toBeVisible();
 
-  let stored = await request.get("http://127.0.0.1:3001/api/transactions");
+  let stored = await request.get("http://127.0.0.1:3001/api/workspaces/default/transactions");
   let transactions = await stored.json();
   expect(transactions.find((item: { id: string }) => item.id === id)).toMatchObject({
     vat_rate: 10,
@@ -51,7 +51,7 @@ test("enregistre puis ventile la TVA d'une transaction bancaire", async ({ page,
   await expect(row.getByText("Ventilation TVA enregistrée")).toBeVisible();
   await expect(row.getByRole("button", { name: "2 taux" })).toBeVisible();
 
-  stored = await request.get("http://127.0.0.1:3001/api/transactions");
+  stored = await request.get("http://127.0.0.1:3001/api/workspaces/default/transactions");
   transactions = await stored.json();
   expect(transactions.find((item: { id: string }) => item.id === id)).toMatchObject({
     vat_splits: [

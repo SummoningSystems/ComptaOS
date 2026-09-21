@@ -36,3 +36,9 @@
 - Le dépôt applicatif et le dépôt Git créé dans chaque workspace sont deux historiques distincts.
 - Le déploiement du code source doit passer par Git et le script serveur documenté ; ne pas envoyer le code source par SCP.
 - Ne jamais enregistrer de clé API, jeton, secret ou donnée comptable réelle dans le dépôt ou dans CTX.
+
+## Espaces partagés
+
+Utiliser un workspaceId explicite pour les requêtes métier, y compris les téléchargements.
+Les préférences de navigation sont individuelles ; _active.json ne pilote plus les requêtes.
+Les mutations du foyer passent par mutateHousehold avec révision, jamais par les API de fichiers génériques.

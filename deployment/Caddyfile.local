@@ -1,0 +1,4 @@
+{$COMPTAOS_ADDRESS} {
+  tls internal
+  reverse_proxy app:3001
+}

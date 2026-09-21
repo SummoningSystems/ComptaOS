@@ -29,6 +29,7 @@ export function resolveSafe(relativePath: string): string {
     throw new WorkspacePathError();
   }
 
+  if (withinBase.split(path.sep).some(part => part.startsWith(".") || part.startsWith("_") || ["auth.json", "companies", "workspaces", "banking", "ai_config.json", "git_sync.json", "household.json", "household.pending.json"].includes(part))) throw new WorkspacePathError();
   let current = base;
   for (const part of withinBase.split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
@@ -52,6 +53,8 @@ export async function buildFileTree(dir: string, base?: string): Promise<FileNod
     const absPath = path.join(dir, entry.name);
     const relPath = path.relative(actualBase, absPath).replace(/\\/g, "/");
 
+    try { resolveSafe(relPath); } catch { continue; }
+    if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
       const children = await buildFileTree(absPath, actualBase);
       nodes.push({ name: entry.name, path: relPath, type: "directory", children });

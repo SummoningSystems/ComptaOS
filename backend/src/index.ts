@@ -1,7 +1,13 @@
 import "dotenv/config";
 import path from "path";
 import { fileURLToPath } from "url";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
+import { registerAccessControl } from "./services/workspaceAccess.js";
+import { workspacesRoutes } from "./routes/workspaces.js";
+import { householdRoutes } from "./routes/household.js";
+import { registerMaintenance } from "./services/maintenance.js";
+import { backupRoutes } from "./routes/backups.js";
+import { startBackupScheduler } from "./services/backupService.js";
 import cors from "@fastify/cors";
 import { filesRoutes } from "./routes/files.js";
 import { transactionsRoutes } from "./routes/transactions.js";
@@ -34,9 +40,8 @@ import { licenseRoutes } from "./routes/license.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { stripeRoutes } from "./routes/stripe.js";
-import { authRoutes, COOKIE_NAME } from "./routes/auth.js";
-import { hasUsers, getJwtSecret } from "./services/authService.js";
-import jwt from "jsonwebtoken";
+import { authRoutes } from "./routes/auth.js";
+import { hasUsers } from "./services/authService.js";
 import staticPlugin from "@fastify/static";
 import { ensureDefaultCompany, getCompaniesRoot } from "./services/companiesService.js";
 import { initRepo, startGitAutoCommitScheduler } from "./services/gitService.js";
@@ -63,84 +68,50 @@ if (LOCAL_API_KEY) {
   console.log("[auth] API key activée — accès restreint");
 }
 
-// ── Middleware Auth JWT (activé quand AUTH_ENABLED=true) ──────────────────────
 const AUTH_ENABLED = process.env.AUTH_ENABLED === "true";
+registerMaintenance(app);
+registerAccessControl(app);
 
-// Routes publiques qui n'ont pas besoin de JWT même avec auth activée
-const PUBLIC_PATHS = [
-  "/api/health",
-  "/api/auth/status",
-  "/api/auth/login",
-  "/api/auth/setup",
-];
-
-function isPublicPath(url: string): boolean {
-  if (PUBLIC_PATHS.includes(url)) return true;
-  // Invitations
-  if (/^\/api\/auth\/invite\/[^/]+(\/(accept))?$/.test(url)) return true;
-  // Assets statiques (frontend)
-  if (!url.startsWith("/api/")) return true;
-  return false;
+async function registerBusinessRoutes(app: FastifyInstance, prefix: string) {
+await app.register(filesRoutes, { prefix: prefix + "/files" });
+await app.register(transactionsRoutes, { prefix: prefix + "/transactions" });
+await app.register(importRoutes, { prefix: prefix + "/import" });
+await app.register(dashboardRoutes, { prefix: prefix + "/dashboard" });
+await app.register(aiRoutes, { prefix: prefix + "/ai" });
+await app.register(ocrRoutes, { prefix: prefix + "/ocr" });
+await app.register(searchRoutes, { prefix: prefix + "/search" });
+await app.register(reportsRoutes, { prefix: prefix + "/reports" });
+await app.register(recurringRoutes, { prefix: prefix + "/recurring" });
+await app.register(hrRoutes, { prefix: prefix + "/hr" });
+await app.register(settingsRoutes, { prefix: prefix + "/settings" });
+await app.register(invoicesRoutes, { prefix: prefix + "/invoices" });
+await app.register(quotesRoutes, { prefix: prefix + "/quotes" });
+await app.register(attachmentsRoutes, { prefix: prefix + "/attachments" });
+await app.register(spreadsheetsRoutes, { prefix: prefix + "/spreadsheets" });
+await app.register(gitRoutes, { prefix: prefix + "/git" });
+await app.register(journalRoutes, { prefix: prefix + "/journal" });
+await app.register(alertsRoutes, { prefix: prefix + "/alerts" });
+await app.register(reconcileRoutes, { prefix: prefix + "/reconcile" });
+await app.register(closingRoutes, { prefix: prefix + "/closing" });
+await app.register(templatesRoutes, { prefix: prefix + "/templates" });
+await app.register(exportRoutes, { prefix: prefix + "/export" });
+await app.register(accountingRoutes, { prefix: prefix + "/accounting" });
+await app.register(profitLossRoutes, { prefix: prefix + "/pl" });
+await app.register(pluginsRoutes,    { prefix: prefix + "/plugins" });
+await app.register(encryptionRoutes, { prefix: prefix + "/encryption" });
 }
-
-if (AUTH_ENABLED) {
-  app.addHook("onRequest", async (req, reply) => {
-    if (isPublicPath(req.url)) return;
-    // Lire le token depuis le cookie
-    const cookieHeader = req.headers.cookie ?? "";
-    const cookiePairs = Object.fromEntries(
-      cookieHeader
-        .split(";")
-        .map((c) => c.trim().split("=").map(decodeURIComponent))
-        .filter((p) => p.length >= 2)
-        .map((p) => [p[0].trim(), p.slice(1).join("=").trim()]),
-    );
-    const token = cookiePairs[COOKIE_NAME];
-    if (!token) {
-      return reply.status(401).send({ error: "Non authentifié." });
-    }
-    try {
-      jwt.verify(token, getJwtSecret());
-    } catch {
-      return reply.status(401).send({ error: "Session expirée." });
-    }
-  });
-  console.log("[auth] Authentification JWT activée (AUTH_ENABLED=true).");
-}
-
-// Routes
-await app.register(filesRoutes, { prefix: "/api/files" });
-await app.register(transactionsRoutes, { prefix: "/api/transactions" });
-await app.register(importRoutes, { prefix: "/api/import" });
-await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
-await app.register(aiRoutes, { prefix: "/api/ai" });
-await app.register(ocrRoutes, { prefix: "/api/ocr" });
-await app.register(searchRoutes, { prefix: "/api/search" });
-await app.register(reportsRoutes, { prefix: "/api/reports" });
-await app.register(recurringRoutes, { prefix: "/api/recurring" });
-await app.register(hrRoutes, { prefix: "/api/hr" });
-await app.register(settingsRoutes, { prefix: "/api/settings" });
-await app.register(invoicesRoutes, { prefix: "/api/invoices" });
-await app.register(quotesRoutes, { prefix: "/api/quotes" });
+await registerBusinessRoutes(app, "/api");
+await registerBusinessRoutes(app, "/api/workspaces/:workspaceId");
 await app.register(companiesRoutes, { prefix: "/api/companies" });
-await app.register(attachmentsRoutes, { prefix: "/api/attachments" });
-await app.register(spreadsheetsRoutes, { prefix: "/api/spreadsheets" });
-await app.register(gitRoutes, { prefix: "/api/git" });
-await app.register(journalRoutes, { prefix: "/api/journal" });
-await app.register(alertsRoutes, { prefix: "/api/alerts" });
-await app.register(reconcileRoutes, { prefix: "/api/reconcile" });
-await app.register(closingRoutes, { prefix: "/api/closing" });
-await app.register(templatesRoutes, { prefix: "/api/templates" });
-await app.register(exportRoutes, { prefix: "/api/export" });
-await app.register(accountingRoutes, { prefix: "/api/accounting" });
-await app.register(profitLossRoutes, { prefix: "/api/pl" });
-await app.register(pluginsRoutes,    { prefix: "/api/plugins" });
-await app.register(encryptionRoutes, { prefix: "/api/encryption" });
 await app.register(licenseRoutes,    { prefix: "" });
 await app.register(waitlistRoutes,   { prefix: "" });
-await app.register(bankingRoutes,    { prefix: "" });
 await app.register(stripeRoutes,     { prefix: "" });
 await app.register(authRoutes,       { prefix: "/api/auth" });
+await app.register(bankingRoutes);
+await app.register(bankingRoutes, { scopePrefix: "/api/workspaces/:workspaceId" });
+await app.register(backupRoutes, { prefix: "/api/backups" });
+await app.register(workspacesRoutes, { prefix: "/api/workspaces" });
+await app.register(householdRoutes, { prefix: "/api/workspaces/:workspaceId/household" });
 
 // Initialisation : créer l'entreprise par défaut si nécessaire
 ensureDefaultCompany();
@@ -162,7 +133,8 @@ if (process.env.NODE_ENV === "production") {
   const frontendDist = path.join(__dirname, "..", "..", "frontend", "dist");
   await app.register(staticPlugin, { root: frontendDist, prefix: "/" });
   // SPA fallback — toute route non-API renvoie index.html
-  app.setNotFoundHandler((_req, reply) => {
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith("/api/")) return reply.code(404).send({ error: "Route introuvable" });
     reply.sendFile("index.html");
   });
 }
@@ -183,6 +155,7 @@ const HOST = process.env.HOST ?? (process.env.NODE_ENV === "production" ? "0.0.0
 
 try {
   await app.listen({ port: PORT, host: HOST });
+  startBackupScheduler();
   console.log(`ComptaOS backend démarré sur http://${HOST}:${PORT}`);
 } catch (err) {
   app.log.error(err);

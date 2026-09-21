@@ -26,6 +26,35 @@ export function buildApiUrl(basePath: string, path = ""): string {
 }
 
 export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
+let workspaceId = new URLSearchParams(window.location.search).get("workspace") ?? "";
+let preferenceKey = "comptaos_workspace_local";
+export function currentWorkspaceId() { return workspaceId; }
+function scopedPath(path: string) {
+  const clean = path.replace(/^\//, "");
+  if (!workspaceId || /^(auth|companies|workspaces|health|backups|license|waitlist|stripe)(\/|$)/.test(clean)) return clean;
+  return "workspaces/" + encodeURIComponent(workspaceId) + "/" + clean;
+}
+api.interceptors.request.use(config => { config.url = scopedPath(config.url ?? ""); return config; });
+api.interceptors.response.use(response => {
+  const match = /^workspaces\/([^/]+)\//.exec(response.config.url ?? "");
+  if (match && decodeURIComponent(match[1]) !== workspaceId) throw new axios.CanceledError("Espace changé");
+  return response;
+});
+export async function initializeWorkspace(userId = "local"): Promise<Company | null> {
+  preferenceKey = "comptaos_workspace_" + userId;
+  const list = await fetchCompanies();
+  const requested = new URLSearchParams(window.location.search).get("workspace") ?? localStorage.getItem(preferenceKey);
+  const selected = list.find(c => c.id === requested) ?? list.find(c => c.kind === "household") ?? list[0] ?? null;
+  if (selected) selectWorkspace(selected.id);
+  return selected;
+}
+export function selectWorkspace(id: string) {
+  workspaceId = id;
+  localStorage.setItem(preferenceKey, id);
+  const url = new URL(window.location.href);
+  url.searchParams.set("workspace", id);
+  window.history.replaceState(null, "", url);
+}
 
 export interface ReceiptOcrProposal {
   supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountVat?: number; amountTtc: number;
@@ -37,7 +66,7 @@ export interface PendingReceipt { id: string; filename: string; originalName: st
 
 /** Construit une URL d'API navigable (liens et téléchargements) en respectant BASE_URL. */
 export function apiUrl(path: string): string {
-  return buildApiUrl(import.meta.env.BASE_URL, path);
+  return buildApiUrl(import.meta.env.BASE_URL, scopedPath(path));
 }
 
 // Injecte automatiquement X-API-Key si configurée (stockée dans localStorage)
@@ -389,12 +418,13 @@ export async function fetchCompanies(): Promise<Company[]> {
 }
 
 export async function fetchActiveCompany(): Promise<Company | null> {
-  const { data } = await api.get<Company | null>("/companies/active");
-  return data;
+  const list = await fetchCompanies();
+  return list.find(c => c.id === workspaceId) ?? list[0] ?? null;
 }
 
 export async function setActiveCompanyApi(companyId: string): Promise<void> {
   await api.put("/companies/active", { companyId });
+  selectWorkspace(companyId);
 }
 
 export async function createCompanyApi(name: string): Promise<Company> {

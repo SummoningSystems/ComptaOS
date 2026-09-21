@@ -6,3 +6,10 @@ workspace/
 .research-trail/
 coverage/
 *.log
+
+**/.env
+**/.env.*
+*.tar.gz
+backups/
+playwright-report/
+test-results/

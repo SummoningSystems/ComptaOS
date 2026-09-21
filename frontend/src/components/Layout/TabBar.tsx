@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../../stores/appStore";
+import { currentWorkspaceId } from "../../api/client";
 import { Tab } from "../../types";
 
 const TAB_ICONS: Record<string, string> = {
@@ -25,7 +26,7 @@ export function TabBar() {
   }, []);
 
   function popOut(tab: Tab) {
-    const url = `${window.location.origin}${window.location.pathname}?view=${tab.type}`;
+    const url = `${window.location.origin}${window.location.pathname}?view=${tab.type}&workspace=${encodeURIComponent(currentWorkspaceId())}`;
     window.open(url, `comptaos_${tab.type}`, "popup,width=1400,height=900");
   }
 

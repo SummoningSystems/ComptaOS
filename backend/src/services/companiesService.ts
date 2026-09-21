@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { workspaceContext } from "./workspaceContext.js";
 import { readFileSync, mkdirSync, existsSync, realpathSync } from "fs";
 import { join, resolve, relative, isAbsolute, sep } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
@@ -8,6 +10,8 @@ const ACTIVE_FILE = join(ROOT, "_active.json");
 
 export interface Company {
   id: string;
+  kind?: "business" | "household";
+  memberIds?: string[];
   name: string;
   /** Chemin relatif depuis ROOT vers le dossier de l'entreprise (ex: "." ou "companies/co_abc123") */
   path: string;
@@ -30,7 +34,7 @@ export function loadCompanies(): Company[] {
   }
 }
 
-function saveCompanies(companies: Company[]): void {
+export function saveCompanies(companies: Company[]): void {
   if (!existsSync(ROOT)) mkdirSync(ROOT, { recursive: true });
   atomicWriteFileSync(COMPANIES_FILE, JSON.stringify(companies, null, 2));
 }
@@ -58,6 +62,8 @@ export function invalidateActiveCompanyCache(): void {
  * Si aucune entreprise n'est configurée, initialise l'entreprise par défaut.
  */
 export function getActiveCompanyPath(): string {
+  const scoped = workspaceContext.getStore();
+  if (scoped) return scoped.root;
   if (_activeCompanyPath) return _activeCompanyPath;
 
   ensureDefaultCompany();
@@ -71,6 +77,10 @@ export function getActiveCompanyPath(): string {
   const activeId = getActiveCompanyId();
   const company = (activeId ? companies.find((c) => c.id === activeId) : null) ?? companies[0];
 
+  return resolveCompanyPath(company);
+}
+
+export function resolveCompanyPath(company: Company): string {
   if (typeof company.path !== "string" || isAbsolute(company.path)) {
     throw new Error("Chemin d'entreprise invalide");
   }
@@ -85,8 +95,7 @@ export function getActiveCompanyPath(): string {
   if (canonicalRelative === ".." || canonicalRelative.startsWith(".." + sep) || isAbsolute(canonicalRelative)) {
     throw new Error("Chemin d'entreprise hors du workspace");
   }
-  _activeCompanyPath = canonicalCompany;
-  return _activeCompanyPath;
+  return canonicalCompany;
 }
 
 /**
@@ -108,10 +117,10 @@ export function ensureDefaultCompany(): void {
 }
 
 /** Crée une nouvelle entreprise avec son arborescence de dossiers. */
-export function createCompany(name: string): Company {
+export function createCompany(name: string, persist = true): Company {
   ensureDefaultCompany();
 
-  const id = `co_${Date.now().toString(36)}`;
+  const id = `co_${randomUUID()}`;
   const companyRelPath = `companies/${id}`;
   const absPath = join(ROOT, companyRelPath);
 
@@ -128,7 +137,7 @@ export function createCompany(name: string): Company {
 
   const companies = loadCompanies();
   companies.push(company);
-  saveCompanies(companies);
+  if (persist) saveCompanies(companies);
 
   return company;
 }

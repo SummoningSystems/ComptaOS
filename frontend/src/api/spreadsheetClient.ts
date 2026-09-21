@@ -1,6 +1,7 @@
 import type { SpreadsheetDoc } from "../components/Spreadsheet/spreadsheetTypes";
 
-const BASE = `${import.meta.env.BASE_URL}api/spreadsheets`;
+import { apiUrl } from "./client";
+const BASE = apiUrl("spreadsheets");
 
 export async function fetchSpreadsheets(): Promise<Omit<SpreadsheetDoc, "sheets">[]> {
   const r = await fetch(BASE);
