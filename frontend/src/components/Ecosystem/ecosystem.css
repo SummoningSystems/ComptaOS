@@ -109,3 +109,19 @@
 .eco-map-free .eco-node {cursor:grab;touch-action:none;user-select:none}
 .eco-map-free .eco-node:active {cursor:grabbing}
 .eco-map-instructions {font-size:11px;color:var(--vscode-muted);line-height:1.7;margin:0 0 12px}
+.eco-doc-grid {display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+.eco-doc-grid.eco-doc-full {grid-template-columns:minmax(0,1fr)}
+.eco-doc-grid table td:first-child {min-width:200px}
+.eco-doc-grid tr[data-selected=true] {background:var(--vscode-highlight)}
+.eco-doc-reason {display:block;color:var(--vscode-muted);margin-top:6px;max-width:300px;line-height:1.6}
+.eco-doc-badge {font-size:10px;border:1px solid var(--vscode-border);border-radius:3px;padding:3px 5px}
+.eco-document-paper {border:1px solid var(--vscode-border);background:var(--vscode-panel);padding:24px;display:flex;flex-direction:column;gap:10px;align-items:center}
+.eco-document-paper>span {font-size:32px;color:var(--vscode-muted)}
+.eco-document-paper p,.eco-document-paper small {color:var(--vscode-muted)}
+.eco-doc-form-row {display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.eco-doc-links {border:1px solid var(--vscode-border);padding:12px;max-height:240px;overflow:auto;font-size:12px}
+.eco-doc-links label {flex-direction:row;align-items:center;margin:10px 0}
+.eco-dialog .eco-doc-links input {width:auto}
+.eco-settings-form {max-width:680px;display:flex;flex-direction:column;gap:18px;font-size:12px;line-height:1.7}
+.eco-settings-form>button {align-self:flex-start}
+@media(max-width:1200px){.eco-doc-grid{grid-template-columns:minmax(0,1fr)}.eco-doc-grid .eco-inspector{border-left:0;border-top:1px solid var(--vscode-border);padding:20px 0}}

@@ -49,7 +49,8 @@ The top-level **Vue d’ensemble** scope covers all people, companies and accoun
 - Flow amounts come from that dataset; each depicted transfer is one movement.
   Lines show direction and type, not proportional amounts. The inspector/list
   provides exact amounts. The graph includes only accounts with sample movements.
-- Detailed accounting, documents, VAT, budgets and other tools are placeholders.
+- Detailed accounting, VAT, budgets and other business tools are placeholders.
+  Documents has a shared sample library with editable metadata and links.
   A simulated validation is local to that tab, with no journal or financial writes.
 - Existing entreprises are not yet attached to this prototype's example ecosystem.
 - Shared accounting data, reconciliation, permissions, bank connections and
@@ -85,3 +86,43 @@ Entreprise mère / Participation détenue, and arrows point from parent to child
 These labels describe the structure only. They do not add legal/tax calculations,
 ownership percentages, or consolidated company accounting to the sample screens.
 Existing prototype data is retained when this update adds position/layout settings.
+
+## Contextual tools and Documents
+
+The sidebar retains a common order while adapting to the selected scope:
+- Mouvements, Documents, Finance, Analyses and scope settings are available throughout.
+- Overview offers a placeholder for work pending across companies.
+- A person has no company accounting or HR tools.
+- Companies expose accounting tools according to configuration, independent of the
+  Entreprise/Holding/SCI label. New companies offer Configurer la comptabilité.
+  Enable accounting and optionally TVA in the scope settings to try the navigation.
+  The two original sample companies start with both enabled.
+- A bank account offers reconciliation when linked by ownership or professional use
+  to a company with accounting enabled.
+- Global settings are under Application in the top bar. This dialog contains
+  placeholders for access/server/extensions; scope settings configure only the
+  selected entity. This does not implement production permission rules.
+
+### Documents walkthrough
+
+1. Open Documents in the left rail, then Bibliothèque.
+2. Change the top dropdown between overview, Augustin, Studio Augustin and
+   Personnel · Augustin. The document tool stays open in each new scoped tab.
+3. Compare Directement liés and Éléments associés. Each associated document
+   explains the account, activity, participation or movement making it relevant.
+4. Select Matériel · achat mixte. It is one shared document linked to Studio Augustin,
+   the personal bank account, and the example movement.
+5. Modifier les liens changes that shared record, updating every scoped view.
+   Personal documents are not propagated to an account or company solely through
+   the person who owns it.
+6. Ajouter un document preselects the current scope as a direct link (overview
+   preselects none). Change the links before saving if needed.
+7. Return to an earlier tab: its search, association filter and selected document
+   are retained. Selecting a tab restores its corresponding scope/sidebar.
+8. New document metadata/links persist in this browser under
+   comptaos-ecosystem-documents-v1. Réinitialiser resets both the structure and
+   the document examples. Selecting a file stores only its filename; file
+   contents, server uploads and real document previews are not implemented.
+
+The browser checks also cover these document journeys and configurable tool
+availability. As before, the prototype makes no financial API requests.

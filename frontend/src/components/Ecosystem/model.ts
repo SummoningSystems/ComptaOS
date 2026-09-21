@@ -3,10 +3,10 @@ import { persist } from "zustand/middleware";
 import { useAppStore } from "../../stores/appStore";
 
 export type EntityKind = "person" | "company" | "account";
-export type Entity = { id: string; kind: EntityKind; name: string; usage?: string; companyType?: string };
+export type Entity = { id: string; kind: EntityKind; name: string; usage?: string; companyType?: string; accountingEnabled?: boolean; vatEnabled?: boolean };
 export type Relation = { id: string; from: string; to: string; kind: "holder" | "activity" | "usage" | "subsidiary" };
-export type View = "structure" | "flows" | "transactions" | "movement" | "accounting" | "placeholder";
-export type ScopeTab = { view: View; scope: string; record?: string; label?: string; period?: string };
+export type View = "documents" | "settings" | "structure" | "flows" | "transactions" | "movement" | "accounting" | "placeholder";
+export type ScopeTab = { view: View; scope: string; record?: string; label?: string; period?: string; category?: string; section?: string };
 export const ROOT = "root";
 // getRandomValues also works on HTTP LAN previews, unlike randomUUID.
 export const prototypeId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b=>b.toString(16).padStart(2,"0")).join("");
@@ -79,10 +79,10 @@ export const useEcosystem = create<Model>()(persist((set) => ({
 export function scopeName(scope:string) {
   return scope===ROOT?"Vue d’ensemble":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";
 }
-const titles: Record<View,string> = {structure:"Structure",flows:"Flux",transactions:"Mouvements",movement:"Mouvement",accounting:"Traitement",placeholder:"Aperçu"};
+const titles: Record<View,string> = {documents:"Documents",settings:"Paramètres",structure:"Structure",flows:"Flux",transactions:"Mouvements",movement:"Mouvement",accounting:"Traitement",placeholder:"Aperçu"};
 export function openScope(spec:ScopeTab) {
   const path=JSON.stringify(spec);
-  useAppStore.getState().openTab({id:"eco:"+path,type:"ecosystem",title:(spec.label??titles[spec.view])+" · "+scopeName(spec.scope),path});
+  useAppStore.getState().openTab({id:"eco:"+JSON.stringify({view:spec.view,scope:spec.scope,record:spec.record??"",category:spec.category??"",label:spec.label??titles[spec.view],period:spec.period??""}),type:"ecosystem",title:(spec.label??titles[spec.view])+" · "+scopeName(spec.scope),path});
 }
 export function parseTab(path?:string):ScopeTab {
   try {
