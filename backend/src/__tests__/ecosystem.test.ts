@@ -136,4 +136,15 @@ describe("persisted financial ecosystem",()=>{
   await expect(fs.stat(path.join(folder,"ecosystem.pending.json"))).rejects.toMatchObject({code:"ENOENT"});
  });
 
+ it("persists shared spreadsheets separately for each scope and enforces membership",async()=>{
+  const base=endpoint+"/tableaux/root";
+  const created=await app.inject({method:"POST",url:base,headers:cookie(),payload:{name:"Budget commun"}});expect(created.statusCode,created.body).toBe(201);const doc=created.json();doc.sheets[0].cells={A1:{value:"=SUM(1,2)"}};
+  expect((await app.inject({method:"PUT",url:base+"/"+doc.id,headers:cookie(),payload:doc})).statusCode).toBe(200);
+  expect((await app.inject({url:base+"/"+doc.id,headers:cookie(partner)})).json().sheets[0].cells.A1.value).toBe("=SUM(1,2)");
+  expect((await app.inject({url:endpoint+"/tableaux/alice",headers:cookie()})).json()).toEqual([]);
+  expect((await app.inject({url:base,headers:cookie(outsider)})).statusCode).toBe(403);
+  expect((await app.inject({method:"PUT",url:base+"/"+doc.id,headers:cookie(reader),payload:doc})).statusCode).toBe(403);
+  expect((await app.inject({url:base+"/variables",headers:cookie()})).json()).toEqual({});
+ });
+
 });

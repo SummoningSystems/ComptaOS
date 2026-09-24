@@ -126,6 +126,16 @@ et exports dans les mêmes onglets. Les exports comptables reprennent les contre
 validées et les justificatifs partagés. La hiérarchie holding/SCI organise la navigation ;
 elle ne réalise pas de consolidation comptable automatique.
 
+## Mini-tableurs
+
+**Analyses & Export → Tableaux** ouvre le tableur HyperFormula dans chaque périmètre.
+Les classeurs de la vue d’ensemble sont partagés ; chaque personne, compte et entreprise
+possède aussi ses propres classeurs. Les onglets restent liés à leur périmètre, y compris
+pour les sauvegardes différées. Les formules, feuilles multiples, formats et imports/exports
+CSV/XLSX sont conservés. Les variables comptables sont disponibles dans les tableaux
+rattachés à une entreprise ; les autres périmètres disposent des formules usuelles.
+Les classeurs d’entreprise déjà présents conservent leur emplacement.
+
 ## Architecture et exploitation
 
 - Une instance serveur, un disque local, plusieurs sessions utilisateur.

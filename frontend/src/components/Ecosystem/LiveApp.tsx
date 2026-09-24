@@ -1,6 +1,6 @@
-import {useEffect,useMemo,useState,useRef} from "react";
+import {useEffect,useMemo,useState,useRef,lazy,Suspense} from "react";
 import {useTheme} from "../../hooks/useTheme";
-import {api} from "../../api/client";
+import {api,buildApiUrl} from "../../api/client";
 import {WorkspaceApiProvider} from "../../api/WorkspaceApi";
 import {WorkspaceStoreProvider} from "../../stores/WorkspaceStore";
 import {useAppStore} from "../../stores/appStore";
@@ -20,6 +20,7 @@ import {createInvitation,fetchUsers,type AuthUser} from "../../api/auth";
 import type {Ecosystem} from "../../types/ecosystem";
 import type {Tab,TabType} from "../../types";
 import "./ecosystem.css";
+const SpreadsheetView=lazy(()=>import("../Spreadsheet/SpreadsheetView").then(m=>({default:m.SpreadsheetView})));
 export default function LiveApp({user,onLogout}:{user:AuthUser|null;onLogout:()=>Promise<void>}){
  const [list,setList]=useState<{id:string;name:string}[]|null>(null),[chosen,setChosen]=useState(""),[name,setName]=useState("Mon écosystème"),[error,setError]=useState("");const data=useLive(s=>s.data);
  const preference="comptaos_ecosystem_"+(user?.id??"local");
@@ -45,6 +46,7 @@ function LivePanel({spec,user,tabId}:{spec:ScopeTab;user:AuthUser|null;tabId:str
  if(spec.label==="Historique")return <div className="eco-work"><h1>Historique partagé</h1>{[...s.history].reverse().map((h,i)=><details key={i}><summary>{h.at} · {h.actor} · {h.action}</summary><pre style={{whiteSpace:"pre-wrap"}}>{JSON.stringify(h.details,null,2)}</pre></details>)}</div>;
  if(["À traiter","À traiter par entreprise","Rapprochement"].includes(spec.label??""))return <div className="eco-work"><h1>Traitements à vérifier</h1>{s.treatments.filter(t=>t.transaction.status!=="validated"&&(spec.scope===ROOT||t.companyId===spec.scope||s.movements.some(m=>m.id===t.movementId&&m.accountId===spec.scope))).map(t=><p key={t.transaction.id}><button onClick={()=>openScope({view:"accounting",scope:t.companyId,record:t.transaction.id})}>{scopeName(t.companyId)} · {t.transaction.date} · {t.transaction.label} ↗</button></p>)}</div>;
  const type=spec.businessType??businessTypes[spec.label??""];
+ if(type==="spreadsheets"&&!entity?.workspaceId)return <Suspense fallback={<p>Chargement du tableur…</p>}><SpreadsheetView apiBase={buildApiUrl(import.meta.env.BASE_URL,`ecosystems/${s.id}/tableaux/${spec.scope}`)}/></Suspense>;
  if(entity?.workspaceId&&type)return <WorkspaceApiProvider id={entity.workspaceId}><WorkspaceStoreProvider scope={entity.id}><ViewContent tabId={tabId} type={type} path={spec.businessPath} currentUser={user}/></WorkspaceStoreProvider></WorkspaceApiProvider>;
  return <LiveOverview spec={spec}/>;
 }

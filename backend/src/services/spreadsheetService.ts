@@ -1,3 +1,4 @@
+import {atomicWriteFile} from "./atomicFile.js";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
@@ -40,6 +41,7 @@ function sheetsDir(): string {
 }
 
 function docPath(id: string): string {
+  if(!/^[a-zA-Z0-9_-]+$/.test(id))throw Object.assign(new Error("Identifiant de tableur invalide"),{statusCode:400});
   return path.join(sheetsDir(), `${id}.json`);
 }
 
@@ -71,7 +73,7 @@ export async function getSpreadsheet(id: string): Promise<SpreadsheetDoc | null>
 export async function saveSpreadsheet(doc: SpreadsheetDoc): Promise<SpreadsheetDoc> {
   await fs.mkdir(sheetsDir(), { recursive: true });
   doc.updatedAt = new Date().toISOString();
-  await fs.writeFile(docPath(doc.id), JSON.stringify(doc, null, 2), "utf-8");
+  await atomicWriteFile(docPath(doc.id), JSON.stringify(doc, null, 2));
   return doc;
 }
 

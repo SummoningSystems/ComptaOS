@@ -25,5 +25,17 @@ test("two partners use one persisted ecosystem from personal bank movement to co
  expect((await second.request.get(endpoint+"/documents/"+state.documents[0].id+"/file")).status()).toBe(200);
  // The second member cannot change a validated source allocation.
  const conflict=await second.request.post(endpoint+"/commands",{data:{revision:state.revision,action:"movement",id:movement.id,expectedRevision:state.movements[0].revision,movement:{notes:"changed"}}});expect(conflict.status()).toBe(409);
+
+ // Shared and company spreadsheets keep separate storage and preserve formulas.
+ await page.getByRole("button",{name:"Analyses & Export",exact:true}).click();await page.getByRole("button",{name:"🧮 Tableaux",exact:true}).click();
+ await page.getByRole("button",{name:"+ Nouveau",exact:true}).click();await page.getByPlaceholder("Nom…",{exact:true}).fill("Budget partagé");await page.getByRole("button",{name:"✓",exact:true}).click();
+ const sheetPanel=page.getByRole("tabpanel",{name:"Tableaux · Vue d’ensemble",exact:true});
+ const firstCell=sheetPanel.locator("tbody tr").first().locator("td").nth(1);await firstCell.click();
+ const formula=sheetPanel.getByPlaceholder("=SUM(A1:A10)  •  =REVENUS_2025  •  =IF(A1>0,…)");await formula.fill("=SUM(1,2)");await formula.press("Enter");await expect(firstCell).toHaveText("3");
+ await expect.poll(async()=>{const docs=await(await page.request.get(endpoint+"/tableaux/root")).json();const saved=await(await page.request.get(endpoint+"/tableaux/root/"+docs[0].id)).json();return saved.sheets[0].cells.A1?.value;}).toBe("=SUM(1,2)");
+ await page.getByLabel("Périmètre actif").selectOption("studio");await page.getByRole("button",{name:"Analyses & Export",exact:true}).click();await page.getByRole("button",{name:"🧮 Tableaux",exact:true}).click();await expect(page.getByText("Aucun tableau.",{exact:true})).toBeVisible();
+ await page.getByRole("button",{name:"+ Nouveau",exact:true}).click();await page.getByPlaceholder("Nom…",{exact:true}).fill("Prévision Studio");await page.getByRole("button",{name:"✓",exact:true}).click();await expect(page.getByRole("button",{name:"📄 Prévision Studio",exact:true})).toBeVisible();
+ const workspaceId=state.entities.find(e=>e.id==="studio")!.workspaceId;expect((await(await page.request.get("/api/workspaces/"+workspaceId+"/spreadsheets")).json())[0].name).toBe("Prévision Studio");
+ await page.getByRole("tab",{name:"Tableaux · Vue d’ensemble",exact:true}).click();await expect(firstCell).toHaveText("3");
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath("ecosystem-real-mobile.png"),fullPage:true});expect(errors).toEqual([]);await second.close();
 });

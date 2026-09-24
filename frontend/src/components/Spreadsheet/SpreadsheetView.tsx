@@ -1,14 +1,8 @@
-﻿import { useEffect, useRef, useState, useCallback } from "react";
+﻿import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import type { SpreadsheetDoc, SpreadsheetSheet, SpreadsheetCell, CellFormat } from "./spreadsheetTypes";
-import {
-  fetchSpreadsheets,
-  fetchSpreadsheet,
-  createSpreadsheet,
-  saveSpreadsheet,
-  deleteSpreadsheetApi,
-  fetchAccountingVariables,
-} from "../../api/spreadsheetClient";
+import {createSpreadsheetApi} from "../../api/spreadsheetClient";
+import {useWorkspaceApi} from "../../api/WorkspaceApi";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -180,7 +174,11 @@ const FORMULA_LIST: { name: string; usage: string; desc: string }[] = [
 
 // ── Composant principal ────────────────────────────────────────────────────────
 
-export function SpreadsheetView() {
+export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
+  const {apiUrl}=useWorkspaceApi();
+  const base=apiBase??apiUrl("spreadsheets");
+  const {fetchSpreadsheets,fetchSpreadsheet,createSpreadsheet,saveSpreadsheet,deleteSpreadsheetApi,fetchAccountingVariables}=useMemo(()=>createSpreadsheetApi(base),[base]);
+  const [loadError,setLoadError]=useState("");
   const [docs, setDocs] = useState<Omit<SpreadsheetDoc, "sheets">[]>([]);
   const [activeDoc, setActiveDoc] = useState<SpreadsheetDoc | null>(null);
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
@@ -313,9 +311,9 @@ export function SpreadsheetView() {
   })();
 
   useEffect(() => {
-    fetchSpreadsheets().then(setDocs);
-    fetchAccountingVariables().then(setAccountingVars);
-  }, []);
+    fetchSpreadsheets().then(setDocs).catch(e=>setLoadError(String(e.message)));
+    fetchAccountingVariables().then(setAccountingVars).catch(e=>setLoadError(String(e.message)));
+  }, [fetchSpreadsheets,fetchAccountingVariables]);
 
   const recompute = useCallback((doc: SpreadsheetDoc, sheetIdx: number, vars: Record<string, number>) => {
     const version = ++recomputeVersionRef.current;
@@ -459,10 +457,12 @@ export function SpreadsheetView() {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       setSaving(true);
-      const saved = await saveSpreadsheet(doc);
-      setActiveDoc(saved);
-      setDirty(false);
-      setSaving(false);
+      try {
+        const saved = await saveSpreadsheet(doc);
+        setActiveDoc(current=>current?.id===saved.id?saved:current);
+        setDirty(false);setLoadError("");
+      } catch(e) {setLoadError(e instanceof Error?e.message:"Sauvegarde impossible");}
+      finally {setSaving(false);}
     }, 1500);
   }
 
@@ -1122,6 +1122,7 @@ export function SpreadsheetView() {
         onChange={handleImport}
       />
 
+      {loadError && <div role="alert" className="text-red-400 p-2">{loadError}</div>}
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <div className="w-52 shrink-0 bg-vscode-sidebar border-r border-vscode-border flex flex-col">
         <div className="px-3 py-2 border-b border-vscode-border flex items-center justify-between">

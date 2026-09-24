@@ -1,3 +1,4 @@
+import {spreadsheetsRoutes} from "./spreadsheets.js";
 import {documentBytes} from "../services/ecosystemDocuments.js";
 import Papa from "papaparse";
 import type { FastifyInstance } from "fastify";
@@ -9,7 +10,7 @@ import { fail } from "../services/householdService.js";
 import { atomicWriteFile } from "../services/atomicFile.js";
 import { listUsers } from "../services/authService.js";
 import { loadCompanies, saveCompanies } from "../services/companiesService.js";
-import { actorContext, workspaceLock } from "../services/workspaceContext.js";
+import { actorContext, workspaceLock, workspaceContext } from "../services/workspaceContext.js";
 import { extractTextLocally } from "../services/localOcrService.js";
 import type { HouseholdImport } from "../types/household.js";
 import { ecosystemBankingRoutes } from "./ecosystemBanking.js";
@@ -59,5 +60,16 @@ export async function ecosystemsRoutes(app:FastifyInstance){
     if(!process.env.OCR_LOCAL_URL)fail("OCR local non configuré. Le document reste disponible.",503);
     return {text:await extractTextLocally(await documentBytes(s,doc),doc.mime)};
   });
+  await app.register(async scoped=>{
+    scoped.addHook("preHandler",(req,_reply,done)=>{
+      const {ecosystemId:id,scope}=req.params as {ecosystemId:string;scope:string};
+      void loadEcosystem(id).then(s=>{
+        if(scope!=="root"&&!s.entities.some(e=>e.id===scope&&e.kind!=="company"))fail("Périmètre de tableur introuvable.",404);
+        const actor=actorContext.getStore()??{id:"local",role:"owner"};
+        workspaceContext.run({id:s.id,root:path.join(ecosystemRoot(id),"scope-data",scope),kind:"ecosystem",actor:actor.id,role:actor.role},done);
+      }).catch(done);
+    });
+    await spreadsheetsRoutes(scoped,{variables:async()=>({})});
+  },{prefix:"/:ecosystemId/tableaux/:scope"});
   await app.register(ecosystemBankingRoutes);
 }
