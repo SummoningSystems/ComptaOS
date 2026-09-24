@@ -218,6 +218,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
   } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const editVersionRef=useRef(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<SpreadsheetSheet[][]>([]);
   const redoStackRef = useRef<SpreadsheetSheet[][]>([]);
@@ -458,9 +459,10 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     saveTimeoutRef.current = setTimeout(async () => {
       setSaving(true);
       try {
+        const version=editVersionRef.current;
         const saved = await saveSpreadsheet(doc);
-        setActiveDoc(current=>current?.id===saved.id?saved:current);
-        setDirty(false);setLoadError("");
+        setActiveDoc(current=>current?.id!==saved.id?current:version===editVersionRef.current?saved:{...current,revision:saved.revision,updatedAt:saved.updatedAt});
+        if(version===editVersionRef.current)setDirty(false);setLoadError("");
       } catch(e) {setLoadError(e instanceof Error?e.message:"Sauvegarde impossible");}
       finally {setSaving(false);}
     }, 1500);
@@ -478,7 +480,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     redoStackRef.current.push(JSON.parse(JSON.stringify(activeDoc.sheets)));
     const newDoc = { ...activeDoc, sheets: prevSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -488,7 +490,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     undoStackRef.current.push(JSON.parse(JSON.stringify(activeDoc.sheets)));
     const newDoc = { ...activeDoc, sheets: nextSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -498,7 +500,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     const newSheets = activeDoc.sheets.map((s, i) => i === activeSheetIdx ? updatedSheet : s);
     const newDoc = { ...activeDoc, sheets: newSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -861,7 +863,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     setActiveSheetIdx(newDoc.sheets.length - 1);
     setNewSheetName("");
     setAddingSheet(false);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -873,7 +875,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
     );
     const newDoc = { ...activeDoc, sheets: newSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
     setRenamingSheet(null);
   }
@@ -888,7 +890,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
       if (i === prev) return Math.min(prev, newSheets.length - 1);
       return prev;
     });
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -1004,7 +1006,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
       const newDoc = { ...activeDoc, sheets: [...activeDoc.sheets, ...importedSheets] };
       setActiveDoc(newDoc);
       setActiveSheetIdx(activeDoc.sheets.length);
-      setDirty(true);
+      editVersionRef.current++;setDirty(true);
       scheduleSave(newDoc);
     }
   }
@@ -1209,7 +1211,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
                     ? "bg-blue-900/40 border-blue-700 text-blue-300"
                     : "border-vscode-border text-vscode-muted hover:text-vscode-text"
                 }`}
-              >𝑥 Variables</button>
+              >𝑥 Variables</button><button onClick={()=>void fetchAccountingVariables().then(setAccountingVars).catch(e=>setLoadError(String(e.message)))}>Actualiser les variables</button>
               <button
                 onClick={async () => {
                   if (!confirm(`Supprimer « ${activeDoc.name} » ?`)) return;

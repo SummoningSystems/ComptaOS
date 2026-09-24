@@ -10,6 +10,6 @@ export default defineConfig({
   projects:[{name:"chromium",use:{...devices["Desktop Chrome"]}}],
   webServer:[
     {command:"node backend/node_modules/tsx/dist/cli.mjs backend/src/index.ts",url:"http://127.0.0.1:3004/api/health",reuseExistingServer:false,timeout:120000,env:{WORKSPACE_PATH:workspace,AUTH_ENABLED:"true",HTTPS_ONLY:"false",NODE_ENV:"test",PORT:"3004",HOST:"127.0.0.1",BACKUP_PATH:"",LOCAL_API_KEY:""}},
-    {cwd:"frontend",command:"node node_modules/vite/bin/vite.js --port 5176 --strictPort",url:"http://localhost:5176",reuseExistingServer:false,timeout:120000,env:{API_TARGET:"http://127.0.0.1:3004"}}
+    {cwd:"frontend",command:"node node_modules/vite/bin/vite.js --port 5176 --strictPort",url:"http://localhost:5176",reuseExistingServer:false,timeout:120000,env:{BASE_PATH:"/",API_TARGET:"http://127.0.0.1:3004"}}
   ]
 });

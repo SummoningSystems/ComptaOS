@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyRequest } from "fastify";
 import {
   listSpreadsheets,
   getSpreadsheet,
@@ -9,7 +9,7 @@ import {
   SpreadsheetDoc,
 } from "../services/spreadsheetService.js";
 
-export async function spreadsheetsRoutes(app: FastifyInstance, options: {variables?:()=>Promise<Record<string,number>>} = {}) {
+export async function spreadsheetsRoutes(app: FastifyInstance, options: {variables?:(req:FastifyRequest)=>Promise<Record<string,number>>} = {}) {
   // GET /api/spreadsheets
   app.get("/", async (_req, reply) => {
     const docs = await listSpreadsheets();
@@ -18,7 +18,7 @@ export async function spreadsheetsRoutes(app: FastifyInstance, options: {variabl
 
   // GET /api/spreadsheets/variables — variables comptables
   app.get("/variables", async (_req, reply) => {
-    const vars = await (options.variables??getAccountingVariables)();
+    const vars = await (options.variables??getAccountingVariables)(_req);
     return reply.send(vars);
   });
 

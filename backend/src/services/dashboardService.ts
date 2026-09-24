@@ -1,3 +1,5 @@
+import {recurringForCompany} from "./ecosystemPlanning.js";
+import {treasuryAccounts,accountBalance} from "../domain/ecosystemMetrics.js";
 import {currentEcosystemCompany,loadEcosystem} from "./ecosystemService.js";
 import { loadAllTransactions } from "./transactionService.js";
 import { loadManualRecurring } from "./manualRecurringService.js";
@@ -81,7 +83,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   const ecosystem=ecosystemCompany?await loadEcosystem(ecosystemCompany.ecosystemId!):null;
   const entity=ecosystem?.entities.find(e=>e.workspaceId===ecosystemCompany?.id);
   // Only accounts explicitly held by the company are company cash.
-  const owned=ecosystem?.entities.filter(e=>e.kind==="account"&&ecosystem.relations.some(r=>r.kind==="holder"&&r.from===entity?.id&&r.to===e.id))??[];
+  const owned=ecosystem&&entity?treasuryAccounts(ecosystem,entity.id,new Date().toISOString().slice(0,10)):[];
   const bankMovements=ecosystem?.movements.filter(m=>owned.some(a=>a.id===m.accountId)&&!m.deleted&&!m.pending&&!m.duplicateCandidates?.length)??[];
   const availableYears = Array.from(new Set(transactions
     .filter((transaction) => transaction.status !== "rejected")
@@ -153,11 +155,11 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     transactionFlow=bankMovements.reduce((n,m)=>n+m.cents,0)/100;
     bankAccounts=owned.flatMap(a=>{
       const feed=ecosystem.feeds.find(f=>f.accountId===a.id&&f.balance!==undefined);
-      const cents=feed?.balance??(a.opening?a.opening.cents+bankMovements.filter(m=>m.accountId===a.id&&m.date>=a.opening!.date).reduce((n,m)=>n+m.cents,0):undefined);
+      const cents=accountBalance(ecosystem,a.id,new Date().toISOString().slice(0,10))??undefined;
       return cents===undefined?[]:[{id:a.id,name:a.name,currency:"EUR",balance:cents/100,updated_at:feed?.balanceAt}];
     });
     cashUnknown=!owned.length||bankAccounts.length!==owned.length;
-    recurring=ecosystem.recurring.filter(r=>r.active&&owned.some(a=>a.id===r.accountId)).map(r=>({id:r.id,label:r.label,category:"misc",amount:r.cents/100,frequency:r.frequency==="monthly"?"mensuel":r.frequency==="quarterly"?"trimestriel":"annuel",nextPayment:r.nextDate,active:true}));
+    recurring=[...recurring.filter(r=>r.id.startsWith("hr_")||!ecosystem.planningMigrated?.includes("recurring:"+entity?.id)),...recurringForCompany(ecosystem,entity!.id)];
   }
   const bankBalance = !cashUnknown&&bankAccounts.length > 0
     ? bankAccounts.reduce((sum, account) => sum + account.balance, 0)

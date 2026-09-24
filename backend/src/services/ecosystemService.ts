@@ -1,3 +1,6 @@
+import {treasuryAccounts} from "../domain/ecosystemMetrics.js";
+import {isManualRecurring} from "./manualRecurringService.js";
+import {resolveVariables,type FinancialVariable} from "../domain/ecosystemVariables.js";
 import {needsTransactionEvidence} from "./transactionEvidenceService.js";
 import {hydrateDocuments} from "./ecosystemDocuments.js";
 import fs from "node:fs/promises";
@@ -23,11 +26,11 @@ export function requireAdmin(){if(!["owner","admin"].includes(actor().role))fail
 const safeId=(s:unknown):s is string=>typeof s==="string"&&/^[a-zA-Z0-9_-]{1,100}$/.test(s);
 function text(value:unknown,max=200):string {if(typeof value!=="string"||!value.trim()||value.length>max)fail("Texte invalide.");return value.trim();}
 function integer(value:unknown):number {if(!Number.isSafeInteger(value))fail("Montant invalide (centimes entiers).");return value as number;}
-function targetExists(s:Ecosystem,id:string){return id==="root"||s.entities.some(e=>e.id===id&&e.kind!=="account"&&!e.archived);}
+function targetExists(s:Ecosystem,id:string){return ["root","common","unassigned"].includes(id)||s.entities.some(e=>e.id===id&&e.kind!=="account"&&!e.archived);}
 export function validateAllocations(s:Ecosystem,lines:Allocation[],amount:number){
   if(!Array.isArray(lines)||!lines.length||lines.length>100)fail("Affectations requises.");
   const ids=new Set<string>();
-  for(const a of lines){if(!safeId(a.id)||ids.has(a.id)||!targetExists(s,a.target))fail("Affectation invalide.");ids.add(a.id);text(a.category);integer(a.cents);if(a.cents&&Math.sign(a.cents)!==Math.sign(amount))fail("Sens d’affectation invalide.");}
+  for(const a of lines){if(a.target==="root")a.target="common";if(!safeId(a.id)||ids.has(a.id)||!targetExists(s,a.target))fail("Affectation invalide.");ids.add(a.id);text(a.category);integer(a.cents);if(a.cents&&Math.sign(a.cents)!==Math.sign(amount))fail("Sens d’affectation invalide.");}
   if(lines.reduce((n,a)=>n+a.cents,0)!==amount)fail("La somme des affectations doit égaler le mouvement.");
 }
 async function materialize(root:string,state:Ecosystem){
@@ -44,9 +47,48 @@ async function materialize(root:string,state:Ecosystem){
 async function loadUnlocked(id:string):Promise<Ecosystem>{
   const root=ecosystemRoot(id);
   const journal=await fs.readFile(path.join(root,"ecosystem.pending.json"),"utf8").catch(e=>{if(e.code!=="ENOENT")throw e;return null;});
-  if(journal){const pending=JSON.parse(journal) as Ecosystem;if(pending.id!==id||pending.schemaVersion!==1)fail("Journal de récupération invalide.",503);await materialize(root,pending);}
+  if(journal){const pending=JSON.parse(journal) as Ecosystem;if(pending.id!==id||![1,2].includes(pending.schemaVersion))fail("Journal de récupération invalide.",503);await materialize(root,pending);}
   const raw=JSON.parse(await fs.readFile(path.join(root,"ecosystem.json"),"utf8")) as Ecosystem;
-  if(raw.schemaVersion!==1||raw.id!==id||!Number.isSafeInteger(raw.revision))fail("Format écosystème non pris en charge.",503);
+  if(![1,2].includes(raw.schemaVersion)||raw.id!==id||!Number.isSafeInteger(raw.revision))fail("Format écosystème non pris en charge.",503);
+  if(raw.schemaVersion===1){
+    // Preserve the original bytes before upgrading; retrying after a crash is safe.
+    const original=await fs.readFile(path.join(root,"ecosystem.json"),"utf8");
+    await fs.writeFile(path.join(root,"ecosystem.v1.backup.json"),original,{flag:"wx",mode:0o600}).catch(e=>{if(e.code!=="EEXIST")throw e;});
+    const review:string[]=[];
+    for(const m of raw.movements)for(const a of m.allocations)if(a.target==="root"){
+      a.target=a.category==="À classer"?"unassigned":"common";
+      if(a.target==="unassigned")review.push("movement:"+m.id);
+    }
+    for(const e of raw.entities)if(e.kind==="account"&&(!e.defaultTarget||e.defaultTarget==="root")){e.defaultTarget="unassigned";review.push("account:"+e.id);}
+    for(const b of raw.budgets)if(b.target==="root")b.target="common";
+    for(const r of raw.recurring)for(const a of r.allocations)if(a.target==="root")a.target="common";
+    raw.schemaVersion=2;raw.revision++;raw.migration={at:new Date().toISOString(),from:1,review:[...new Set(review)]};
+    raw.history.push({at:raw.migration.at,actor:"migration",action:"schema-v2",details:raw.migration});
+    await atomicWriteFile(path.join(root,"ecosystem.pending.json"),JSON.stringify(raw));await materialize(root,raw);
+  }
+  const planningBefore=JSON.stringify(raw);const migrated:string[]=[];
+  for(const company of raw.entities.filter(e=>e.kind==="company"&&e.workspaceId)){
+    const record=loadCompanies().find(c=>c.id===company.workspaceId);if(!record)continue;
+    for(const kind of ["recurring","budgets"] as const){
+      const key=kind+":"+company.id;if(raw.planningMigrated?.includes(key))continue;
+      const file=path.join(resolveCompanyPath(record),"settings",kind==="recurring"?"manual_recurring.json":"budgets.json");
+      const content=await fs.readFile(file,"utf8").catch(e=>{if(e.code!=="ENOENT")throw e;return null;});if(content===null)continue;
+      const entries=JSON.parse(content) as unknown[];if(!Array.isArray(entries))fail("Prévisions historiques invalides : "+company.name,503);
+      if(kind==="recurring")for(const entry of entries){
+        if(!isManualRecurring(entry))fail("Échéance historique invalide : "+company.name,503);
+        if(raw.recurring.some(r=>r.id===entry.id))continue;
+        const cents=Math.round(entry.amount*100);
+        raw.recurring.push({id:entry.id,label:entry.label,accountId:"",cents,allocations:[{id:uid(),target:company.id,category:entry.category,cents:-cents}],frequency:entry.frequency==="mensuel"?"monthly":entry.frequency==="trimestriel"?"quarterly":"yearly",nextDate:entry.nextPayment,endDate:entry.endPayment,active:entry.active,decision:entry.decision,simulatedCents:entry.simulatedAmount===undefined?undefined:Math.round(entry.simulatedAmount*100),notes:entry.notes,originCompany:company.id});
+      }
+      else for(const entry of entries){const b=entry as {category:string;monthlyLimit:number};if(!b||typeof b.category!=="string"||!Number.isFinite(b.monthlyLimit)||b.monthlyLimit<0)fail("Budget historique invalide : "+company.name,503);if(!raw.budgets.some(v=>v.target===company.id&&v.category===b.category))raw.budgets.push({id:uid(),target:company.id,category:b.category,cents:Math.round(b.monthlyLimit*100),basis:"accounting"});}
+      raw.planningMigrated=[...(raw.planningMigrated??[]),key];migrated.push(key);
+    }
+  }
+  if(migrated.length){
+    await fs.writeFile(path.join(root,"ecosystem.planning.backup.json"),planningBefore,{flag:"wx",mode:0o600}).catch(e=>{if(e.code!=="EEXIST")throw e;});
+    raw.revision++;raw.history.push({at:new Date().toISOString(),actor:"migration",action:"planning-migration",details:{sources:migrated,review:raw.recurring.filter(r=>!r.accountId).map(r=>r.id)}});
+    await atomicWriteFile(path.join(root,"ecosystem.pending.json"),JSON.stringify(raw));await materialize(root,raw);
+  }
   await hydrateDocuments(raw);return raw;
 }
 export async function loadEcosystem(id:string){const root=ecosystemRoot(id);return workspaceLock(root,()=>loadUnlocked(id));}
@@ -54,11 +96,21 @@ export async function createEcosystem(name:string){
   requireAdmin();name=text(name);
   return workspaceLock(path.join(getCompaniesRoot(),"_registry"),async()=>{
     const record=createCompany(name,false);record.kind="ecosystem";record.memberIds=[actor().id];
-    const state:Ecosystem={schemaVersion:1,id:record.id,name,revision:0,entities:[],relations:[],movements:[],transfers:[],documents:[],treatments:[],budgets:[],recurring:[],feeds:[],imports:[],history:[]};
+    const state:Ecosystem={schemaVersion:2,id:record.id,name,revision:0,entities:[],relations:[],movements:[],transfers:[],documents:[],treatments:[],budgets:[],recurring:[],feeds:[],imports:[],history:[]};
     // Publish the registry only after a complete state exists.
     await atomicWriteFile(path.join(resolveCompanyPath(record),"ecosystem.json"),JSON.stringify(state));
     saveCompanies([...loadCompanies(),record]);return state;
   });
+}
+function affectedScopes(before:Ecosystem,after:Ecosystem){
+ const ids=new Set<string>(["root"]);
+ function changed<T extends {id:string}>(a:T[],b:T[],scopes:(v:T)=>string[]){const old=new Map(a.map(v=>[v.id,v]));const next=new Map(b.map(v=>[v.id,v]));for(const id of new Set([...old.keys(),...next.keys()]))if(JSON.stringify(old.get(id))!==JSON.stringify(next.get(id)))for(const value of [old.get(id),next.get(id)])if(value)for(const scope of scopes(value))ids.add(scope);}
+ changed(before.entities,after.entities,e=>[e.id]);changed(before.relations,after.relations,r=>[r.from,r.to]);
+ changed(before.movements,after.movements,m=>[m.accountId,...m.allocations.map(a=>a.target)]);
+ changed(before.documents,after.documents,d=>[...d.links,...d.movementIds.flatMap(id=>{const m=after.movements.find(m=>m.id===id);return m?[m.accountId,...m.allocations.map(a=>a.target)]:[];})]);
+ changed(before.budgets,after.budgets,b=>[b.target]);changed(before.recurring,after.recurring,r=>[r.accountId,...r.allocations.map(a=>a.target)]);
+ changed(before.variables??[],after.variables??[],v=>[v.scope]);
+ changed(before.treatments.map(t=>({...t,id:t.transaction.id})),after.treatments.map(t=>({...t,id:t.transaction.id})),t=>[t.companyId]);return [...ids].filter(Boolean);
 }
 export async function mutateEcosystem(id:string,revision:number|undefined,action:string,work:(s:Ecosystem)=>unknown|Promise<unknown>){
   if(actor().role==="readonly")fail("Accès en lecture seule.",403);
@@ -71,7 +123,7 @@ export async function mutateEcosystem(id:string,revision:number|undefined,action
     for(const m of s.movements)refreshTreatments(s,m);
     for(const old of before.treatments){const next=s.treatments.find(t=>t.transaction.id===old.transaction.id);if(JSON.stringify(old)!==JSON.stringify(next)){await companyOpen(before,old);if(old.transaction.status==="validated"&&action!=="reopen")fail("Rouvrez les traitements validés avant cette modification.",409);}}
     for(const next of s.treatments){const old=before.treatments.find(t=>t.transaction.id===next.transaction.id);if(JSON.stringify(next)!==JSON.stringify(old))await companyOpen(s,next);}
-    s.revision++;s.history.push({at:new Date().toISOString(),actor:actor().id,action,details:details??null});
+    s.revision++;s.history.push({at:new Date().toISOString(),actor:actor().id,scopeIds:affectedScopes(before,s),action,details:details??null});
     // All linked movements and accounting treatments share one atomic commit.
     await atomicWriteFile(path.join(root,"ecosystem.pending.json"),JSON.stringify(s));
     await materialize(root,s);return s;
@@ -92,9 +144,9 @@ async function companyOpen(s:Ecosystem,t:Treatment){
 }
 function refreshTreatments(s:Ecosystem,m:Movement){
   const transfer=s.transfers.find(t=>t.fromId===m.id||t.toId===m.id);
-  const companiesFor=(account:string)=>s.entities.filter(e=>e.kind==="company"&&e.accountingEnabled&&s.relations.some(r=>r.kind==="holder"&&r.from===e.id&&r.to===account||r.kind==="usage"&&r.from===account&&r.to===e.id));
+  const companiesFor=(account:string,at=m.date)=>s.entities.filter(e=>e.kind==="company"&&e.accountingEnabled&&treasuryAccounts(s,e.id,at).some(a=>a.id===account));
   const other=transfer?s.movements.find(x=>x.id===(transfer.fromId===m.id?transfer.toId:transfer.fromId)):undefined;
-  const wanted=m.deleted||m.pending||m.duplicateCandidates?.length?[]:transfer?companiesFor(m.accountId).filter(e=>m.cents<0||!other||!companiesFor(other.accountId).some(c=>c.id===e.id)).map(e=>({id:"transfer-"+transfer.id+"-"+e.id,target:e.id,cents:m.cents,category:"internal_transfer"})):m.allocations.filter(a=>s.entities.some(e=>e.id===a.target&&e.kind==="company"&&e.accountingEnabled));
+  const wanted=m.deleted||m.pending||m.duplicateCandidates?.length?[]:transfer?companiesFor(m.accountId).filter(e=>m.cents<0||!other||!companiesFor(other.accountId,other.date).some(c=>c.id===e.id)).map(e=>({id:"transfer-"+transfer.id+"-"+e.id,target:e.id,cents:m.cents,category:"internal_transfer"})):m.allocations.filter(a=>s.entities.some(e=>e.id===a.target&&e.kind==="company"&&e.accountingEnabled));
   s.treatments=s.treatments.filter(t=>t.movementId!==m.id||wanted.some(a=>a.id===t.allocationId));
   for(const a of wanted){
     const old=s.treatments.find(t=>t.movementId===m.id&&t.allocationId===a.id);
@@ -105,11 +157,12 @@ function refreshTreatments(s:Ecosystem,m:Movement){
 export function makeMovement(s:Ecosystem,input:Partial<Movement>):Movement {
   const account=s.entities.find(e=>e.id===input.accountId&&e.kind==="account"&&!e.archived);if(!account)fail("Compte actif requis.");
   if(!validDate(input.date!))fail("Date invalide.");const cents=integer(input.cents);
-  const m:Movement={id:uid(),accountId:account.id,date:input.date!,label:text(input.label,1000),cents,currency:"EUR",allocations:input.allocations??[{id:uid(),target:account.defaultTarget??"root",category:"À classer",cents}],revision:1,reviewed:input.reviewed===true,nature:input.nature??(cents<0?"expense":"income"),notes:typeof input.notes==="string"?input.notes.slice(0,10000):""};
+  const m:Movement={id:uid(),accountId:account.id,date:input.date!,label:text(input.label,1000),cents,currency:"EUR",allocations:input.allocations??[{id:uid(),target:account.defaultTarget??"unassigned",category:"À classer",cents}],revision:1,reviewed:input.reviewed===true,nature:input.nature??(cents<0?"expense":"income"),notes:typeof input.notes==="string"?input.notes.slice(0,10000):""};
+  if(input.tags!==undefined){if(!Array.isArray(input.tags)||input.tags.length>30)fail("Étiquettes invalides.");m.tags=[...new Set(input.tags.map(t=>text(t,60)))];}
   if(!["income","expense","refund"].includes(m.nature))fail("Nature invalide.");validateAllocations(s,m.allocations,cents);return m;
 }
 function household(s:Ecosystem):HouseholdState {
-  return {schemaVersion:1,revision:s.revision,people:s.entities.filter(e=>e.kind==="person").map(e=>({id:e.id,name:e.name})),contexts:[{id:"root",name:"Vie commune",kind:"shared"},...s.entities.filter(e=>e.kind!=="account").map(e=>({id:e.id,name:e.name,kind:e.kind==="company"?"activity" as const:"personal" as const}))],accounts:s.entities.filter(e=>e.kind==="account").map(e=>({id:e.id,name:e.name,ownerIds:s.relations.filter(r=>r.kind==="holder"&&r.to===e.id).map(r=>r.from),currency:"EUR",purpose:"personal",defaultContextId:e.defaultTarget??"root",archived:e.archived,opening:e.opening})),transactions:s.movements.map(m=>({...m,allocations:m.allocations.map(a=>({contextId:a.target,category:a.category,cents:a.cents})),source:m.source?.provider==="file"?m.source.raw as HouseholdState["transactions"][number]["source"]:undefined,attachments:[],updatedAt:"",updatedBy:""})),transfers:s.transfers,budgets:[],recurring:[],imports:s.imports,history:[]};
+  return {schemaVersion:1,revision:s.revision,people:s.entities.filter(e=>e.kind==="person").map(e=>({id:e.id,name:e.name})),contexts:[{id:"root",name:"Vie commune (ancien)",kind:"shared"},{id:"common",name:"Vie commune",kind:"shared"},{id:"unassigned",name:"Non affecté",kind:"shared"},...s.entities.filter(e=>e.kind!=="account").map(e=>({id:e.id,name:e.name,kind:e.kind==="company"?"activity" as const:"personal" as const}))],accounts:s.entities.filter(e=>e.kind==="account").map(e=>({id:e.id,name:e.name,ownerIds:s.relations.filter(r=>r.kind==="holder"&&r.to===e.id).map(r=>r.from),currency:"EUR",purpose:"personal",defaultContextId:e.defaultTarget??"unassigned",archived:e.archived,opening:e.opening})),transactions:s.movements.map(m=>({...m,allocations:m.allocations.map(a=>({contextId:a.target,category:a.category,cents:a.cents})),source:m.source?.provider==="file"?m.source.raw as HouseholdState["transactions"][number]["source"]:undefined,attachments:[],updatedAt:"",updatedBy:""})),transfers:s.transfers,budgets:[],recurring:[],imports:s.imports,history:[]};
 }
 export function previewEcosystemImport(s:Ecosystem,input:HouseholdImport){
   const preview=previewImport(household(s),input);
@@ -125,8 +178,19 @@ export async function ecosystemCommand(id:string,input:Record<string,unknown>){
   if(!Number.isSafeInteger(input.revision))fail("Révision requise.");
   return mutateEcosystem(id,input.revision as number,text(input.action),async s=>{
     switch(input.action){
+      case "variable":{
+        const v=input.variable as FinancialVariable;
+        if(!v||!safeId(v.id)||!["income","expenses","net","balance","bank_debits","bank_credits","accounting_revenue_ht","accounting_expenses_ht","vat","forecast_expenses"].includes(v.metric)||typeof v.period!=="string"||typeof v.scope!=="string"||v.formula!==undefined&&typeof v.formula!=="string")fail("Variable invalide.");
+        const next:FinancialVariable={id:v.id,name:text(v.name),scope:v.scope,metric:v.metric,period:v.period,category:v.category?text(v.category):undefined,formula:v.formula?.trim()||undefined};
+        const list=[...(s.variables??[]).filter(x=>x.id!==v.id),next];
+        const result=resolveVariables(s,list).find(x=>x.id===v.id)!;
+        // Unknown bank balances are legitimate states, but malformed formulas/cycles are not saved.
+        if(next.formula&&result.error)fail(result.error);
+        s.variables=list;return next;
+      }
+      case "delete-variable":s.variables=(s.variables??[]).filter(v=>v.id!==input.id);return {id:input.id};
       case "entity":{
-        const v=input.entity as Entity;if(!v||!safeId(v.id)||!["person","company","account"].includes(v.kind))fail("Élément invalide.");
+        const v=input.entity as Entity;if(!v||(!safeId(v.id)||["root","common","unassigned"].includes(v.id))||!["person","company","account"].includes(v.kind))fail("Élément invalide.");
         const old=s.entities.find(e=>e.id===v.id);if(old&&old.kind!==v.kind)fail("Le type ne peut pas changer.");
         if(old&&old.revision!==v.revision)fail("Élément modifié. Rechargez avant de modifier ses propriétés.",409);
         const e:Entity={id:v.id,kind:v.kind,name:text(v.name),archived:v.archived===true,revision:(old?.revision??0)+1};
@@ -139,7 +203,16 @@ export async function ecosystemCommand(id:string,input:Record<string,unknown>){
         if(v.kind==="account"){
           e.usage=text(v.usage??"Autre");
           e.bankIdentifier=v.bankIdentifier?.replace(/\s/g,"").toUpperCase();
-          if(e.bankIdentifier&&(!/^[A-Z0-9]{15,34}$/.test(e.bankIdentifier)||s.entities.some(other=>other.id!==e.id&&other.bankIdentifier===e.bankIdentifier)))fail("Identifiant bancaire invalide ou déjà associé à un autre compte.");e.defaultTarget=v.defaultTarget??"root";if(!targetExists(s,e.defaultTarget))fail("Affectation par défaut invalide.");
+          if(e.bankIdentifier&&(!/^[A-Z0-9]{15,34}$/.test(e.bankIdentifier)||s.entities.some(other=>other.id!==e.id&&other.bankIdentifier===e.bankIdentifier)))fail("Identifiant bancaire invalide ou déjà associé à un autre compte.");e.defaultTarget=v.defaultTarget==="root"?"common":v.defaultTarget??"unassigned";if(!targetExists(s,e.defaultTarget))fail("Affectation par défaut invalide.");
+          e.treasuryAssignments=v.treasuryAssignments??old?.treasuryAssignments;
+          if(e.treasuryAssignments){
+            if(!Array.isArray(e.treasuryAssignments)||e.treasuryAssignments.length>100)fail("Affectations de trésorerie invalides.");
+            for(const a of e.treasuryAssignments){
+              if(!s.entities.some(c=>c.id===a.companyId&&c.kind==="company"&&!c.archived)||!validDate(a.from)||a.to&&(!validDate(a.to)||a.to<a.from))fail("Entreprise et dates de trésorerie invalides.");
+            }
+            const ordered=[...e.treasuryAssignments].sort((a,b)=>a.from.localeCompare(b.from));
+            if(ordered.some((a,i)=>i>0&&a.from<=(ordered[i-1].to??"9999-12-31")))fail("Un compte ne peut contribuer à deux trésoreries sur la même période.");
+          }
           e.opening=undefined;
           if(v.opening){if(!validDate(v.opening.date))fail("Date du solde invalide.");e.opening={date:v.opening.date,cents:integer(v.opening.cents)};}
         }
@@ -188,7 +261,7 @@ export async function ecosystemCommand(id:string,input:Record<string,unknown>){
         if(m.revision!==input.expectedRevision)fail("Mouvement modifié.",409);
         if(s.transfers.some(t=>t.fromId===m.id||t.toId===m.id))fail("Dissociez le virement avant correction.",409);
         for(const t of s.treatments.filter(t=>t.movementId===m.id)){await companyOpen(s,t);if(t.transaction.status==="validated")fail("Rouvrez les traitements avant correction.",409);}
-        const change=m.sourceChange;const before=structuredClone(m);Object.assign(m,change,{sourceChange:undefined,reviewed:false,revision:m.revision+1,allocations:change.cents===m.cents?m.allocations:[{id:uid(),target:"root",category:"À classer",cents:change.cents}]});return {before,after:m};
+        const change=m.sourceChange;const before=structuredClone(m);Object.assign(m,change,{sourceChange:undefined,reviewed:false,revision:m.revision+1,allocations:change.cents===m.cents?m.allocations:[{id:uid(),target:"unassigned",category:"À classer",cents:change.cents}]});return {before,after:m};
       }
       case "import":return importMovements(s,input.import as HouseholdImport);
       case "transfer":{
@@ -199,9 +272,9 @@ export async function ecosystemCommand(id:string,input:Record<string,unknown>){
         const t={id:uid(),fromId:a.id,toId:b?.id};s.transfers.push(t);refreshTreatments(s,a);if(b)refreshTreatments(s,b);return t;
       }
       case "unlink":{const t=s.transfers.find(t=>t.id===input.id);for(const treatment of s.treatments.filter(v=>v.transferId===input.id)){await companyOpen(s,treatment);if(treatment.transaction.status==="validated")fail("Rouvrez les traitements du virement avant de le dissocier.",409);}s.transfers=s.transfers.filter(t=>t.id!==input.id);for(const m of s.movements.filter(m=>m.id===t?.fromId||m.id===t?.toId))refreshTreatments(s,m);return t;}
-      case "budget":{const v=input.budget as Ecosystem["budgets"][number];if(!v||!targetExists(s,v.target)||integer(v.cents)<0)fail("Budget invalide.");const row={id:v.id||uid(),target:v.target,category:text(v.category),cents:v.cents};const i=s.budgets.findIndex(b=>b.id===row.id);if(i<0)s.budgets.push(row);else s.budgets[i]=row;return row;}
+      case "budget":{const v=input.budget as Ecosystem["budgets"][number];if(!v||!targetExists(s,v.target)||integer(v.cents)<0)fail("Budget invalide.");const row={id:v.id||uid(),target:v.target==="root"?"common":v.target,category:text(v.category),cents:v.cents,basis:v.basis==="accounting"?"accounting" as const:"allocations" as const};const i=s.budgets.findIndex(b=>b.id===row.id);if(i<0)s.budgets.push(row);else s.budgets[i]=row;return row;}
       case "delete-budget":s.budgets=s.budgets.filter(b=>b.id!==input.id);return input.id;
-      case "recurring":{const v=input.recurring as Ecosystem["recurring"][number];if(!v||!s.entities.some(e=>e.id===v.accountId&&e.kind==="account"&&!e.archived)||integer(v.cents)<=0||!validDate(v.nextDate)||!["monthly","quarterly","yearly"].includes(v.frequency))fail("Échéance invalide.");validateAllocations(s,v.allocations,-v.cents);const row={...v,id:v.id||uid(),label:text(v.label),active:v.active===true};const i=s.recurring.findIndex(r=>r.id===row.id);if(i<0)s.recurring.push(row);else s.recurring[i]=row;return row;}
+      case "recurring":{const v=input.recurring as Ecosystem["recurring"][number];if(!v||!s.entities.some(e=>e.id===v.accountId&&e.kind==="account"&&!e.archived)||integer(v.cents)<=0||!validDate(v.nextDate)||!["monthly","quarterly","yearly"].includes(v.frequency))fail("Échéance invalide.");if(v.endDate&&(!validDate(v.endDate)||v.endDate<v.nextDate)||v.decision&&!["keep","reduce","cancel","planned"].includes(v.decision)||v.simulatedCents!==undefined&&integer(v.simulatedCents)<0)fail("Scénario invalide.");validateAllocations(s,v.allocations,-v.cents);const row={...v,id:v.id||uid(),label:text(v.label),active:v.active===true};const i=s.recurring.findIndex(r=>r.id===row.id);if(i<0)s.recurring.push(row);else s.recurring[i]=row;return row;}
       case "document":{const d=s.documents.find(d=>d.id===input.id);if(!d)fail("Document introuvable.",404);const v=input.document as typeof d;if(!Array.isArray(v.links)||v.links.some(id=>!s.entities.some(e=>e.id===id))||!Array.isArray(v.movementIds)||v.movementIds.some(id=>!s.movements.some(m=>m.id===id)))fail("Liens invalides.");for(const t of s.treatments.filter(t=>t.movementId&&d.movementIds.includes(t.movementId)&&!v.movementIds.includes(t.movementId))){await companyOpen(s,t);if(t.transaction.status==="validated")fail("Rouvrez le traitement avant de retirer son justificatif.",409);}
         Object.assign(d,{name:text(v.name),kind:text(v.kind),date:validDate(v.date)?v.date:d.date,links:[...new Set(v.links)],movementIds:[...new Set(v.movementIds)]});return d;}
       case "reopen":{const t=s.treatments.find(t=>t.transaction.id===input.id);if(!t)fail("Traitement introuvable.",404);await companyOpen(s,t);t.transaction.status="pending";t.transaction.reconciled=false;t.transaction.revision=(t.transaction.revision??0)+1;return t;}
@@ -211,10 +284,8 @@ export async function ecosystemCommand(id:string,input:Record<string,unknown>){
 }
 export function currentEcosystemCompany(){const record=loadCompanies().find(c=>c.id===workspaceContext.getStore()?.id);return record?.ecosystemId?record:undefined;}
 export async function ecosystemTransactions(){const company=currentEcosystemCompany();if(!company)return null;const s=await loadEcosystem(company.ecosystemId!);const e=s.entities.find(e=>e.workspaceId===company.id);return s.treatments.filter(t=>t.companyId===e?.id).map(t=>({...t.transaction,documentIds:s.documents.filter(d=>!!t.movementId&&d.movementIds.includes(t.movementId)).map(d=>d.id)}));}
-export async function writeEcosystemTransaction(txn:Transaction,remove=false){
-  const company=currentEcosystemCompany();if(!company)return false;
-  await mutateEcosystem(company.ecosystemId!,undefined,remove?"accounting-delete":"accounting",async s=>{
-    const e=s.entities.find(e=>e.workspaceId===company.id);if(!e?.accountingEnabled)fail("Activez la comptabilité pour cette entreprise.");
+async function applyEcosystemTransaction(s:Ecosystem,txn:Transaction,remove:boolean,companyId:string){
+    const e=s.entities.find(e=>e.workspaceId===companyId);if(!e?.accountingEnabled)fail("Activez la comptabilité pour cette entreprise.");
     const old=s.treatments.find(t=>t.companyId===e.id&&t.transaction.id===txn.id);
     await assertMonthOpen(old?.transaction.date??txn.date);await assertMonthOpen(txn.date);
     if(old&&txn.revision!==old.transaction.revision)fail("Traitement modifié. Rechargez.",409);
@@ -233,5 +304,13 @@ export async function writeEcosystemTransaction(txn:Transaction,remove=false){
     delete txn.documentIds;
     txn.revision=(old?.transaction.revision??0)+1;
     if(old)old.transaction=txn;else s.treatments.push({companyId:e.id,transaction:txn});return txn;
-  });return true;
 }
+export async function writeEcosystemTransactions(txns:Transaction[],remove=false){
+ const company=currentEcosystemCompany();if(!company)return false;
+ if(!txns.length||txns.length>500||new Set(txns.map(t=>t.id)).size!==txns.length)fail("Sélection invalide (500 maximum).");
+ await mutateEcosystem(company.ecosystemId!,undefined,remove?"accounting-delete":"accounting",async s=>{
+   for(const txn of txns)await applyEcosystemTransaction(s,txn,remove,company.id);
+   return {ids:txns.map(t=>t.id)};
+ });return true;
+}
+export async function writeEcosystemTransaction(txn:Transaction,remove=false){return writeEcosystemTransactions([txn],remove);}

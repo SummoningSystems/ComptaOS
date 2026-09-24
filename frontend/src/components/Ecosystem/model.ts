@@ -1,12 +1,13 @@
+import {resolveTool,type ToolId} from "./toolCatalog";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAppStore } from "../../stores/appStore";
 
 export type EntityKind = "person" | "company" | "account";
-export type Entity = { revision?:number; workspaceId?:string; bankIdentifier?:string; archived?:boolean; defaultTarget?:string; opening?:{date:string;cents:number}; id: string; kind: EntityKind; name: string; usage?: string; companyType?: string; accountingEnabled?: boolean; vatEnabled?: boolean };
+export type Entity = { treasuryAssignments?:{companyId:string;from:string;to?:string}[]; revision?:number; workspaceId?:string; bankIdentifier?:string; archived?:boolean; defaultTarget?:string; opening?:{date:string;cents:number}; id: string; kind: EntityKind; name: string; usage?: string; companyType?: string; accountingEnabled?: boolean; vatEnabled?: boolean };
 export type Relation = { id: string; from: string; to: string; kind: "holder" | "activity" | "usage" | "subsidiary" };
 export type View = "documents" | "settings" | "structure" | "flows" | "transactions" | "movement" | "accounting" | "placeholder";
-export type ScopeTab = { view: View; scope: string; record?: string; label?: string; period?: string; category?: string; section?: string; businessType?: import("../../types").TabType; businessPath?:string };
+export type ScopeTab = { ui?:Record<string,unknown>; toolId?:ToolId; view: View; scope: string; record?: string; label?: string; period?: string; category?: string; section?: string; businessType?: import("../../types").TabType; businessPath?:string };
 export const ROOT = "root";
 // getRandomValues also works on HTTP LAN previews, unlike randomUUID.
 export const prototypeId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b=>b.toString(16).padStart(2,"0")).join("");
@@ -77,17 +78,18 @@ export const useEcosystem = create<Model>()(persist((set) => ({
 }),{name:"comptaos-ecosystem-ux-v1",version:1,partialize:s=>new URLSearchParams(location.search).get("prototype")==="ecosystem"?({entities:s.entities,relations:s.relations,positions:s.positions,layout:s.layout}):({})}));
 
 export function scopeName(scope:string) {
-  return scope===ROOT?"Vue d’ensemble":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";
+  return scope==="unassigned"?"Non affecté":scope==="common"?"Vie commune":scope===ROOT?"Vue d’ensemble":useEcosystem.getState().entities.find(e=>e.id===scope)?.name??"Élément";
 }
 const titles: Record<View,string> = {documents:"Documents",settings:"Paramètres",structure:"Structure",flows:"Flux",transactions:"Mouvements",movement:"Mouvement",accounting:"Traitement",placeholder:"Aperçu"};
 export function openScope(spec:ScopeTab) {
+  spec={...spec,toolId:resolveTool(spec)};
   const path=JSON.stringify(spec);
   useAppStore.getState().openTab({id:"eco:"+JSON.stringify({view:spec.view,scope:spec.scope,record:spec.record??"",businessType:spec.businessType,businessPath:spec.businessPath,category:spec.category??"",label:spec.label??titles[spec.view],period:spec.period??""}),type:"ecosystem",title:(spec.label??titles[spec.view])+" · "+scopeName(spec.scope),path});
 }
 export function parseTab(path?:string):ScopeTab {
   try {
     const s=JSON.parse(path??"") as ScopeTab;
-    if(s && s.view in titles && typeof s.scope==="string")return s;
+    if(s && s.view in titles && typeof s.scope==="string")return {...s,toolId:resolveTool(s)};
   } catch { /* Default to the map for invalid links. */ }
   return {view:"structure",scope:ROOT};
 }

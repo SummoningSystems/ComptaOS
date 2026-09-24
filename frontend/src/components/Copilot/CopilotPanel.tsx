@@ -1,3 +1,4 @@
+import {useWorkspaceApi} from "../../api/WorkspaceApi";
 import { useEffect, useRef, useState } from "react";
 import { ChatMessage } from "../../types";
 import { aiChat } from "../../api/ai";
@@ -37,6 +38,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
+  const {api}=useWorkspaceApi();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -62,7 +64,7 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
     setLoading(true);
 
     try {
-      const answer = await aiChat(updated);
+      const answer = await aiChat(updated,api);
       setMessages([...updated, { role: "assistant", content: answer }]);
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : "Erreur inconnue";

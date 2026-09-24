@@ -11,7 +11,7 @@ interface FileEditorProps {
 export function FileEditor({ tabId, path }: FileEditorProps) {
  const {fetchFileContent,rawFileUrl,saveFileContent}=useWorkspaceApi();
 
-  const { markDirty } = useAppStore();
+  const { markDirty,activeTabId } = useAppStore();
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,14 +62,14 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
   // Ctrl+S / Cmd+S
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if (activeTabId===tabId && (e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         handleSave();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleSave]);
+  }, [handleSave,activeTabId,tabId]);
 
   if (previewKind) {
     const url = rawFileUrl(path);

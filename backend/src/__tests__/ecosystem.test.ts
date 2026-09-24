@@ -20,6 +20,8 @@ describe("persisted financial ecosystem",()=>{
   await app.register((await import("../routes/ecosystems.js")).ecosystemsRoutes,{prefix:"/api/ecosystems"});
   await app.register((await import("../routes/transactions.js")).transactionsRoutes,{prefix:"/api/workspaces/:workspaceId/transactions"});
   await app.register((await import("../routes/accounting.js")).accountingRoutes,{prefix:"/api/workspaces/:workspaceId/accounting"});
+  await app.register((await import("../routes/recurring.js")).recurringRoutes,{prefix:"/api/workspaces/:workspaceId/recurring"});
+  await app.register((await import("../routes/settings.js")).settingsRoutes,{prefix:"/api/workspaces/:workspaceId/settings"});
   const result=await app.inject({method:"POST",url:"/api/ecosystems",headers:cookie(),payload:{name:"Ensemble"}});expect(result.statusCode,result.body).toBe(201);state=result.json();endpoint="/api/ecosystems/"+state.id;
   for(const user of [partner,reader])expect((await app.inject({method:"POST",url:endpoint+"/members",headers:cookie(),payload:{userId:user.id}})).statusCode).toBe(200);
  });
@@ -144,7 +146,72 @@ describe("persisted financial ecosystem",()=>{
   expect((await app.inject({url:endpoint+"/tableaux/alice",headers:cookie()})).json()).toEqual([]);
   expect((await app.inject({url:base,headers:cookie(outsider)})).statusCode).toBe(403);
   expect((await app.inject({method:"PUT",url:base+"/"+doc.id,headers:cookie(reader),payload:doc})).statusCode).toBe(403);
-  expect((await app.inject({url:base+"/variables",headers:cookie()})).json()).toEqual({});
+  expect((await app.inject({url:base+"/variables",headers:cookie()})).json()).toMatchObject({affectations_depenses_total:220,affectations_revenus_total:0});
+ });
+
+ it("stores dated dedicated cash and rejects overlapping assignments atomically",async()=>{
+  const account=state.entities.find(e=>e.id==="bank0")!;
+  await command({action:"entity",entity:{...account,treasuryAssignments:[{companyId:"studio",from:"2026-01-01",to:"2026-12-31"}]}});
+  const response=await app.inject({method:"POST",url:endpoint+"/commands",headers:cookie(),payload:{revision:state.revision,action:"entity",entity:{...state.entities.find(e=>e.id==="bank0"),treasuryAssignments:[{companyId:"studio",from:"2026-01-01"},{companyId:"holding",from:"2026-09-01"}]}}});expect(response.statusCode).toBe(400);
+  expect((await app.inject({url:endpoint,headers:cookie()})).json().revision).toBe(state.revision);
+ });
+ it("shares named variables with spreadsheets and retains IDs after renaming",async()=>{
+  await command({action:"variable",variable:{id:"expense_alice",name:"Personnel",scope:"alice",metric:"expenses",period:"2026-09"}});
+  const variables=(await app.inject({url:endpoint+"/variables",headers:cookie()})).json();expect(variables[0].value).toBe(30);
+  const values=(await app.inject({url:endpoint+"/tableaux/root/variables",headers:cookie()})).json();expect(values.v_expense_alice).toBe(30);
+  await command({action:"variable",variable:{...state.variables![0],name:"Personnel renommé"}});
+  expect((await app.inject({url:endpoint+"/tableaux/root/variables",headers:cookie()})).json().v_expense_alice).toBe(30);
+ });
+ it("migrates v1 once with a byte-preserving backup and a review report",async()=>{
+  const created=await app.inject({method:"POST",url:"/api/ecosystems",headers:cookie(),payload:{name:"Migration"}});const old=created.json() as Ecosystem;
+  old.schemaVersion=1;old.entities=[{id:"cash",kind:"account",name:"Compte",defaultTarget:"root"}];old.movements=[{id:"migrate",accountId:"cash",date:"2026-09-01",label:"À classer",cents:-100,currency:"EUR",allocations:[{id:"allocation-kept",target:"root",category:"À classer",cents:-100}],revision:1,reviewed:false,nature:"expense",notes:""}];
+  const folder=companies.resolveCompanyPath(companies.loadCompanies().find(c=>c.id===old.id)!);const raw=JSON.stringify(old);await fs.writeFile(path.join(folder,"ecosystem.json"),raw);
+  const migrated=(await app.inject({url:"/api/ecosystems/"+old.id,headers:cookie()})).json();expect(migrated.schemaVersion).toBe(2);expect(migrated.movements[0].allocations[0]).toMatchObject({id:"allocation-kept",target:"unassigned"});expect(migrated.migration.review).toContain("movement:migrate");expect(await fs.readFile(path.join(folder,"ecosystem.v1.backup.json"),"utf8")).toBe(raw);
+  expect((await app.inject({url:"/api/ecosystems/"+old.id,headers:cookie()})).json().revision).toBe(migrated.revision);
+ });
+
+ it("migrates legacy planning without double writes and rejects stale saves",async()=>{
+  const company=companies.loadCompanies().find(c=>c.id===state.entities.find(e=>e.id==="studio")!.workspaceId)!;
+  const file=path.join(companies.resolveCompanyPath(company),"settings","manual_recurring.json");const legacy=[{id:"legacy-rent",label:"Bureau",category:"rent",amount:200,frequency:"mensuel",nextPayment:"2026-10-01",active:true,decision:"reduce",simulatedAmount:150}];
+  await fs.writeFile(file,JSON.stringify(legacy));const url="/api/workspaces/"+company.id+"/recurring/manual";
+  const loaded=await app.inject({url,headers:cookie()});expect(loaded.statusCode,loaded.body).toBe(200);expect(loaded.json().find((r:{id:string})=>r.id==="legacy-rent").simulatedAmount).toBe(150);
+  state=(await app.inject({url:endpoint,headers:cookie()})).json();expect(state.recurring.find(r=>r.id==="legacy-rent")?.accountId).toBe("");expect(state.planningMigrated).toContain("recurring:studio");
+  const revision=state.revision;const saved=await app.inject({method:"PUT",url,headers:{...cookie(),"x-ecosystem-revision":String(revision)},payload:legacy.map(r=>({...r,amount:250}))});expect(saved.statusCode,saved.body).toBe(200);
+  expect(JSON.parse(await fs.readFile(file,"utf8"))[0].amount).toBe(200);
+  expect((await app.inject({method:"PUT",url,headers:{...cookie(),"x-ecosystem-revision":String(revision)},payload:legacy})).statusCode).toBe(409);
+  state=(await app.inject({url:endpoint,headers:cookie()})).json();expect(state.recurring.find(r=>r.id==="legacy-rent")?.cents).toBe(25000);
+ });
+ it("applies accounting bulk changes atomically when one item is locked",async()=>{
+  const company=state.entities.find(e=>e.id==="studio")!,url="/api/workspaces/"+company.workspaceId+"/transactions";
+  const manual={id:"bulk-draft",date:"2026-10-01",label:"Draft",amount_ttc:-10,amount_ht:-10,vat:0,vat_rate:0,currency:"EUR",category:"misc",account:"",status:"pending"};
+  expect((await app.inject({method:"POST",url,headers:cookie(),payload:manual})).statusCode).toBe(201);
+  state=(await app.inject({url:endpoint,headers:cookie()})).json();const locked=state.treatments.find(t=>t.transaction.status==="validated")!;
+  const result=await app.inject({method:"POST",url:url+"/smart-categorize/apply",headers:cookie(),payload:{changes:[{id:manual.id,category:"rent"},{id:locked.transaction.id,category:"rent"}]}});expect(result.statusCode).toBe(409);
+  const after=(await app.inject({url,headers:cookie()})).json();expect(after.find((t:{id:string})=>t.id===manual.id).category).toBe("misc");
+ });
+
+ it("isolates free files by scope and excludes managed files from editing and search",async()=>{
+  const base=endpoint+"/filespaces/alice/files";
+  expect((await app.inject({method:"PUT",url:base+"/content",headers:cookie(),payload:{path:"note.md",content:"budget-personnel"}})).statusCode).toBe(200);
+  expect((await app.inject({url:base+"/content?path=note.md",headers:cookie(partner)})).json().content).toBe("budget-personnel");
+  expect((await app.inject({method:"PUT",url:base+"/content",headers:cookie(reader),payload:{path:"note.md",content:"bad"}})).statusCode).toBe(403);
+  expect((await app.inject({method:"PUT",url:base+"/content",headers:cookie(),payload:{path:"transactions/fake.yaml",content:"bad"}})).statusCode).toBe(403);
+  expect((await app.inject({method:"PUT",url:base+"/content",headers:cookie(),payload:{path:"notes/../transactions/fake.yaml",content:"bad"}})).statusCode).toBe(403);
+  const results=(await app.inject({url:endpoint+"/search-files?q=budget-personnel",headers:cookie()})).json();expect(results).toEqual(expect.arrayContaining([expect.objectContaining({scope:"alice",path:"note.md"})]));
+  expect((await app.inject({url:endpoint+"/search-files?q=fake-token",headers:cookie()})).json()).toEqual([]);
+ });
+ it("rejects stale spreadsheet writes without losing the successful version",async()=>{
+  const base=endpoint+"/tableaux/alice";const created=(await app.inject({method:"POST",url:base,headers:cookie(),payload:{name:"Concurrent"}})).json();
+  const one=await app.inject({method:"PUT",url:base+"/"+created.id,headers:cookie(),payload:{...created,name:"First"}});expect(one.statusCode,one.body).toBe(200);
+  expect((await app.inject({method:"PUT",url:base+"/"+created.id,headers:cookie(partner),payload:{...created,name:"Stale"}})).statusCode).toBe(409);
+  expect((await app.inject({url:base+"/"+created.id,headers:cookie()})).json().name).toBe("First");
+ });
+
+ it("returns structured local OCR without creating or validating financial records",async()=>{
+  vi.stubEnv("OCR_LOCAL_URL","http://localhost:9999");
+  vi.stubGlobal("fetch",vi.fn(async(url:string)=>{expect(String(url)).toBe("http://localhost:9999/ocr");return new Response(JSON.stringify({text:"BISTRO DU TEST\nFACTURE N-42\n04/08/2026\nTVA 10 % 16,18 1,62\nTVA 20 % 7,50 1,50\nTOTAL HT 23,68\nTOTAL TTC 26,80"}),{status:200});}));
+  const before=(await app.inject({url:endpoint,headers:cookie()})).json();const response=await app.inject({method:"POST",url:endpoint+"/documents/"+before.documents[0].id+"/analyze",headers:cookie()});expect(response.statusCode,response.body).toBe(200);expect(response.json().proposal.vatSplits).toHaveLength(2);expect(response.json().proposal.amountTtc).toBe(26.8);
+  const after=(await app.inject({url:endpoint,headers:cookie()})).json();expect(after.revision).toBe(before.revision);expect(after.movements).toEqual(before.movements);expect(after.treatments).toEqual(before.treatments);
  });
 
 });

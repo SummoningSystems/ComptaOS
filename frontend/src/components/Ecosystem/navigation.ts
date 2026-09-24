@@ -1,4 +1,5 @@
-﻿import type { NavGroup, NavItem, SidebarSection } from "../Layout/Sidebar";
+import {resolveTool} from "./toolCatalog";
+import type { NavGroup, NavItem, SidebarSection } from "../Layout/Sidebar";
 import { ROOT, type Entity, type Relation, type ScopeTab } from "./model";
 
 export function accountingEnabled(entity?:Entity) {
@@ -14,13 +15,14 @@ export function scopeNavigation(scope:string,entities:Entity[],relations:Relatio
     (r.kind==="holder"&&r.to===scope&&accountingEnabled(entities.find(e=>e.id===r.from))));
   function item(section:SidebarSection,label:string,icon:string,view:ScopeTab["view"]="placeholder",category?:string):NavItem {
     const spec:ScopeTab={view,scope,section,...(view==="placeholder"||category?{label}:{}),...(category?{category}:{})};
+    spec.toolId=resolveTool(spec);
     return {label,icon,tab:{id:section+":"+label,title:label,type:"ecosystem",path:JSON.stringify(spec)}};
   }
   const result:NavGroup[]=[
     {id:"movements",title:"Mouvements",icon:"💳",items:[
       item("movements","Transactions","📋","transactions"),
-      item("movements","Importer un relevé","📥"),
-      ...(bankAccounting?[item("movements","Rapprochement","🔗")]:[]),
+      item("movements","Importer un relevé","📥"),item("movements","Alertes","✅"),
+      ...(!company||bankAccounting?[item("movements","Rapprochement","🔗")]:[]),
     ]},
   ];
   if(scope===ROOT)result.push({id:"compta",title:"Comptabilité",icon:"📒",items:[item("compta","À traiter par entreprise","✅")]});
@@ -36,6 +38,7 @@ export function scopeNavigation(scope:string,entities:Entity[],relations:Relatio
     item("documents","Contrats","📄","documents","contract"),
     ...(!account?[item("documents","Factures","🧾","documents","invoice")]:[]),
     ...(company?[item("documents","Devis","📋","documents","quote")]:[]),
+    ...(!company&&!account?[item("documents","Facturation","🧾"),item("documents","Créer des devis","📋"),item("documents","Tiers","▤"),item("documents","Modèles","▤"),item("documents","RH","▤")]:[]),
   ]});
   result.push({id:"finance",title:"Finance",icon:"💰",items:[
     item("finance",account?"Solde et flux":"Trésorerie","⇄","flows"),
@@ -43,10 +46,10 @@ export function scopeNavigation(scope:string,entities:Entity[],relations:Relatio
     ...(configured?[item("finance","Bilan / P&L","📈")]:[]),
   ]});
   result.push({id:"analyses",title:"Analyses & Export",icon:"📈",items:[
-    item("analyses","Rapports","📊"),item("analyses","Export","⬇"),item("analyses","Tableaux","🧮"),
+    item("analyses","Rapports","📊"),item("analyses","Export","⬇"),item("analyses","Tableaux","🧮"),item("analyses","Variables","𝑥"),
   ]});
   result.push({id:"outils",title:"Paramètres du périmètre",icon:"⚙️",items:[
-    item("outils","Paramètres","⚙️","settings"),item("outils","Historique","🕐"),
+    item("outils","Paramètres","⚙️","settings"),item("outils","Historique","🕐"),item("outils","Fichiers","📁"),...(company?[item("outils","Assistant","✨")]:[]),
   ]});
   return result;
 }

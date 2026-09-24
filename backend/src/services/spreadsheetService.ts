@@ -1,3 +1,6 @@
+import {workspaceLock} from "./workspaceContext.js";
+import {currentEcosystemCompany,loadEcosystem} from "./ecosystemService.js";
+import {resolveVariables} from "../domain/ecosystemVariables.js";
 import {atomicWriteFile} from "./atomicFile.js";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -27,6 +30,7 @@ export interface SpreadsheetSheet {
 }
 
 export interface SpreadsheetDoc {
+  revision?:number;
   id: string;
   name: string;
   createdAt: string;
@@ -71,10 +75,13 @@ export async function getSpreadsheet(id: string): Promise<SpreadsheetDoc | null>
 }
 
 export async function saveSpreadsheet(doc: SpreadsheetDoc): Promise<SpreadsheetDoc> {
-  await fs.mkdir(sheetsDir(), { recursive: true });
-  doc.updatedAt = new Date().toISOString();
-  await atomicWriteFile(docPath(doc.id), JSON.stringify(doc, null, 2));
-  return doc;
+ const target=docPath(doc.id);
+ return workspaceLock(target,async()=>{
+  const current=await getSpreadsheet(doc.id);
+  if(current&&(current.revision??0)!==(doc.revision??0))throw Object.assign(new Error("Ce tableau a été modifié ailleurs. Rechargez-le avant de réessayer ; vos modifications locales sont conservées."),{statusCode:409});
+  const saved={...doc,revision:(current?.revision??0)+1,updatedAt:new Date().toISOString()};
+  await atomicWriteFile(target,JSON.stringify(saved,null,2));return saved;
+ });
 }
 
 export async function createSpreadsheet(name: string): Promise<SpreadsheetDoc> {
@@ -145,5 +152,7 @@ export async function getAccountingVariables(): Promise<AccountingVariables> {
   vars["depenses_total"]  = +Math.abs(all.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + t.amount_ttc, 0)).toFixed(2);
   vars["solde_total"]     = +(vars["revenus_total"] - vars["depenses_total"]).toFixed(2);
 
+  const company=currentEcosystemCompany();
+  if(company){const s=await loadEcosystem(company.ecosystemId!);for(const v of resolveVariables(s,s.variables??[]))if(v.value!==undefined)vars[v.symbol]=v.value;}
   return vars;
 }

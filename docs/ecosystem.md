@@ -152,7 +152,7 @@ Les classeurs d’entreprise déjà présents conservent leur emplacement.
   les jetons individuels, exclus de Git mais inclus dans les sauvegardes complètes.
 - L’ancien écran Foyer n’est plus une entrée de l’application. Les anciennes API et les
   outils d’entreprise via `?legacy=1` restent disponibles pour compatibilité ; aucun
-  convertisseur de données historiques n’est exécuté.
+  convertisseur de l’ancien Foyer indépendant n’est exécuté. Les états écosystème v1 et les anciennes prévisions d’entreprise sont migrés avec conservation des sources (voir le registre de parité).
 
 Utiliser **Application → Sauvegarder maintenant** et les instructions de restauration
 hors ligne du guide local. Sauvegarder avant la bascule et avant chaque mise à jour.
@@ -172,3 +172,8 @@ npm run test:e2e
 
 Les suites navigateur démarrent leurs serveurs et données temporaires. La CI vérifie
 également le démarrage Docker, HTTPS, une sauvegarde et la persistance après redémarrage.
+
+
+## Adaptation des fonctionnalités
+
+Voir [le registre de parité](feature-parity.md) pour les entrées de chaque outil, les règles de périmètre et les migrations. Les nouveautés principales sont **Variables**, les périodes de **Trésorerie dédiée** dans les paramètres d’un compte, les filtres avancés, le rapprochement partagé et les outils complets sous **Application**.

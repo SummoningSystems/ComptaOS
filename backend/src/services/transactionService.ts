@@ -105,7 +105,7 @@ function deriveVatRate(txn: Transaction): number {
   return snapVatRate(round2((vatAbs / htAbs) * 100));
 }
 
-function normalizeTransaction(txn: Transaction): Transaction {
+export function normalizeTransaction(txn: Transaction): Transaction {
   // Si des splits sont définis, on en déduit HT/TVA/taux effectif
   if (txn.vat_splits && txn.vat_splits.length > 0) {
     const totalHt = round2(

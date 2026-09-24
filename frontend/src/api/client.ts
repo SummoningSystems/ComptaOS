@@ -152,12 +152,15 @@ export interface GitCommit {
   author: string;
   filesChanged: number;
 }
-export function createWorkspaceApi(workspaceId: string) {
+export function createWorkspaceApi(workspaceId: string, resourcePrefix?:string) {
  const revisions=new Map<string,number>();
  const api=axios.create({baseURL:buildApiUrl(import.meta.env.BASE_URL)});
  if(_apiKey)api.defaults.headers.common['X-API-Key']=_apiKey;
- const scoped=(path:string)=>{const clean=path.replace(/^\//,'');return !workspaceId || /^(auth|companies|workspaces|ecosystems|health|backups|license|waitlist|stripe)(\/|$)/.test(clean)?clean:'workspaces/'+encodeURIComponent(workspaceId)+'/'+clean;};
+ const scoped=(path:string)=>{const clean=path.replace(/^\//,"");if(/^(auth|companies|workspaces|ecosystems|health|backups|license|waitlist|stripe)(\/|$)/.test(clean))return clean;if(resourcePrefix)return resourcePrefix+"/"+clean;return workspaceId?"workspaces/"+encodeURIComponent(workspaceId)+"/"+clean:clean;};
  api.interceptors.request.use(config=>{config.url=scoped(config.url??'');return config;});
+ const planningRevisions=new Map<string,string>();
+ api.interceptors.response.use(response=>{const revision=response.headers["x-ecosystem-revision"];if(revision!==undefined)planningRevisions.set(response.config.url??"",String(revision));return response;});
+ api.interceptors.request.use(config=>{if(config.method==="put"){const revision=planningRevisions.get(scoped(config.url??""));if(revision)config.headers.set("X-Ecosystem-Revision",revision);}return config;});
  const apiUrl=(path:string)=>buildApiUrl(import.meta.env.BASE_URL,scoped(path));
  async function uploadInvoicePdf(file: File): Promise<{
   invoice: Partial<import("../types").Invoice>;

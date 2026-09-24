@@ -29,7 +29,7 @@ export function resolveSafe(relativePath: string): string {
     throw new WorkspacePathError();
   }
 
-  if (withinBase.split(path.sep).some(part => part.startsWith(".") || part.startsWith("_") || ["auth.json", "companies", "workspaces", "banking", "ai_config.json", "git_sync.json", "household.json", "ecosystem.json", "ecosystem.pending.json", "documents", "preferences", "household.pending.json"].includes(part))) throw new WorkspacePathError();
+  if (withinBase.split(path.sep).some(part => part.startsWith(".") || part.startsWith("_") || ["auth.json", "companies", "workspaces", "banking", "ai_config.json", "git_sync.json", "household.json", "ecosystem.json", "ecosystem.v1.backup.json", "ecosystem.planning.backup.json", "ecosystem.pending.json", "documents", "preferences", "household.pending.json"].includes(part))) throw new WorkspacePathError();
   let current = base;
   for (const part of withinBase.split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
@@ -82,28 +82,33 @@ export async function readFile(relativePath: string): Promise<string> {
   return fs.readFile(abs, "utf-8");
 }
 
+function resolveWritable(relativePath:string){
+ const absolute=resolveSafe(relativePath);const first=path.relative(realpathSync(getActiveCompanyPath()),absolute).split(path.sep)[0];
+ if(["transactions","attachments","settings","invoices","quotes","tiers","hr","spreadsheets","plugins","receipt-inbox.json","closing.json"].includes(first))throw Object.assign(new Error("Donnée gérée par ComptaOS : utilisez son outil dédié."),{statusCode:403});
+ return absolute;
+}
 /** Écrit le contenu d'un fichier (crée les dossiers intermédiaires si besoin). */
 export async function writeFile(relativePath: string, content: string): Promise<void> {
-  const abs = resolveSafe(relativePath);
+  const abs = resolveWritable(relativePath);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content, "utf-8");
 }
 
 /** Supprime un fichier. */
 export async function deleteFile(relativePath: string): Promise<void> {
-  const abs = resolveSafe(relativePath);
+  const abs = resolveWritable(relativePath);
   await fs.unlink(abs);
 }
 
 /** Crée un dossier. */
 export async function createDirectory(relativePath: string): Promise<void> {
-  const abs = resolveSafe(relativePath);
+  const abs = resolveWritable(relativePath);
   await fs.mkdir(abs, { recursive: true });
 }
 
 /** Renomme / déplace un fichier ou dossier. */
 export async function renameNode(oldRel: string, newRel: string): Promise<void> {
-  const oldAbs = resolveSafe(oldRel);
-  const newAbs = resolveSafe(newRel);
+  const oldAbs = resolveWritable(oldRel);
+  const newAbs = resolveWritable(newRel);
   await fs.rename(oldAbs, newAbs);
 }

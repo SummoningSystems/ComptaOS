@@ -10,6 +10,8 @@ WORKDIR /build/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+# Pure financial domain rules are shared with the browser build.
+COPY backend/src/domain/ /build/backend/src/domain/
 RUN npm run build
 
 FROM node:24-alpine

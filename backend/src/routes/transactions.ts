@@ -1,3 +1,6 @@
+import {currentEcosystemCompany,writeEcosystemTransactions} from "../services/ecosystemService.js";
+import {normalizeTransaction} from "../services/transactionService.js";
+import {fail} from "../services/householdService.js";
 import { FastifyInstance } from "fastify";
 import {
   loadAllTransactions,
@@ -105,6 +108,10 @@ export async function transactionsRoutes(app: FastifyInstance) {
       if (!Array.isArray(changes) || changes.length === 0) {
         return reply.status(400).send({ error: "changes requis" });
       }
+      if(currentEcosystemCompany()){
+        const all=await loadAllTransactions();const selected=changes.map(({id,category,vat_rate})=>{const t=all.find(t=>t.id===id);if(!t)fail("Traitement introuvable.",404);return normalizeTransaction({...t,category,...(vat_rate===undefined?{}:{vat_rate,vat_splits:[]})});});
+        await writeEcosystemTransactions(selected);return reply.send({applied:selected.length});
+      }
       const results = await Promise.all(
         changes.map(({ id, category, vat_rate }) => updateTransaction(id, { category, ...(vat_rate === undefined ? {} : { vat_rate, vat_splits: [] }) }))
       );
@@ -158,6 +165,9 @@ export async function transactionsRoutes(app: FastifyInstance) {
     if (!Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: "ids requis (tableau)" });
     }
+    if(currentEcosystemCompany()){
+      const all=await loadAllTransactions();const selected=ids.map(id=>{const t=all.find(t=>t.id===id);if(!t)fail("Traitement introuvable.",404);return t;});await writeEcosystemTransactions(selected,true);return reply.send({deleted:selected.length});
+    }
     await Promise.all(ids.map((id) => deleteTransaction(id)));
     autoCommit(getWorkspaceRoot(), `suppression: ${ids.length} transaction(s)`).catch(() => {});
     return reply.send({ deleted: ids.length });
@@ -175,6 +185,9 @@ export async function transactionsRoutes(app: FastifyInstance) {
       const valid: Transaction["status"][] = ["validated", "pending", "rejected"];
       if (!valid.includes(status)) {
         return reply.status(400).send({ error: "status invalide" });
+      }
+      if(currentEcosystemCompany()){
+        const all=await loadAllTransactions();const selected=ids.map(id=>{const t=all.find(t=>t.id===id);if(!t)fail("Traitement introuvable.",404);return {...t,status};});await writeEcosystemTransactions(selected);return reply.send({updated:selected.length});
       }
       const updated = await Promise.all(ids.map((id) => updateTransaction(id, { status })));
       autoCommit(getWorkspaceRoot(), `statut → ${status}: ${ids.length} transaction(s)`).catch(() => {});

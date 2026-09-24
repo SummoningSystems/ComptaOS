@@ -63,6 +63,7 @@ export function listPlugins(): PluginManifest[] {
 
 /** Active ou désactive un plugin (persiste dans manifest.json) */
 export function setPluginEnabled(name: string, enabled: boolean): void {
+  if(!/^[a-zA-Z0-9_-]+$/.test(name))throw new Error("Nom de plugin invalide");
   const dir = getPluginsDir();
   const manifestPath = join(dir, name, "manifest.json");
   if (!existsSync(manifestPath)) throw new Error(`Plugin "${name}" introuvable`);
@@ -78,6 +79,9 @@ export function runPlugin(
   hook: string,
   context: Record<string, unknown>,
 ): Record<string, unknown> {
+  if(!/^[a-zA-Z0-9_-]+$/.test(name)||!["hook-transaction","hook-import","report-generator"].includes(hook))throw new Error("Plugin ou hook invalide");
+  const manifest=listPlugins().find(p=>p.name===name);
+  if(!manifest?.enabled||!manifest.hooks.includes(hook as PluginManifest["hooks"][number]))throw new Error("Plugin désactivé ou hook non déclaré");
   const dir = getPluginsDir();
   const codePath = join(dir, name, "plugin.cjs");
   if (!existsSync(codePath)) return context;

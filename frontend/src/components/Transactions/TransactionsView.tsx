@@ -466,7 +466,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   const load=useCallback(async () => {
     setLoading(true);
     try {
-      const [data, tags] = await Promise.all([fetchTransactions(), fetchAllTags()]);
+      const [data, tags] = await Promise.all([fetchTransactions(), fetchAllTags(api)]);
       const safeData = Array.isArray(data) ? data : [];
       const safeTags = Array.isArray(tags) ? tags : [];
       setTransactions(safeData);
@@ -485,7 +485,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     } finally {
       setLoading(false);
     }
-  }, [fetchTransactions]);
+  }, [fetchTransactions, api]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -595,7 +595,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     setAiLoading(txn.id);
     setAiSuggestion(null);
     try {
-      const result = await aiCategorize(txn.label, txn.amount_ttc);
+      const result = await aiCategorize(txn.label, txn.amount_ttc, api);
       setAiSuggestion({ id: txn.id, ...result });
     } catch {
       alert("Erreur catégorisation IA — vérifiez ANTHROPIC_API_KEY.");

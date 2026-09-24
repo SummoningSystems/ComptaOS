@@ -60,6 +60,8 @@ async function searchFiles(dir: string, query: string, root: string): Promise<Se
 
   for (const entry of entries) {
     const name = entry.name as string;
+    // Search only business documents. Never traverse credentials, metadata or links.
+    if(name.startsWith(".")||name.startsWith("_")||entry.isSymbolicLink()||/^(settings|preferences|scope-data|companies|backups|plugins)$/i.test(name)||/^(ecosystem|receipt-inbox|auth|banking|config|secret|token)/i.test(name))continue;
     const abs = path.join(dir, name);
     const rel = path.relative(root, abs).replace(/\\/g, "/");
 

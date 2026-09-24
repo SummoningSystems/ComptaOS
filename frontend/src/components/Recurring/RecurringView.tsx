@@ -13,23 +13,24 @@ const today = () => new Date().toISOString().slice(0, 10);
 const euros = (value: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 
 export function RecurringView() {
- const {fetchManualRecurring,fetchTransactions,fetchTreasuryAlert,saveManualRecurring}=useWorkspaceApi();
+ const {fetchDashboard,apiUrl,fetchManualRecurring,fetchTransactions,fetchTreasuryAlert,saveManualRecurring}=useWorkspaceApi();
 
+  const [cash,setCash]=useState<number|null>(null),[error,setError]=useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]); const [manual, setManual] = useState<ManualRecurring[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false }); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
   const [horizon, setHorizon] = useState<3 | 6 | 12>(6); const [view, setView] = useState<"pilot" | "calendar">("pilot");
   const [editingId, setEditingId] = useState<string | null>(null); const [form, setForm] = useState<Partial<ManualRecurring>>({});
-  const [ignored, setIgnored] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("compta_dismissed_patterns") ?? "[]") as string[]));
+  const [ignored, setIgnored] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem(apiUrl("recurring")+"_dismissed") ?? "[]") as string[]));
 
-  useEffect(() => { Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert()]).then(([entries, stored, treasuryAlert]) => { setTransactions(entries); setManual(stored); setAlert(treasuryAlert); }).finally(() => setLoading(false)); }, [fetchManualRecurring, fetchTransactions, fetchTreasuryAlert]);
+  useEffect(() => { Promise.all([fetchTransactions(), fetchManualRecurring(), fetchTreasuryAlert(),fetchDashboard()]).then(([entries, stored, treasuryAlert,dashboard]) => {setCash(dashboard.cash_unknown?null:dashboard.treasury); setTransactions(entries); setManual(stored); setAlert(treasuryAlert); }).catch(e=>setError(String(e.message))).finally(() => setLoading(false)); }, [fetchManualRecurring, fetchTransactions, fetchTreasuryAlert,fetchDashboard]);
   const detectedAll = useMemo(() => removeManualDuplicates(detectRecurring(transactions), manual), [transactions, manual]);
   const detected = useMemo(() => detectedAll.filter((item) => !ignored.has(item.key)), [detectedAll, ignored]);
-  const currentBalance = useMemo(() => transactions.filter((entry) => entry.status !== "rejected").reduce((sum, entry) => sum + entry.amount_ttc, 0), [transactions]);
+  const currentBalance = cash??Number.NaN;
   const baseMonthly = useMemo(() => manual.filter((item) => item.active && item.decision !== "planned").reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0) + detected.reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0), [manual, detected]);
   const scenarioMonthly = useMemo(() => manual.reduce((sum, item) => sum + monthlyEquivalent(scenarioAmount(item), item.frequency), 0) + detected.reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0), [manual, detected]);
   const savingsMonthly = baseMonthly - scenarioMonthly;
-  const scenarioItems = useMemo(() => [...manual.map((item) => ({ id: item.id, label: item.label, amount: scenarioAmount(item), frequency: item.frequency, nextPayment: item.nextPayment, active: item.active && scenarioAmount(item) > 0 })), ...detected.map((item) => ({ id: `auto-${item.key}`, label: item.label, amount: item.amount, frequency: item.frequency, nextPayment: item.nextPayment, active: true }))], [manual, detected]);
-  const forecast = useMemo(() => buildForecast(scenarioItems, transactions, horizon, currentBalance), [scenarioItems, transactions, horizon, currentBalance]);
+  const scenarioItems = useMemo(() => [...manual.map((item) => ({ id: item.id, label: item.label, amount: scenarioAmount(item), frequency: item.frequency, nextPayment: item.nextPayment, endPayment:item.endPayment, active: item.active && scenarioAmount(item) > 0 })), ...detected.map((item) => ({ id: `auto-${item.key}`, label: item.label, amount: item.amount, frequency: item.frequency, nextPayment: item.nextPayment, active: true }))], [manual, detected]);
+  const forecast = useMemo(() => cash===null?[]:buildForecast(scenarioItems, transactions, horizon, currentBalance), [scenarioItems, transactions, horizon, currentBalance,cash]);
   const next30 = useMemo(() => { const limit = new Date(); limit.setDate(limit.getDate() + 30); const end = limit.toISOString().slice(0, 10); return scenarioItems.filter((item) => item.active && item.nextPayment >= today() && item.nextPayment <= end).reduce((sum, item) => sum + item.amount, 0); }, [scenarioItems]);
   const runway = scenarioMonthly > 0 ? currentBalance / scenarioMonthly : Infinity;
   const warnings = useMemo(() => {
@@ -41,21 +42,21 @@ export function RecurringView() {
     return messages;
   }, [manual, detected, forecast, alert]);
 
-  async function persist(entries: ManualRecurring[]) { setSaving(true); setManual(entries); try { await saveManualRecurring(entries); } finally { setSaving(false); } }
+  async function persist(entries: ManualRecurring[]) { setSaving(true); setManual(entries); try { await saveManualRecurring(entries);setError(""); } catch(e){setError(String(e));throw e;} finally { setSaving(false); } }
   function startNew() { setEditingId("new"); setForm({ label: "", amount: 0, category: "misc", frequency: "mensuel", nextPayment: today(), active: true, decision: "keep" }); }
   function startEdit(item: ManualRecurring) { setEditingId(item.id); setForm(item); }
-  async function saveForm() { if (!form.label?.trim() || !form.amount || form.amount <= 0 || !form.nextPayment) return; const item = { id: editingId === "new" ? `manual_${Date.now()}` : editingId!, label: form.label.trim(), amount: Number(form.amount), category: form.category ?? "misc", frequency: form.frequency ?? "mensuel", nextPayment: form.nextPayment, active: form.active ?? true, decision: form.decision ?? "keep", simulatedAmount: form.simulatedAmount, notes: form.notes } satisfies ManualRecurring; await persist(editingId === "new" ? [...manual, item] : manual.map((entry) => entry.id === editingId ? item : entry)); setEditingId(null); setForm({}); }
+  async function saveForm() { if (!form.label?.trim() || !form.amount || form.amount <= 0 || !form.nextPayment) return; const item = { id: editingId === "new" ? `manual_${Date.now()}` : editingId!, label: form.label.trim(), amount: Number(form.amount), category: form.category ?? "misc", frequency: form.frequency ?? "mensuel", nextPayment: form.nextPayment, active: form.active ?? true, decision: form.decision ?? "keep", simulatedAmount: form.simulatedAmount, endPayment:form.endPayment, notes: form.notes } satisfies ManualRecurring; await persist(editingId === "new" ? [...manual, item] : manual.map((entry) => entry.id === editingId ? item : entry)); setEditingId(null); setForm({}); }
   async function patchManual(id: string, changes: Partial<ManualRecurring>) { await persist(manual.map((item) => item.id === id ? { ...item, ...changes } : item)); }
   async function confirmDetected(key: string) { const item = detected.find((entry) => entry.key === key); if (!item) return; await persist([...manual, { id: `manual_${Date.now()}`, label: item.label, amount: item.amount, category: item.category, frequency: item.frequency, nextPayment: item.nextPayment, active: true, decision: "keep" }]); }
-  function ignoreDetected(key: string) { const next = new Set(ignored).add(key); setIgnored(next); localStorage.setItem("compta_dismissed_patterns", JSON.stringify([...next])); }
+  function ignoreDetected(key: string) { const next = new Set(ignored).add(key); setIgnored(next); localStorage.setItem(apiUrl("recurring")+"_dismissed", JSON.stringify([...next])); }
   async function advancePayment(item: ManualRecurring) { await patchManual(item.id, { nextPayment: addCalendarMonths(item.nextPayment, item.frequency === "mensuel" ? 1 : item.frequency === "trimestriel" ? 3 : 12) }); }
 
   if (loading) return <div className="p-6 text-sm text-vscode-muted">Analyse des frais en cours…</div>;
   return <div className="h-full overflow-auto p-6 flex flex-col gap-5 max-w-6xl mx-auto">
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold text-vscode-text">Pilotage des frais récurrents</h1><p className="text-xs text-vscode-muted mt-1">Visualise le coût structurel, prépare les décisions et mesure leur effet sur la trésorerie.</p></div><button onClick={startNew} disabled={editingId !== null} className="px-3 py-2 bg-vscode-accent text-white text-xs rounded disabled:opacity-40">＋ Ajouter un frais</button></header>
+    {error&&<p role="alert">{error}</p>}<header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold text-vscode-text">Pilotage des frais récurrents</h1><p className="text-xs text-vscode-muted mt-1">Visualise le coût structurel, prépare les décisions et mesure leur effet sur la trésorerie.</p></div><button onClick={startNew} disabled={editingId !== null} className="px-3 py-2 bg-vscode-accent text-white text-xs rounded disabled:opacity-40">＋ Ajouter un frais</button></header>
 
     <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[
-      ["Coût mensuel", euros(baseMonthly), "text-red-400"], ["Coût annuel réel", euros(baseMonthly * 12), "text-vscode-text"], ["À payer sous 30 j", euros(next30), "text-amber-400"], [savingsMonthly >= 0 ? "Économie simulée" : "Surcoût simulé", euros(Math.abs(savingsMonthly) * 12) + "/an", savingsMonthly >= 0 ? "text-green-400" : "text-red-400"], ["Autonomie sur frais fixes", Number.isFinite(runway) ? `${runway.toFixed(1)} mois` : "∞", runway < 3 ? "text-red-400" : "text-vscode-text"],
+      ["Coût mensuel", euros(baseMonthly), "text-red-400"], ["Coût annuel réel", euros(baseMonthly * 12), "text-vscode-text"], ["À payer sous 30 j", euros(next30), "text-amber-400"], [savingsMonthly >= 0 ? "Économie simulée" : "Surcoût simulé", euros(Math.abs(savingsMonthly) * 12) + "/an", savingsMonthly >= 0 ? "text-green-400" : "text-red-400"], ["Autonomie sur frais fixes", cash===null?"Solde inconnu":Number.isFinite(runway) ? `${runway.toFixed(1)} mois` : "∞", runway < 3 ? "text-red-400" : "text-vscode-text"],
     ].map(([label, value, color]) => <div key={label} className="bg-vscode-panel border border-vscode-border rounded-lg p-4"><p className="text-[10px] uppercase tracking-wide text-vscode-muted">{label}</p><p className={`text-xl font-semibold mt-1 ${color}`}>{value}</p></div>)}</section>
 
     {warnings.length > 0 && <section className="border border-amber-700/60 bg-amber-900/10 rounded-lg p-3"><h2 className="text-xs font-semibold text-amber-300 mb-1">Points d'attention</h2><ul className="text-xs text-amber-200/90 space-y-1">{warnings.map((message) => <li key={message}>• {message}</li>)}</ul></section>}

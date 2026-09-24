@@ -220,7 +220,7 @@ test("scope Documents and sidebar tools while retaining document tabs and a shar
   expect(requests).toEqual([]);expect(errors).toEqual([]);
 });
 
-test("make company accounting opt-in and expose reconciliation only on linked accounts",async({page})=>{
+test("keep company accounting opt-in and allow personal evidence reconciliation",async({page})=>{
   await page.goto("/?prototype=ecosystem");
   await page.getByRole("button",{name:"+ Ajouter",exact:true}).click();
   await page.getByRole("button",{name:"◇ Entreprise",exact:true}).click();
@@ -247,7 +247,7 @@ test("make company accounting opt-in and expose reconciliation only on linked ac
   await expect(page.getByRole("button",{name:/Rapprochement$/})).toBeVisible();
   await page.getByLabel("Périmètre actif").selectOption("perso-a");
   await page.getByRole("button",{name:"Mouvements",exact:true}).click();
-  await expect(page.getByRole("button",{name:/Rapprochement$/})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:/Rapprochement$/})).toHaveCount(1);
   await page.getByRole("button",{name:"Application",exact:true}).click();
   await expect(dialog.getByRole("heading",{name:"Paramètres de l’application"})).toBeVisible();
   await expect(page.getByLabel("Périmètre actif")).toHaveValue("perso-a");
