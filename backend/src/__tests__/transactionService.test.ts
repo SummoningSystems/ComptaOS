@@ -20,6 +20,7 @@ import {
   updateTransaction,
   validateVatSplits,
 } from "../services/transactionService.js";
+import { saveAnnualWorkspace } from "../services/annualAccountingService.js";
 
 function transaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -57,6 +58,11 @@ describe("transactionService persistence", () => {
     expect(await fs.readdir(directory)).toEqual(["txn_test.yaml"]);
     const stored = yaml.parse(await fs.readFile(path.join(directory, "txn_test.yaml"), "utf-8"));
     expect(stored).toMatchObject({ id: "txn_test", amount_ht: -100, vat: -20, amount_ttc: -120 });
+  });
+
+  it("interdit de modifier les transactions d'un exercice annuel clôturé", async () => {
+    saveAnnualWorkspace({ version: 1, thirdParties: [], documents: [], schedules: [], adjustments: [], assets: [], fiscalAdjustments: [], confirmations: [], closings: [{ year: "2026", status: "closed", closedAt: "2027-01-10T00:00:00Z", fingerprint: "empreinte" }] });
+    await expect(saveTransaction(transaction())).rejects.toThrow("L'exercice 2026 est clôturé");
   });
 
   it("met à jour une transaction avec un remplacement complet", async () => {

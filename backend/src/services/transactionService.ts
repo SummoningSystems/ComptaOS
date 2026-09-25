@@ -7,6 +7,7 @@ import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
 import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
+import { assertAnnualYearOpen, loadAnnualWorkspace, recurringEvidenceTransactionIds } from "./annualAccountingService.js";
 
 const TXN_DIR = "transactions";
 
@@ -156,7 +157,10 @@ function ensureWatcher() {
 /** Charge toutes les transactions depuis les fichiers YAML du dossier transactions/. */
 export async function loadAllTransactions(): Promise<Transaction[]> {
   ensureWatcher();
-  if (_cache) return _cache;
+  if (_cache) {
+    const evidenceIds = recurringEvidenceTransactionIds();
+    return _cache.map((item) => evidenceIds.has(item.id) ? { ...item, justified: true } : item);
+  }
 
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
@@ -184,12 +188,18 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
 
   _loadIssues = issues;
   _cache = transactions.sort((a, b) => b.date.localeCompare(a.date));
-  return _cache;
+  const evidenceIds = recurringEvidenceTransactionIds();
+  return _cache.map((item) => evidenceIds.has(item.id) ? { ...item, justified: true } : item);
 }
 
 /** Sauvegarde une transaction dans un fichier YAML. */
+export async function assertTransactionDateOpen(date: string): Promise<void> {
+  await assertMonthOpen(date);
+  assertAnnualYearOpen(loadAnnualWorkspace(), date.slice(0, 4));
+}
+
 export async function saveTransaction(txn: Transaction): Promise<void> {
-  await assertMonthOpen(txn.date);
+  await assertTransactionDateOpen(txn.date);
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
   const normalized = normalizeTransaction(txn);
@@ -226,8 +236,8 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const filePath = await findTransactionFile(id);
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
-  await assertMonthOpen(txn.date);
-  if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
+  await assertTransactionDateOpen(txn.date);
+  if (patch.date && patch.date !== txn.date) await assertTransactionDateOpen(patch.date);
   const merged = { ...txn, ...patch };
   const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
@@ -244,7 +254,7 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
 export async function deleteTransaction(id: string): Promise<void> {
   const filePath = await findTransactionFile(id);
   const txn = yaml.parse(await fs.readFile(filePath, "utf-8")) as Transaction;
-  await assertMonthOpen(txn.date);
+  await assertTransactionDateOpen(txn.date);
   await fs.unlink(filePath);
   invalidateCache();
 }

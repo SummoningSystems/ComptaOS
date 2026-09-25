@@ -34,6 +34,7 @@ const HistoryView = lazy(() => import("./components/History/HistoryView").then((
 const JournalView = lazy(() => import("./components/Journal/JournalView").then((m) => ({ default: m.JournalView })));
 const AlertsView = lazy(() => import("./components/Alerts/AlertsView").then((m) => ({ default: m.AlertsView })));
 const ClosingView = lazy(() => import("./components/Closing/ClosingView").then((m) => ({ default: m.ClosingView })));
+const AnnualClosingView = lazy(() => import("./components/Closing/AnnualClosingView").then((m) => ({ default: m.AnnualClosingView })));
 const TemplatesView = lazy(() => import("./components/Templates/TemplatesView").then((m) => ({ default: m.TemplatesView })));
 const ReconcileView = lazy(() => import("./components/Reconcile/ReconcileView").then((m) => ({ default: m.ReconcileView })));
 const TreasuryView = lazy(() => import("./components/Treasury/TreasuryView").then((m) => ({ default: m.TreasuryView })));
@@ -68,6 +69,7 @@ const TAB_LABELS: Record<TabType, string> = {
   journal:      "Journal",
   alerts:       "À traiter",
   closing:      "Clôture mensuelle",
+  "annual-closing": "Clôture annuelle",
   templates:    "Modèles",
   reconcile:    "Rapprochement",
   treasury:     "Trésorerie",
@@ -129,6 +131,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "journal"      && <JournalView />}
       {type === "alerts"       && <AlertsView />}
       {type === "closing"      && <ClosingView />}
+      {type === "annual-closing" && <AnnualClosingView />}
       {type === "templates"    && <TemplatesView />}
       {type === "reconcile"    && <ReconcileView initialMonth={contextMonth} />}
       {type === "treasury"     && <TreasuryView />}

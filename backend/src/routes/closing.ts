@@ -8,6 +8,7 @@ import { activeClosing, closeMonth, loadClosings, reopenMonth } from "../service
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { needsTransactionEvidence } from "../services/transactionEvidenceService.js";
+import { annualAccountingOptions, loadAnnualWorkspace } from "../services/annualAccountingService.js";
 
 type Step = { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number; action?: "banking" | "transactions" | "vat" | "reconcile" | "export"; filter?: "unjustified" | "misc" | "pending" };
 
@@ -15,14 +16,16 @@ async function checklist(month: string) {
   const [transactions, receipts, connections, closing] = await Promise.all([loadAllTransactions(), loadPendingReceipts(), getConnections().catch(() => []), activeClosing(month)]);
   const active = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date.startsWith(month));
   const expenses = active.filter((transaction) => transaction.amount_ttc < 0);
-  const unjustified = expenses.filter(needsTransactionEvidence);
+  const annual = annualAccountingOptions(loadAnnualWorkspace(), month.slice(0, 4), transactions);
+  const activeIds = new Set(active.map((transaction) => transaction.id));
+  const unjustified = expenses.filter((transaction) => needsTransactionEvidence(transaction) && !annual.evidenceTransactionIds.includes(transaction.id));
   const uncategorized = active.filter((transaction) => transaction.category === "misc");
-  const vatMissing = expenses.filter((transaction) => transaction.vat === 0 && !["salary", "taxes"].includes(transaction.category));
+  const vatMissing = expenses.filter((transaction) => transaction.vat === 0 && !annual.advanceAccounts[transaction.id] && !["salary", "taxes"].includes(transaction.category));
   const unreconciled = active.filter((transaction) => transaction.reconciled !== true);
   const unvalidated = active.filter((transaction) => transaction.status !== "validated");
   const lastBankSync = connections.flatMap((connection) => connection.accounts).map((account) => account.lastSyncAt).filter((date): date is string => !!date).sort().at(-1);
   const bankFresh = lastBankSync ? Date.now() - Date.parse(lastBankSync) < 7 * 86_400_000 : false;
-  const preview = buildAccountingPreview(transactions, loadAccountingConfig(), month.slice(0, 4));
+  const preview = buildAccountingPreview(transactions, loadAccountingConfig(), month.slice(0, 4), { ...annual, extraLines: [], extraAnomalies: annual.extraAnomalies.filter((item) => item.transactionId && activeIds.has(item.transactionId)) });
   const blockers = preview.anomalies.filter((anomaly) => anomaly.severity === "blocking" && (!anomaly.transactionId || active.some((transaction) => transaction.id === anomaly.transactionId)));
   const steps: Step[] = [
     { id: "bank", label: "Banque synchronisée", status: bankFresh ? "done" : "warning", detail: lastBankSync ? `Dernière synchronisation : ${lastBankSync}` : "Aucune synchronisation bancaire trouvée", action: "banking" },
