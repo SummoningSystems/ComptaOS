@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchTransactions } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { Transaction } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
@@ -14,6 +14,8 @@ interface TierStats {
 }
 
 export function TiersView() {
+ const {fetchTransactions}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,7 @@ export function TiersView() {
     fetchTransactions()
       .then(setTransactions)
       .finally(() => setLoading(false));
-  }, []);
+  }, [fetchTransactions]);
 
   // Grouper par tiers (notes field)
   const tierMap = new Map<string, Transaction[]>();
@@ -74,7 +76,7 @@ export function TiersView() {
   function toggleExpand(name: string) {
     setExpanded((prev) => {
       const s = new Set(prev);
-      s.has(name) ? s.delete(name) : s.add(name);
+      if (s.has(name)) s.delete(name); else s.add(name);
       return s;
     });
   }

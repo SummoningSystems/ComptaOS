@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { searchWorkspace, SearchResult } from "../../api/search";
-import { useAppStore } from "../../stores/appStore";
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface SearchOverlayProps {

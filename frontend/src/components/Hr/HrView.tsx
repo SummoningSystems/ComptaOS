@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiUrl, deleteHrDocument, fetchHrWorkspace, fetchTransactions, linkHrPayslip, saveHrWorkspace, uploadHrDocument } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import type { HrContractType, HrDeadline, HrDocumentType, HrEmployee, HrStore, HrVariable, HrVariableType, Transaction } from "../../types";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
@@ -14,6 +14,8 @@ const input = "mt-1 w-full rounded border border-vscode-border bg-vscode-bg px-2
 type Section = "month" | "calendar" | "files" | "team";
 
 export function HrView() {
+ const {apiUrl,deleteHrDocument,fetchHrWorkspace,fetchTransactions,linkHrPayslip,saveHrWorkspace,uploadHrDocument}=useWorkspaceApi();
+
   const [store, setStore] = useState<HrStore>(emptyStore);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [month, setMonth] = useState(monthNow()); const [section, setSection] = useState<Section>("month");
@@ -21,7 +23,7 @@ export function HrView() {
   const [employeeForm, setEmployeeForm] = useState(emptyEmployee); const [editingId, setEditingId] = useState<string>();
   const [variable, setVariable] = useState<{ employeeId: string; type: HrVariableType; label: string; amount: number; quantity: number }>({ employeeId: "", type: "bonus", label: "", amount: 0, quantity: 0 });
 
-  useEffect(() => { Promise.all([fetchHrWorkspace(), fetchTransactions()]).then(([data, txns]) => { setStore(data); setTransactions(txns); setSelectedId(data.employees.find((item) => item.active)?.id ?? ""); }).catch(() => setMessage("Chargement RH impossible.")).finally(() => setLoading(false)); }, []);
+  useEffect(() => { Promise.all([fetchHrWorkspace(), fetchTransactions()]).then(([data, txns]) => { setStore(data); setTransactions(txns); setSelectedId(data.employees.find((item) => item.active)?.id ?? ""); }).catch(() => setMessage("Chargement RH impossible.")).finally(() => setLoading(false)); }, [fetchHrWorkspace, fetchTransactions]);
   const active = store.employees.filter((item) => item.active); const selected = store.employees.find((item) => item.id === selectedId);
   const monthVariables = store.variables.filter((item) => item.month === month); const monthPayslips = store.documents.filter((item) => item.type === "payslip" && item.month === month);
   const payrollStatus = store.payrollMonths.find((item) => item.month === month)?.status ?? "draft";

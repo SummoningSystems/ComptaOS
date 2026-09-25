@@ -63,3 +63,13 @@ desktop.ini
 # ctx generated artifacts
 .ctx/
 .agent/generated/
+
+# Local household deployment configuration and trusted public CA copy
+deployment/local.env
+comptaos-local-root.crt
+backup-copy/
+
+test-results/
+playwright-report/
+
+.artifacts/

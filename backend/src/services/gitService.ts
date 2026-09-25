@@ -2,6 +2,7 @@ import { execFile as _execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import fs from "fs/promises";
+import { beginWork } from "./maintenance.js";
 import { fileURLToPath } from "url";
 import { atomicWriteFile } from "./atomicFile.js";
 
@@ -15,14 +16,21 @@ export interface LocalGitStatus {
   lastAutoCommitAt?: string;
 }
 
-let localGitStatus: LocalGitStatus = { ready: false, error: "Git n'est pas encore initialisé", uncommitted: 0 };
+const statuses = new Map<string, LocalGitStatus>();
+function statusFor(root: string): LocalGitStatus { return statuses.get(root) ?? { ready: false, uncommitted: 0 }; }
 let commitQueue: Promise<void> = Promise.resolve();
 
 export const WORKSPACE_GITIGNORE_ENTRIES = [
   "attachments/",
+  "companies/",
   "*.tmp",
   ".DS_Store",
   "auth.json",
+  "household.pending.json",
+  "ecosystem.pending.json",
+  ".powens_profiles.json",
+  "documents/",
+  "settings/ai_config.json",
   ".jwt_secret",
   ".banking_config.json",
   "banking/",
@@ -66,7 +74,8 @@ export async function initRepo(workspacePath: string): Promise<void> {
   await ensureWorkspaceGitignore(workspacePath);
 
   try {
-    await git(["rev-parse", "--git-dir"], workspacePath);
+    const top = await git(["rev-parse", "--show-toplevel"], workspacePath);
+    if (path.resolve(top) !== path.resolve(workspacePath)) throw new Error("Le dépôt parent ne doit pas être partagé entre espaces.");
     // Déjà initialisé — s'assurer que l'identité est configurée
     await git(["config", "user.email", "comptaos@localhost"], workspacePath).catch(() => {});
     await git(["config", "user.name", "ComptaOS"], workspacePath).catch(() => {});
@@ -92,21 +101,22 @@ export async function initRepo(workspacePath: string): Promise<void> {
  */
 async function runAutoCommit(workspacePath: string, message: string): Promise<void> {
   try {
+    await initRepo(workspacePath);
     await git(["add", "-A"], workspacePath);
     const status = await git(["status", "--porcelain"], workspacePath);
     if (!status) { await refreshLocalGitStatus(workspacePath); return; }
     await git(["commit", "-m", message], workspacePath);
-    localGitStatus.lastAutoCommitAt = new Date().toISOString();
+    statuses.set(workspacePath, { ...statusFor(workspacePath), lastAutoCommitAt: new Date().toISOString() });
     await refreshLocalGitStatus(workspacePath);
   } catch (err) {
     const error = (err as Error).message?.slice(0, 240) || "Erreur Git inconnue";
-    localGitStatus = { ...localGitStatus, ready: false, error };
+    statuses.set(workspacePath, { ...statusFor(workspacePath), ready: false, error });
     console.warn("[git] autoCommit échoué:", error);
   }
 }
 
 export function autoCommit(workspacePath: string, message: string): Promise<void> {
-  const next = commitQueue.then(() => runAutoCommit(workspacePath, message));
+  const next = commitQueue.then(async () => { const release = await beginWork(); try { await runAutoCommit(workspacePath, message); } finally { release(); } });
   commitQueue = next.catch(() => {});
   return next;
 }
@@ -115,11 +125,11 @@ export async function refreshLocalGitStatus(workspacePath: string): Promise<Loca
   try {
     const status = await git(["status", "--porcelain"], workspacePath);
     const lastCommit = await git(["log", "-1", "--pretty=%h %s"], workspacePath).catch(() => undefined);
-    localGitStatus = { ...localGitStatus, ready: true, error: undefined, uncommitted: status ? status.split("\n").length : 0, lastCommit };
+    statuses.set(workspacePath, { ...statusFor(workspacePath), ready: true, error: undefined, uncommitted: status ? status.split("\n").length : 0, lastCommit });
   } catch (err) {
-    localGitStatus = { ...localGitStatus, ready: false, error: (err as Error).message?.slice(0, 240) || "Git indisponible", uncommitted: 0 };
+    statuses.set(workspacePath, { ...statusFor(workspacePath), ready: false, error: (err as Error).message?.slice(0, 240) || "Git indisponible", uncommitted: 0 });
   }
-  return { ...localGitStatus };
+  return { ...statusFor(workspacePath) };
 }
 
 export function startGitAutoCommitScheduler(workspacePath: string, intervalMs = 60_000): () => void {

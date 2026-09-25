@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileNode } from "../../types";
-import { useAppStore } from "../../stores/appStore";
-import { fetchFileTree } from "../../api/client";
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface FileTreeNodeProps {
   node: FileNode;
@@ -81,11 +81,13 @@ function fileIcon(node: FileNode): string {
 }
 
 export function FileTree() {
-  const { fileTree, setFileTree } = useAppStore();
+ const {fetchFileTree,saveFileContent,createDirectory}=useWorkspaceApi();
+
+  const { fileTree, setFileTree,openTab } = useAppStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -96,17 +98,17 @@ export function FileTree() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchFileTree, setFileTree]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 text-[10px] uppercase tracking-widest text-vscode-muted border-b border-vscode-border shrink-0">
-        <span>Explorer</span>
+        <span>Explorer</span><button onClick={async()=>{const name=prompt("Chemin du nouveau fichier", "notes.md")?.trim();if(!name)return;try{const exists=(nodes:FileNode[]):boolean=>nodes.some(n=>n.path===name||n.children&&exists(n.children));if(!exists(fileTree))await saveFileContent(name,"");openTab({id:"file:"+name,title:name,type:"editor",path:name});await load();}catch(e){setError(e instanceof Error?e.message:"Création impossible");}}}>Nouveau fichier</button><button onClick={async()=>{const name=prompt("Nom du dossier")?.trim();if(!name)return;try{await createDirectory(name);await load();}catch(e){setError(e instanceof Error?e.message:"Création impossible");}}}>Nouveau dossier</button>
         <button
           onClick={load}
           title="Rafraîchir"

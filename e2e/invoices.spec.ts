@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Module Factures", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?legacy=1");
     // Attendre que l'app soit chargée (dashboard ou sidebar visible)
     await page.getByTitle("Documents").click();
     await page.getByRole("button", { name: /Factures$/i }).click();

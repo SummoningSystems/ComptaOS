@@ -27,10 +27,10 @@ function drawText(
   size: number,
   color = COL_TEXT,
 ) {
-  page.drawText(String(text ?? ""), { x, y, font, size, color });
+  page.drawText(String(text ?? "").replace(/[\u202f\u00a0]/g," "), { x, y, font, size, color });
 }
 
-async function generateInvoicePdf(inv: OutgoingInvoice): Promise<Uint8Array> {
+export async function generateInvoicePdf(inv: OutgoingInvoice, title = "FACTURE"): Promise<Uint8Array> {
   const profile = loadCompanyProfile();
   const doc = await PDFDocument.create();
   const page = doc.addPage([PAGE_W, PAGE_H]);
@@ -60,7 +60,7 @@ async function generateInvoicePdf(inv: OutgoingInvoice): Promise<Uint8Array> {
   }
 
   // ── En-tête : numéro de facture (droite) ─────────────────────────────────
-  drawText(page, "FACTURE", PAGE_W - MARGIN - 120, y - 18, fontBold, 22, COL_ACCENT);
+  drawText(page, title, PAGE_W - MARGIN - 120, y - 18, fontBold, 22, COL_ACCENT);
   drawText(page, inv.number, PAGE_W - MARGIN - 120, y - 38, fontBold, 13, COL_TEXT);
   drawText(page, `Date : ${inv.date}`, PAGE_W - MARGIN - 120, y - 54, fontReg, 9, COL_MUTED);
   if (inv.dueDate) {
@@ -73,7 +73,7 @@ async function generateInvoicePdf(inv: OutgoingInvoice): Promise<Uint8Array> {
 
   // ── Client ───────────────────────────────────────────────────────────────
   y -= 20;
-  drawText(page, "FACTURER À", MARGIN, y, fontBold, 8, COL_MUTED);
+  drawText(page, title === "DEVIS" ? "DESTINATAIRE" : "FACTURER À", MARGIN, y, fontBold, 8, COL_MUTED);
   drawText(page, inv.client, MARGIN, y - 16, fontBold, 12, COL_TEXT);
 
   // ── Tableau ───────────────────────────────────────────────────────────────

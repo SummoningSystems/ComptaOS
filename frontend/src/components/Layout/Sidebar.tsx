@@ -1,19 +1,25 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useAppStore } from "../../stores/appStore";
 import { FileTree } from "../Explorer/FileTree";
-import type { TabType } from "../../types";
+import type { Tab, TabType } from "../../types";
 
-export type SidebarSection = "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
+export type SidebarSection = "ecosystem" | "movements" | "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
 
 interface SidebarProps {
   activeSection: SidebarSection;
   onSectionChange: (s: SidebarSection) => void;
   pendingCount?: number;
+  ecosystem?: ReactNode;
+  activeItemTitle?: string;
+  groups?: NavGroup[];
+  scopeLabel?: string;
+  onOpenTab?: (tab: Tab) => void;
+  explorerContent?: ReactNode;
 }
 
-type NavItem = { icon: string; label: string; tab: { id: string; title: string; type: TabType }; badge?: number };
+export type NavItem = { icon: string; label: string; tab: Tab; badge?: number };
 
-type NavGroup = {
+export type NavGroup = {
   id: SidebarSection;
   icon: string;
   title: string;
@@ -97,11 +103,12 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: SidebarProps) {
+export function Sidebar({ activeSection, onSectionChange, pendingCount = 0, ecosystem, onOpenTab, explorerContent, activeItemTitle, groups = NAV_GROUPS, scopeLabel }: SidebarProps) {
   const { sidebarWidth, openTab, tabs, activeTabId } = useAppStore();
   const [hovered, setHovered] = useState<SidebarSection | null>(null);
 
-  const activeGroup = NAV_GROUPS.find((g) => g.id === activeSection);
+  const navigate = onOpenTab ?? openTab;
+  const activeGroup = groups.find((g) => g.id === activeSection);
 
   return (
     <div
@@ -110,26 +117,30 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
     >
       {/* Activity bar */}
       <div className="flex flex-col items-center py-2 gap-0.5 w-10 bg-vscode-panel border-r border-vscode-border shrink-0">
+        {ecosystem && <button title="Écosystème" aria-label="Écosystème" onClick={() => onSectionChange("ecosystem")} className="w-8 h-8 text-vscode-accent text-lg">◈</button>}
         {/* Dashboard direct */}
         <button
           title="Dashboard"
-          onClick={() => { openTab({ id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange("compta"); }}
+          aria-label="Dashboard"
+          onClick={() => { navigate({ id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange(groups.some(g=>g.id==="compta")?"compta":"ecosystem"); }}
           className="w-8 h-8 flex items-center justify-center rounded text-base transition-colors text-vscode-muted hover:text-vscode-text"
         >
           📊
         </button>
         <div className="w-6 h-px bg-vscode-border my-1" />
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <button
             key={group.id}
             title={group.title}
+            aria-label={group.title}
+            aria-pressed={activeSection === group.id}
             onMouseEnter={() => setHovered(group.id)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => onSectionChange(group.id)}
             className={`
               w-8 h-8 flex items-center justify-center rounded text-base transition-colors relative
               ${activeSection === group.id
-                ? "text-white bg-vscode-highlight"
+                ? "text-vscode-text bg-vscode-highlight"
                 : "text-vscode-muted hover:text-vscode-text"
               }
             `}
@@ -159,23 +170,25 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
             <span className="text-[10px] font-semibold text-vscode-muted uppercase tracking-wider">
               {activeGroup.title}
             </span>
+            {scopeLabel && <p className="text-[10px] text-vscode-muted mt-1 truncate" title={scopeLabel}>{scopeLabel}</p>}
           </div>
         )}
 
-        {activeSection === "explorer" && <FileTree />}
+        {activeSection === "ecosystem" && ecosystem}
+        {activeSection === "explorer" && (explorerContent ?? <FileTree />)}
 
         {activeSection !== "explorer" && activeGroup?.items && (
           <div className="py-1">
             {activeGroup.items.map((item) => {
-              const isActive = tabs.find((t) => t.id === item.tab.id)?.id === activeTabId;
+              const isActive = onOpenTab ? activeItemTitle === item.label : tabs.find((t) => t.id === item.tab.id)?.id === activeTabId;
               return (
                 <button
                   key={item.tab.id}
-                  onClick={() => openTab(item.tab)}
+                  onClick={() => navigate(item.tab)}
                   className={`
                     w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors text-left
                     ${isActive
-                      ? "bg-vscode-highlight text-white"
+                      ? "bg-vscode-highlight text-vscode-text"
                       : "text-vscode-muted hover:text-vscode-text hover:bg-vscode-bg"
                     }
                   `}

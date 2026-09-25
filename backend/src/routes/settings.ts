@@ -1,3 +1,4 @@
+import {readBudgets,writeBudgets,planningContext} from "../services/ecosystemPlanning.js";
 import { FastifyInstance } from "fastify";
 import {
   loadCategoryRules,
@@ -100,12 +101,14 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   // GET /api/settings/budgets
   app.get("/budgets", async (_req, reply) => {
-    return reply.send(loadBudgets());
+    const c=await planningContext();if(c)reply.header("X-Ecosystem-Revision",c.state.revision);
+    return reply.send(await readBudgets());
   });
 
   // PUT /api/settings/budgets
   app.put<{ Body: CategoryBudget[] }>("/budgets", async (req, reply) => {
-    saveBudgets(req.body);
+    if(!await writeBudgets(req.body,req.headers["x-ecosystem-revision"]===undefined?undefined:Number(req.headers["x-ecosystem-revision"])))saveBudgets(req.body);
+    const updated=await planningContext();if(updated)reply.header("X-Ecosystem-Revision",updated.state.revision);
     return reply.send({ ok: true });
   });
 

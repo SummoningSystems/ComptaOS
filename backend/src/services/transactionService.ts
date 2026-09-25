@@ -1,3 +1,5 @@
+import { ecosystemTransactions, writeEcosystemTransaction, currentEcosystemCompany } from "./ecosystemService.js";
+import { workspaceLock } from "./workspaceContext.js";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
@@ -16,24 +18,23 @@ function txnDir(): string {
 }
 
 // ── Cache mémoire ─────────────────────────────────────────────────────────────
-let _cache: Transaction[] | null = null;
-let _watcher: fsSync.FSWatcher | null = null;
-let _fileByTransactionId = new Map<string, string>();
-
-export interface TransactionLoadIssue {
-  file: string;
-  message: string;
+export interface TransactionLoadIssue { file: string; message: string }
+interface CacheEntry { data: Transaction[] | null; watcher: fsSync.FSWatcher | null; files: Map<string,string>; issues: TransactionLoadIssue[] }
+const caches = new Map<string, CacheEntry>();
+function cache(): CacheEntry {
+  const root = getWorkspaceRoot();
+  let entry = caches.get(root);
+  if (!entry) { entry = { data: null, watcher: null, files: new Map(), issues: [] }; caches.set(root, entry); }
+  return entry;
 }
 
-let _loadIssues: TransactionLoadIssue[] = [];
-
 export function getTransactionLoadIssues(): TransactionLoadIssue[] {
-  return _loadIssues.map((issue) => ({ ...issue }));
+  return cache().issues.map((issue) => ({ ...issue }));
 }
 
 function invalidateCache() {
-  _cache = null;
-  _fileByTransactionId = new Map<string, string>();
+  cache().data = null;
+  cache().files = new Map<string, string>();
 }
 
 function round2(n: number): number {
@@ -104,7 +105,7 @@ function deriveVatRate(txn: Transaction): number {
   return snapVatRate(round2((vatAbs / htAbs) * 100));
 }
 
-function normalizeTransaction(txn: Transaction): Transaction {
+export function normalizeTransaction(txn: Transaction): Transaction {
   // Si des splits sont définis, on en déduit HT/TVA/taux effectif
   if (txn.vat_splits && txn.vat_splits.length > 0) {
     const totalHt = round2(
@@ -137,26 +138,28 @@ function normalizeTransaction(txn: Transaction): Transaction {
  */
 export function invalidateTransactionCache(): void {
   invalidateCache();
-  if (_watcher) {
-    _watcher.close();
-    _watcher = null;
+  if (cache().watcher) {
+    cache().watcher!.close();
+    cache().watcher = null;
   }
 }
 
 function ensureWatcher() {
-  if (_watcher) return;
+  if (cache().watcher) return;
   const dir = txnDir();
   try {
     fsSync.mkdirSync(dir, { recursive: true });
-    _watcher = fsSync.watch(dir, { persistent: false }, () => invalidateCache());
-    _watcher.on("error", () => { _watcher = null; });
+    const entry = cache();
+    entry.watcher = fsSync.watch(dir, { persistent: false }, () => { entry.data = null; entry.files = new Map(); });
+    entry.watcher.on("error", () => { entry.watcher = null; });
   } catch { /* ignore si le dossier n'existe pas encore */ }
 }
 
 /** Charge toutes les transactions depuis les fichiers YAML du dossier transactions/. */
 export async function loadAllTransactions(): Promise<Transaction[]> {
+  const ecosystem = await ecosystemTransactions(); if (ecosystem) return ecosystem;
   ensureWatcher();
-  if (_cache) return _cache;
+  if (cache().data) return cache().data!;
 
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
@@ -174,7 +177,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
         throw new Error("structure de transaction invalide");
       }
       transactions.push(normalizeTransaction(parsed));
-      _fileByTransactionId.set(parsed.id, path.join(dir, file));
+      cache().files.set(parsed.id, path.join(dir, file));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       issues.push({ file, message });
@@ -182,13 +185,18 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
     }
   }
 
-  _loadIssues = issues;
-  _cache = transactions.sort((a, b) => b.date.localeCompare(a.date));
-  return _cache;
+  cache().issues = issues;
+  cache().data = transactions.sort((a, b) => b.date.localeCompare(a.date));
+  return cache().data!;
 }
 
 /** Sauvegarde une transaction dans un fichier YAML. */
 export async function saveTransaction(txn: Transaction): Promise<void> {
+  if (await writeEcosystemTransaction(normalizeTransaction(txn))) return;
+  return workspaceLock(getWorkspaceRoot(), () => saveTransactionUnlocked(txn));
+}
+async function saveTransactionUnlocked(txn: Transaction): Promise<void> {
+  if (!txn.id || !/^[A-Za-z0-9._-]+$/.test(txn.id) || txn.id === "." || txn.id === "..") throw Object.assign(new Error("Identifiant invalide"), { statusCode: 400 });
   await assertMonthOpen(txn.date);
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
@@ -209,11 +217,11 @@ async function findTransactionFile(id: string): Promise<string> {
     throw new Error("Identifiant de transaction invalide");
   }
 
-  const knownPath = _fileByTransactionId.get(id);
+  const knownPath = cache().files.get(id);
   if (knownPath) return knownPath;
 
   await loadAllTransactions();
-  const indexedPath = _fileByTransactionId.get(id);
+  const indexedPath = cache().files.get(id);
   if (indexedPath) return indexedPath;
 
   const error = new Error(`Transaction introuvable: ${id}`) as NodeJS.ErrnoException;
@@ -223,12 +231,22 @@ async function findTransactionFile(id: string): Promise<string> {
 
 /** Met à jour une transaction existante. */
 export async function updateTransaction(id: string, patch: Partial<Transaction>): Promise<Transaction> {
+  if (currentEcosystemCompany()) {
+    const current=(await loadAllTransactions()).find(t=>t.id===id);
+    if(!current)throw Object.assign(new Error("Traitement introuvable"),{statusCode:404});
+    const merged={...current,...patch,id:current.id};
+    const updated=["amount_ttc","amount_ht","vat","vat_rate","vat_splits"].some(k=>k in patch)?normalizeTransaction(merged):merged;
+    await writeEcosystemTransaction(updated);return updated;
+  }
+  return workspaceLock(getWorkspaceRoot(), () => updateTransactionUnlocked(id, patch));
+}
+async function updateTransactionUnlocked(id: string, patch: Partial<Transaction>): Promise<Transaction> {
   const filePath = await findTransactionFile(id);
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
   await assertMonthOpen(txn.date);
   if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
-  const merged = { ...txn, ...patch };
+  const merged = { ...txn, ...patch, id: txn.id };
   const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
   // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
@@ -242,6 +260,10 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
 
 /** Supprime une transaction. */
 export async function deleteTransaction(id: string): Promise<void> {
+  if (currentEcosystemCompany()) { const t=(await loadAllTransactions()).find(t=>t.id===id);if(t)await writeEcosystemTransaction(t,true);return; }
+  return workspaceLock(getWorkspaceRoot(), () => deleteTransactionUnlocked(id));
+}
+async function deleteTransactionUnlocked(id: string): Promise<void> {
   const filePath = await findTransactionFile(id);
   const txn = yaml.parse(await fs.readFile(filePath, "utf-8")) as Transaction;
   await assertMonthOpen(txn.date);

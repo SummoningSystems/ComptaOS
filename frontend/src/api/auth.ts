@@ -87,8 +87,9 @@ export async function fetchInvitations(): Promise<Invitation[]> {
 export async function createInvitation(
   role: Exclude<UserRole, "owner">,
   email?: string,
+  workspaceId?: string,
 ): Promise<Invitation> {
-  const { data } = await api.post<Invitation>("/auth/invite", { role, email });
+  const { data } = await api.post<Invitation>("/auth/invite", { role, email, workspaceId });
   return data;
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { OutgoingInvoice, Category } from "../../types";
-import { fetchInvoices, createInvoice, updateInvoice, deleteInvoice, downloadInvoicePdf } from "../../api/client";
+import { OutgoingInvoice } from "../../types";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -33,6 +33,8 @@ const EMPTY_FORM: Omit<OutgoingInvoice, "id"> = {
 };
 
 export function InvoicesView() {
+ const {fetchInvoices,createInvoice,updateInvoice,deleteInvoice,downloadInvoicePdf}=useWorkspaceApi();
+
   const [invoices, setInvoices] = useState<OutgoingInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
@@ -49,7 +51,7 @@ export function InvoicesView() {
       );
       setInvoices(updated);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [fetchInvoices]);
 
   async function quickStatus(inv: OutgoingInvoice, status: OutgoingInvoice["status"]) {
     const patch = status === "paid"
@@ -65,7 +67,6 @@ export function InvoicesView() {
   }
 
   function openEdit(inv: OutgoingInvoice) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...rest } = inv;
     setForm(rest);
     setEditingId(id);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchGitLog, fetchGitDiff, GitCommit } from "../../api/client";
+import {GitCommit} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 function formatDate(iso: string): string {
   try {
@@ -61,6 +62,8 @@ function DiffViewer({ diff }: { diff: string }) {
 }
 
 export function HistoryView() {
+ const {fetchGitLog,fetchGitDiff}=useWorkspaceApi();
+
   const [commits, setCommits] = useState<GitCommit[]>([]);
   const [initialized, setInitialized] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -106,7 +109,8 @@ export function HistoryView() {
     }
   }
 
-  useEffect(() => { loadLog(); }, []);
+  // Load the initial history once; subsequent refreshes use the explicit reload action.
+  useEffect(() => { void loadLog(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     let list = commits;

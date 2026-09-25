@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { CsvImporter } from "./CsvImporter";
 
 type ImportTab = "csv" | "ofx" | "qif";
@@ -19,6 +19,8 @@ function FileImporter({
   accept: Record<string, string[]>;
   endpoint: string;
 }) {
+ const {api}=useWorkspaceApi();
+
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

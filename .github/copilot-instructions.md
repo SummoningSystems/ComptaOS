@@ -7,13 +7,13 @@
 ### Processus standard
 1. Faire les modifications en local
 2. Builder le frontend en local pour vérifier : `cd frontend && $env:BASE_PATH="/comptaos/"; npm run build`
-3. Commit et push sur GitHub :
+3. Créer ou utiliser `develop` (master est protégé), puis commit et push sur GitHub :
    ```
    git add -A
    git commit -m "description du changement"
-   git push origin master
+   git push origin develop
    ```
-4. Déployer sur le serveur via le script :
+4. Après validation, ouvrir une Pull Request de `develop` vers `master`. Déployer seulement après fusion, via le script :
    ```
    ssh -p 2222 benoit@77.37.120.101 "~/apps/comptaos/deploy.sh"
    ```
@@ -28,13 +28,13 @@ Le script `deploy.sh` fait automatiquement :
 - **Repo sur serveur** : `~/apps/comptaos/` (git remote = `https://github.com/SummoningSystems/ComptaOS.git`)
 - **Script de déploiement** : `~/apps/comptaos/deploy.sh`
 - **Container frontend** : `tipforgood_frontend_1` (Nginx, fichiers dans `/usr/share/nginx/html/comptaos/`)
-- **Container backend** : `comptaos-backend` (Node 18 + Fastify, source montée depuis `~/apps/comptaos/backend`)
+- **Container backend** : `comptaos-backend` (Node 20 + Fastify, source montée depuis `~/apps/comptaos/backend`)
 - **Workspace data** : `~/apps/comptaos/workspace` (ignoré par git — données live)
 - **URL de l'app** : `https://tipforgood.com/comptaos/`
 
 ### Architecture
 - Frontend : React + Vite + TypeScript, `BASE_URL = /comptaos/`
-- Backend : Fastify 4 + TypeScript ESM, port 3003 interne, proxy Nginx `^~ /comptaos/api/`
+- Backend : Fastify 5 + TypeScript ESM, port 3003 interne, proxy Nginx `^~ /comptaos/api/`
 - Auth : JWT en cookie httpOnly `comptaos_token`
 - API base URL frontend : `${import.meta.env.BASE_URL}api` → `/comptaos/api`
 

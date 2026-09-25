@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Wizard création entreprise", () => {
   test("peut créer une entreprise supplémentaire et atteindre le dashboard", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?legacy=1");
     await page.getByTitle("Changer d'entreprise").click();
     await page.getByRole("button", { name: /nouvelle entreprise/i }).click();
 

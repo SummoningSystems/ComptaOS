@@ -8,7 +8,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently --names \"backend,frontend\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"wait-on http://127.0.0.1:3001/api/health --timeout 30000 && npm run dev --prefix frontend\"",
-    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "install:all": "npm ci && npm ci --prefix backend && npm ci --prefix frontend",
     "build": "npm run build --prefix backend && npm run build --prefix frontend",
     "electron": "electron .",
     "electron:dev": "concurrently --names \"backend,frontend,electron\" --prefix-colors \"cyan,magenta,yellow\" \"npm run dev --prefix backend\" \"wait-on http://127.0.0.1:3001/api/health --timeout 30000 && npm run dev --prefix frontend\" \"wait-on http://127.0.0.1:3001/api/health --timeout 30000 && electron .\"",

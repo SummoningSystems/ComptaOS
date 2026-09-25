@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface BankAccount {
   id: number;
@@ -31,6 +31,8 @@ interface PowensConfig {
 type Step = "connections" | "setup" | "waiting_webview";
 
 export function BankingView() {
+ const {api}=useWorkspaceApi();
+
   const [config, setConfig] = useState<PowensConfig>({ configured: false });
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [step, setStep] = useState<Step>("connections");
@@ -60,7 +62,7 @@ export function BankingView() {
       setConnections(conns.data);
     } catch {/* silent */}
     setLoading(false);
-  }, []);
+  }, [api]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

@@ -1,15 +1,7 @@
+import {useCallback} from "react";
 import { useEffect, useState } from "react";
-import {
-  fetchGitSyncStatus,
-  configureGitSync,
-  testGitSync,
-  gitSyncPush,
-  gitSyncPull,
-  deleteGitSync,
-  type GitSyncStatus,
-  type GitSyncConfig,
-  type GitProvider,
-} from "../../api/client";
+import {type GitSyncStatus,type GitProvider} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +60,8 @@ function Step({ n, label, active, done }: { n: number; label: string; active: bo
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export function GitSyncPanel() {
+ const {fetchGitSyncStatus,configureGitSync,testGitSync,gitSyncPush,gitSyncPull,deleteGitSync}=useWorkspaceApi();
+
   const [status, setStatus] = useState<GitSyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -86,7 +80,7 @@ export function GitSyncPanel() {
   const [syncing, setSyncing] = useState<"push" | "pull" | null>(null);
   const [syncMsg, setSyncMsg] = useState<{ ok: boolean; message: string } | null>(null);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
       const s = await fetchGitSyncStatus();
@@ -99,9 +93,9 @@ export function GitSyncPanel() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchGitSyncStatus]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider)!;
   const isLocal = provider === "local";

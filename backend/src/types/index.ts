@@ -4,6 +4,11 @@ export interface VatSplit {
 }
 
 export interface Transaction {
+  revision?: number;
+  documentIds?: string[];
+  transferId?: string;
+  sourceAllocation?: {ecosystemId:string;movementId:string;allocationId:string};
+  settlement?: {accountNumber:string;label:string;journalCode:string;journalLabel:string;payerId?:string;transferAccount?:{number:string;label:string}};
   id: string;
   date: string;
   label: string;
@@ -74,6 +79,7 @@ export interface DashboardData {
   vat_regime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise";
   next_vat_due?: { period: string; label: string; estimated_amount: number; provisional: boolean };
   treasury: number;
+  cash_unknown?: boolean;
   /** Somme des mouvements non rejetes; ce n'est pas un solde bancaire. */
   transaction_flow: number;
   /** Somme des derniers soldes remontes par les connexions bancaires. */

@@ -1,12 +1,14 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { uploadInvoicePdf } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { Invoice, Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 
 export function PdfImporter() {
+ const {uploadInvoicePdf}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function PdfImporter() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [uploadInvoicePdf]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

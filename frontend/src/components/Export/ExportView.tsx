@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { useCallback, useEffect, useState } from "react";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => String(CURRENT_YEAR - i));
@@ -16,17 +16,19 @@ function triggerDownload(data: BlobPart, filename: string, type: string) {
 }
 
 export function ExportView() {
+ const {api}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [config, setConfig] = useState<Config | null>(null); const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const [saved, setSaved] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setError(null);
     try { const [configResponse, previewResponse] = await Promise.all([api.get<Config>("/accounting/config"), api.get<Preview>("/accounting/preview", { params: { year } })]); setConfig(configResponse.data); setPreview(previewResponse.data); }
     catch { setError("Impossible de charger le contrôle comptable."); }
-  }
-  useEffect(() => { void refresh(); }, [year]);
+  }, [api, year]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   async function saveConfig() {
     if (!config) return; setLoading("save"); setSaved(false); setError(null);

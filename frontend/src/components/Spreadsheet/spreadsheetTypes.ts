@@ -20,6 +20,7 @@ export interface SpreadsheetSheet {
 }
 
 export interface SpreadsheetDoc {
+  revision?:number;
   id: string;
   name: string;
   createdAt: string;

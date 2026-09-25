@@ -1,3 +1,5 @@
+import {requireAdmin} from "../services/ecosystemService.js";
+import {workspaceContext,actorContext} from "../services/workspaceContext.js";
 import { FastifyInstance } from "fastify";
 import {
   listPlugins,
@@ -16,7 +18,7 @@ export async function pluginsRoutes(app: FastifyInstance) {
   /** POST /api/plugins/:name/enable */
   app.post<{ Params: { name: string } }>("/:name/enable", async (req, reply) => {
     try {
-      setPluginEnabled(req.params.name, true);
+      requireAdmin();setPluginEnabled(req.params.name, true);
       return reply.send({ ok: true });
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
@@ -26,7 +28,7 @@ export async function pluginsRoutes(app: FastifyInstance) {
   /** POST /api/plugins/:name/disable */
   app.post<{ Params: { name: string } }>("/:name/disable", async (req, reply) => {
     try {
-      setPluginEnabled(req.params.name, false);
+      requireAdmin();setPluginEnabled(req.params.name, false);
       return reply.send({ ok: true });
     } catch (err) {
       return reply.status(404).send({ error: (err as Error).message });
@@ -37,9 +39,9 @@ export async function pluginsRoutes(app: FastifyInstance) {
   app.post<{ Params: { name: string }; Body: { hook: string; context: Record<string, unknown> } }>(
     "/:name/run",
     async (req, reply) => {
-      const { hook, context } = req.body;
+      requireAdmin();const { hook, context } = req.body;
       if (!hook) return reply.status(400).send({ error: "hook requis" });
-      const result = runPlugin(req.params.name, hook, context ?? {});
+      const result = runPlugin(req.params.name, hook, {...(context??{}),scope:workspaceContext.getStore()?.id,actor:actorContext.getStore()?.id});
       return reply.send({ result });
     },
   );

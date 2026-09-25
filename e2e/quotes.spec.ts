@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Module Devis", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?legacy=1");
     await page.getByTitle("Documents").click();
     await page.getByRole("button", { name: /Devis$/i }).click();
   });

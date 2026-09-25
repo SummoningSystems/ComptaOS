@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { useCallback, useEffect, useState } from "react";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
 interface ReconcileTransaction {
@@ -25,6 +25,8 @@ const ISSUE_LABELS: Record<ReconciliationIssue, string> = {
 const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
+ const {api}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<ReconcileTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
   const total = transactions.length;
   const pending = total - reconciled;
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setSelected(new Set());
     setError("");
@@ -57,9 +59,9 @@ export function ReconcileView({ initialMonth }: { initialMonth?: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [api, month]);
 
-  useEffect(() => { load(); }, [month]);
+  useEffect(() => { void load(); }, [load]);
 
   async function toggleOne(id: string, value: boolean) {
     setSaving(true);

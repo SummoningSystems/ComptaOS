@@ -3,7 +3,7 @@
 ## Prérequis
 
 - Node.js 20.19+ et npm 10+ (production épinglée sur Node.js 20.19.5).
-- Installer les dépendances avec `npm run install:all` après l'installation racine.
+- Installer les dépendances racine, backend et frontend avec `npm run install:all`.
 - Copier `backend/.env.example` vers `backend/.env`; `WORKSPACE_PATH` configure le dossier de données.
 
 Sous PowerShell avec une politique bloquant `npm.ps1`, utiliser `npm.cmd` à la place de `npm`.

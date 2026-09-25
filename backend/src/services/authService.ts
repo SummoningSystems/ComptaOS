@@ -1,3 +1,4 @@
+import { workspaceLock } from "./workspaceContext.js";
 import { chmodSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import crypto from "crypto";
@@ -26,6 +27,7 @@ export type PublicUser = Omit<AuthUser, "passwordHash">;
 
 export interface Invitation {
   token: string;
+  workspaceId?: string;
   email?: string;
   role: Exclude<UserRole, "owner">;
   createdBy: string;
@@ -65,7 +67,8 @@ function isAuthStore(value: unknown): value is AuthStore {
     INVITATION_ROLES.has(invitation.role) &&
     typeof invitation.createdBy === "string" &&
     typeof invitation.createdAt === "string" &&
-    typeof invitation.expiresAt === "string"
+    typeof invitation.expiresAt === "string" &&
+    (invitation.workspaceId === undefined || typeof invitation.workspaceId === "string")
   ));
 
   return usersValid && invitationsValid;
@@ -138,9 +141,9 @@ export async function createOwner(
   displayName: string,
   password: string,
 ): Promise<PublicUser> {
+  const hash = await bcrypt.hash(password, 12);
   const store = loadStore();
   if (store.users.length > 0) throw new Error("Un compte owner existe déjà.");
-  const hash = await bcrypt.hash(password, 12);
   const user: AuthUser = {
     id: `user_${crypto.randomBytes(6).toString("hex")}`,
     username: username.toLowerCase().trim(),
@@ -168,9 +171,12 @@ export async function verifyCredentials(
   if (!user) return null;
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return null;
-  user.lastLogin = new Date().toISOString();
-  saveStore(store);
-  return strip(user);
+  const latest = loadStore();
+  const current = latest.users.find(u => u.id === user.id && u.active && u.passwordHash === user.passwordHash);
+  if (!current) return null;
+  current.lastLogin = new Date().toISOString();
+  saveStore(latest);
+  return strip(current);
 }
 
 export function getUserById(id: string): PublicUser | null {
@@ -191,11 +197,12 @@ export async function createUser(
   role: Exclude<UserRole, "owner">,
   createdBy: string,
 ): Promise<PublicUser> {
+  if (!INVITATION_ROLES.has(role)) throw new Error("Rôle invalide.");
+  const hash = await bcrypt.hash(password, 12);
   const store = loadStore();
   if (store.users.find((u) => u.username === username.toLowerCase().trim())) {
     throw new Error("Ce nom d'utilisateur existe déjà.");
   }
-  const hash = await bcrypt.hash(password, 12);
   const user: AuthUser = {
     id: `user_${crypto.randomBytes(6).toString("hex")}`,
     username: username.toLowerCase().trim(),
@@ -223,6 +230,7 @@ export async function updateUser(
   requesterId: string,
   requesterRole: UserRole,
 ): Promise<PublicUser> {
+  const passwordHash = patch.password ? await bcrypt.hash(patch.password, 12) : undefined;
   const store = loadStore();
   const idx = store.users.findIndex((u) => u.id === id);
   if (idx === -1) throw new Error("Utilisateur introuvable.");
@@ -237,7 +245,7 @@ export async function updateUser(
   if (patch.email !== undefined) user.email = patch.email || undefined;
   if (patch.role && (requesterRole === "owner" || requesterRole === "admin")) user.role = patch.role;
   if (patch.active !== undefined && (requesterRole === "owner" || requesterRole === "admin")) user.active = patch.active;
-  if (patch.password) user.passwordHash = await bcrypt.hash(patch.password, 12);
+  if (passwordHash) user.passwordHash = passwordHash;
 
   store.users[idx] = user;
   saveStore(store);
@@ -260,11 +268,13 @@ export function createInvitation(
   role: Exclude<UserRole, "owner">,
   createdBy: string,
   email?: string,
+  workspaceId?: string,
 ): Invitation {
   const store = loadStore();
   const inv: Invitation = {
     token: crypto.randomBytes(24).toString("hex"),
     email,
+    workspaceId,
     role,
     createdBy,
     createdAt: new Date().toISOString(),
@@ -290,6 +300,7 @@ export async function acceptInvitation(
   displayName: string,
   password: string,
 ): Promise<PublicUser> {
+  return workspaceLock(getCompaniesRoot() + ":invitations", async () => {
   const inv = getInvitation(token);
   if (!inv) throw new Error("Invitation invalide ou expirée.");
   const user = await createUser(username, displayName, password, inv.role, inv.createdBy);
@@ -301,6 +312,7 @@ export async function acceptInvitation(
     saveStore(store);
   }
   return user;
+  });
 }
 
 export function listInvitations(): Invitation[] {

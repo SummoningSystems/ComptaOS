@@ -1,7 +1,8 @@
+const ecosystemMode = !new URLSearchParams(window.location.search).has("legacy") && !new URLSearchParams(window.location.search).has("view");
 import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
-import { api, fetchCompanies } from "./api/client";
+import { api, fetchCompanies, initializeWorkspace } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
-import { TabBar } from "./components/Layout/TabBar";
+import { WorkspaceLayout } from "./components/Layout/WorkspaceLayout";
 import { StatusBar } from "./components/Layout/StatusBar";
 import { CopilotPanel } from "./components/Copilot/CopilotPanel";
 import { SearchOverlay } from "./components/Search/SearchOverlay";
@@ -13,9 +14,10 @@ import { LoginView } from "./components/Auth/LoginView";
 import { SetupView } from "./components/Auth/SetupView";
 import { AcceptInviteView } from "./components/Auth/AcceptInviteView";
 import { fetchAuthStatus, fetchMe, logout, type AuthUser } from "./api/auth";
-import type { TabType } from "./types";
+import type { Company, TabType } from "./types";
 import { MobileCaptureView } from "./components/Mobile/MobileCaptureView";
 
+const LiveApp = lazy(() => import("./components/Ecosystem/LiveApp"));
 const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
 const ImportView = lazy(() => import("./components/Import/ImportView").then((m) => ({ default: m.ImportView })));
@@ -50,6 +52,7 @@ function ViewLoading() {
 }
 
 const TAB_LABELS: Record<TabType, string> = {
+  ecosystem:    "Écosystème",
   dashboard:    "Dashboard",
   editor:       "Éditeur",
   import:       "Import",
@@ -105,7 +108,7 @@ class ViewErrorBoundary extends Component<{ children: ReactNode }, { error: stri
 }
 
 /** Rendu d'une vue par son type (partagé fenêtre principale + popup) */
-function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null }) {
+export function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null }) {
   const params = new URLSearchParams(path ?? "");
   const workFilter = params.get("filter") ?? path;
   const contextMonth = params.get("month") ?? undefined;
@@ -146,6 +149,8 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
 export default function App() {
   // ── TOUS les hooks en premier (Rules of Hooks) ────────────────────────────
   type AuthState = "loading" | "setup" | "login" | "invite" | "app";
+  const [workspace, setWorkspace] = useState<Company | null>(null);
+  const [workspaceError, setWorkspaceError] = useState("");
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -179,7 +184,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (authState !== "app") return;
+    if (ecosystemMode || authState !== "app" || !workspace || workspace.kind === "household") return;
     api.get<{ alerts: { level: string; message: string }[]; count: number }>("/alerts")
       .then(({ data }) => { setAlertCount(data.count); setAlertMessages(data.alerts.slice(0, 5)); })
       .catch(() => {});
@@ -193,7 +198,14 @@ export default function App() {
         setShowCompanyWizard(true);
       }
     });
-  }, [authState]);
+  }, [authState, workspace]);
+
+  useEffect(() => {
+    if (ecosystemMode || authState !== "app") return;
+    let active = true;
+    initializeWorkspace(currentUser?.id).then(value => { if (active) setWorkspace(value); }).catch(error => { if (active) setWorkspaceError(String(error)); });
+    return () => { active = false; };
+  }, [authState, currentUser?.id]);
 
   // Raccourci Ctrl+K / Cmd+K → ouvre la recherche globale
   useEffect(() => {
@@ -226,6 +238,7 @@ export default function App() {
   async function handleLogout() {
     await logout().catch(() => {});
     setCurrentUser(null);
+    setWorkspace(null);
     setAuthState("login");
     setShowUserMenu(false);
   }
@@ -259,6 +272,10 @@ export default function App() {
   if (authState === "login") {
     return <LoginView onLogin={(user) => { setCurrentUser(user); setAuthState("app"); }} />;
   }
+
+  if (ecosystemMode) return <Suspense fallback={<ViewLoading />}><LiveApp user={currentUser} onLogout={handleLogout}/></Suspense>;
+  if (!workspace) return <div className="p-8 text-vscode-text">{workspaceError || "Chargement de l’espace…"}</div>;
+  if (workspace.kind === "household" || workspace.kind === "ecosystem") return <Suspense fallback={<ViewLoading />}><LiveApp user={currentUser} onLogout={handleLogout}/></Suspense>;
 
   // ── Mode fenêtre autonome (?view=<type>) ──────────────────────────────────
   const standaloneView = new URLSearchParams(window.location.search).get("view") as TabType | null;
@@ -298,6 +315,8 @@ export default function App() {
       <div className="flex items-center gap-3 px-4 h-10 bg-vscode-panel border-b border-vscode-border shrink-0 select-none">
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
+          <a className="text-xs text-vscode-accent" href={import.meta.env.BASE_URL}>Écosystème financier</a>
+          {import.meta.env.DEV && <a className="text-xs text-vscode-accent" href="?prototype=ecosystem">Prototype écosystème</a>}
           <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />
         </div>
         <div className="flex-1" />
@@ -383,12 +402,7 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div className="flex flex-1 min-h-0">
-        <Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />
-
-        <div className="flex flex-col flex-1 min-w-0">
-          <TabBar />
-
+      <WorkspaceLayout sidebar={<Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />}>
           <div className="flex-1 min-h-0">
             <ViewErrorBoundary key={activeTab?.id ?? "empty"}>
               {activeTab
@@ -403,8 +417,7 @@ export default function App() {
               }
             </ViewErrorBoundary>
           </div>
-        </div>
-      </div>
+      </WorkspaceLayout>
 
       <StatusBar />
       <CommandPalette />

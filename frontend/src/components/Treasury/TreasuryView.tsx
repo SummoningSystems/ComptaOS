@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import {
-  AreaChart, Area,
+  Area,
   BarChart, Bar,
   XAxis, YAxis,
   CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
   ComposedChart, Line,
 } from "recharts";
-import { fetchDashboard, fetchHrEmployees, fetchManualRecurring, fetchTransactions } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { DashboardData, HrEmployee, ManualRecurring, Transaction } from "../../types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -34,6 +34,8 @@ function KpiCard({ label, value, sub, accent, help }: { label: string; value: st
 }
 
 export function TreasuryView() {
+ const {fetchDashboard,fetchHrEmployees,fetchManualRecurring,fetchTransactions}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -52,7 +54,7 @@ export function TreasuryView() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [fetchDashboard, fetchHrEmployees, fetchManualRecurring, fetchTransactions]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-full text-vscode-muted text-sm">Chargement…</div>;

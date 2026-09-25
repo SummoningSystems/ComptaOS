@@ -1,14 +1,8 @@
-﻿import { useEffect, useRef, useState, useCallback } from "react";
+﻿import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import type { SpreadsheetDoc, SpreadsheetSheet, SpreadsheetCell, CellFormat } from "./spreadsheetTypes";
-import {
-  fetchSpreadsheets,
-  fetchSpreadsheet,
-  createSpreadsheet,
-  saveSpreadsheet,
-  deleteSpreadsheetApi,
-  fetchAccountingVariables,
-} from "../../api/spreadsheetClient";
+import {createSpreadsheetApi} from "../../api/spreadsheetClient";
+import {useWorkspaceApi} from "../../api/WorkspaceApi";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -103,11 +97,6 @@ function formatNumber(val: number, fmt?: CellFormat["numberFormat"]): string {
   return Number.isInteger(val) ? String(val) : val.toFixed(2);
 }
 
-function buildHF(_sheet: SpreadsheetSheet, _vars: Record<string, number>) {
-  // Remplacé par Web Worker — ne pas utiliser directement
-  throw new Error("Utiliser le Web Worker via recompute()");
-}
-
 /** Ajuste les références de cellules dans une formule lors d'une copie/déplacement */
 function adjustFormula(formula: string, deltaRow: number, deltaCol: number): string {
   if (!formula.startsWith("=")) return formula;
@@ -185,7 +174,11 @@ const FORMULA_LIST: { name: string; usage: string; desc: string }[] = [
 
 // ── Composant principal ────────────────────────────────────────────────────────
 
-export function SpreadsheetView() {
+export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
+  const {apiUrl}=useWorkspaceApi();
+  const base=apiBase??apiUrl("spreadsheets");
+  const {fetchSpreadsheets,fetchSpreadsheet,createSpreadsheet,saveSpreadsheet,deleteSpreadsheetApi,fetchAccountingVariables}=useMemo(()=>createSpreadsheetApi(base),[base]);
+  const [loadError,setLoadError]=useState("");
   const [docs, setDocs] = useState<Omit<SpreadsheetDoc, "sheets">[]>([]);
   const [activeDoc, setActiveDoc] = useState<SpreadsheetDoc | null>(null);
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
@@ -225,6 +218,7 @@ export function SpreadsheetView() {
   } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const editVersionRef=useRef(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<SpreadsheetSheet[][]>([]);
   const redoStackRef = useRef<SpreadsheetSheet[][]>([]);
@@ -318,9 +312,9 @@ export function SpreadsheetView() {
   })();
 
   useEffect(() => {
-    fetchSpreadsheets().then(setDocs);
-    fetchAccountingVariables().then(setAccountingVars);
-  }, []);
+    fetchSpreadsheets().then(setDocs).catch(e=>setLoadError(String(e.message)));
+    fetchAccountingVariables().then(setAccountingVars).catch(e=>setLoadError(String(e.message)));
+  }, [fetchSpreadsheets,fetchAccountingVariables]);
 
   const recompute = useCallback((doc: SpreadsheetDoc, sheetIdx: number, vars: Record<string, number>) => {
     const version = ++recomputeVersionRef.current;
@@ -464,10 +458,13 @@ export function SpreadsheetView() {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       setSaving(true);
-      const saved = await saveSpreadsheet(doc);
-      setActiveDoc(saved);
-      setDirty(false);
-      setSaving(false);
+      try {
+        const version=editVersionRef.current;
+        const saved = await saveSpreadsheet(doc);
+        setActiveDoc(current=>current?.id!==saved.id?current:version===editVersionRef.current?saved:{...current,revision:saved.revision,updatedAt:saved.updatedAt});
+        if(version===editVersionRef.current)setDirty(false);setLoadError("");
+      } catch(e) {setLoadError(e instanceof Error?e.message:"Sauvegarde impossible");}
+      finally {setSaving(false);}
     }, 1500);
   }
 
@@ -483,7 +480,7 @@ export function SpreadsheetView() {
     redoStackRef.current.push(JSON.parse(JSON.stringify(activeDoc.sheets)));
     const newDoc = { ...activeDoc, sheets: prevSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -493,7 +490,7 @@ export function SpreadsheetView() {
     undoStackRef.current.push(JSON.parse(JSON.stringify(activeDoc.sheets)));
     const newDoc = { ...activeDoc, sheets: nextSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -503,7 +500,7 @@ export function SpreadsheetView() {
     const newSheets = activeDoc.sheets.map((s, i) => i === activeSheetIdx ? updatedSheet : s);
     const newDoc = { ...activeDoc, sheets: newSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -866,7 +863,7 @@ export function SpreadsheetView() {
     setActiveSheetIdx(newDoc.sheets.length - 1);
     setNewSheetName("");
     setAddingSheet(false);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -878,7 +875,7 @@ export function SpreadsheetView() {
     );
     const newDoc = { ...activeDoc, sheets: newSheets };
     setActiveDoc(newDoc);
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
     setRenamingSheet(null);
   }
@@ -893,7 +890,7 @@ export function SpreadsheetView() {
       if (i === prev) return Math.min(prev, newSheets.length - 1);
       return prev;
     });
-    setDirty(true);
+    editVersionRef.current++;setDirty(true);
     scheduleSave(newDoc);
   }
 
@@ -1009,7 +1006,7 @@ export function SpreadsheetView() {
       const newDoc = { ...activeDoc, sheets: [...activeDoc.sheets, ...importedSheets] };
       setActiveDoc(newDoc);
       setActiveSheetIdx(activeDoc.sheets.length);
-      setDirty(true);
+      editVersionRef.current++;setDirty(true);
       scheduleSave(newDoc);
     }
   }
@@ -1127,6 +1124,7 @@ export function SpreadsheetView() {
         onChange={handleImport}
       />
 
+      {loadError && <div role="alert" className="text-red-400 p-2">{loadError}</div>}
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <div className="w-52 shrink-0 bg-vscode-sidebar border-r border-vscode-border flex flex-col">
         <div className="px-3 py-2 border-b border-vscode-border flex items-center justify-between">
@@ -1168,6 +1166,7 @@ export function SpreadsheetView() {
           )}
           {docs.map(doc => (
             <button
+              type="button"
               key={doc.id}
               onClick={() => loadDoc(doc.id)}
               className={`w-full text-left px-3 py-2 text-xs truncate transition-colors ${
@@ -1213,7 +1212,7 @@ export function SpreadsheetView() {
                     ? "bg-blue-900/40 border-blue-700 text-blue-300"
                     : "border-vscode-border text-vscode-muted hover:text-vscode-text"
                 }`}
-              >𝑥 Variables</button>
+              >𝑥 Variables</button><button onClick={()=>void fetchAccountingVariables().then(setAccountingVars).catch(e=>setLoadError(String(e.message)))}>Actualiser les variables</button>
               <button
                 onClick={async () => {
                   if (!confirm(`Supprimer « ${activeDoc.name} » ?`)) return;
@@ -1261,7 +1260,10 @@ export function SpreadsheetView() {
                   if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); applyAutocompleteSuggestion(acSuggestions[autocompleteIdx].name); return; }
                   if (e.key === "Escape") { setAutocompleteOpen(false); return; }
                 }
-                if (e.key === "Enter" && editingCell) commitEdit(editingCell);
+                if (e.key === "Enter" && editingCell) {
+                  e.preventDefault();
+                  commitEdit(editingCell);
+                }
                 if (e.key === "Escape") { setEditingCell(null); setAutocompleteOpen(false); }
               }}
               placeholder="=SUM(A1:A10)  •  =REVENUS_2025  •  =IF(A1>0,…)"

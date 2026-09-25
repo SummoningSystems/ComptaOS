@@ -1,3 +1,6 @@
+import {recurringForCompany} from "./ecosystemPlanning.js";
+import {treasuryAccounts,accountBalance} from "../domain/ecosystemMetrics.js";
+import {currentEcosystemCompany,loadEcosystem} from "./ecosystemService.js";
 import { loadAllTransactions } from "./transactionService.js";
 import { loadManualRecurring } from "./manualRecurringService.js";
 import { DashboardData } from "../types/index.js";
@@ -76,6 +79,12 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     loadAllTransactions(),
     getConnections().catch(() => []),
   ]);
+  const ecosystemCompany=currentEcosystemCompany();
+  const ecosystem=ecosystemCompany?await loadEcosystem(ecosystemCompany.ecosystemId!):null;
+  const entity=ecosystem?.entities.find(e=>e.workspaceId===ecosystemCompany?.id);
+  // Only accounts explicitly held by the company are company cash.
+  const owned=ecosystem&&entity?treasuryAccounts(ecosystem,entity.id,new Date().toISOString().slice(0,10)):[];
+  const bankMovements=ecosystem?.movements.filter(m=>owned.some(a=>a.id===m.accountId)&&!m.deleted&&!m.pending&&!m.duplicateCandidates?.length)??[];
   const availableYears = Array.from(new Set(transactions
     .filter((transaction) => transaction.status !== "rejected")
     .map((transaction) => transaction.date.slice(0, 4))))
@@ -130,7 +139,7 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   const isEstimate = netResult > 0 ? netResult * 0.25 : 0;
 
   // Runway : trésorerie / moyenne dépenses 3 derniers mois
-  const bankAccounts = connections.flatMap((connection) => connection.accounts)
+  let bankAccounts = connections.flatMap((connection) => connection.accounts)
     .filter((account): account is typeof account & { balance: number } =>
       typeof account.balance === "number" && Number.isFinite(account.balance)
     )
@@ -141,10 +150,21 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
       balance: parseFloat(account.balance.toFixed(2)),
       updated_at: account.balanceUpdatedAt,
     }));
-  const bankBalance = bankAccounts.length > 0
+  let cashUnknown=false;
+  if(ecosystem){
+    transactionFlow=bankMovements.reduce((n,m)=>n+m.cents,0)/100;
+    bankAccounts=owned.flatMap(a=>{
+      const feed=ecosystem.feeds.find(f=>f.accountId===a.id&&f.balance!==undefined);
+      const cents=accountBalance(ecosystem,a.id,new Date().toISOString().slice(0,10))??undefined;
+      return cents===undefined?[]:[{id:a.id,name:a.name,currency:"EUR",balance:cents/100,updated_at:feed?.balanceAt}];
+    });
+    cashUnknown=!owned.length||bankAccounts.length!==owned.length;
+    recurring=[...recurring.filter(r=>r.id.startsWith("hr_")||!ecosystem.planningMigrated?.includes("recurring:"+entity?.id)),...recurringForCompany(ecosystem,entity!.id)];
+  }
+  const bankBalance = !cashUnknown&&bankAccounts.length > 0
     ? bankAccounts.reduce((sum, account) => sum + account.balance, 0)
     : undefined;
-  const treasury = bankBalance ?? transactionFlow;
+  const treasury = cashUnknown?0:bankBalance ?? transactionFlow;
   const companyProfile = loadCompanyProfile();
   const vatPosition = computeVatPosition(transactions, companyProfile);
   const spendableCash = treasury - vatPosition.reserve;
@@ -178,7 +198,11 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
   });
 
   // ── Prévisions 6 mois à partir des frais récurrents + moyenne revenus ─────
-  const forecast = buildDashboardForecast(recurring, transactions, spendableCash);
+  if(ecosystem){
+    monthly_balance.length=0;
+    // Historical bank balances cannot be inferred from accounting allocations.
+  }
+  const forecast = cashUnknown?[]:buildDashboardForecast(recurring, transactions, spendableCash);
 
   return {
     monthly_revenue:  months.map((m) => ({ month: m, amount: parseFloat(monthlyMap[m].revenue.toFixed(2)) })),
@@ -191,11 +215,12 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     spendable_cash: parseFloat(spendableCash.toFixed(2)),
     vat_regime: companyProfile.vatRegime,
     next_vat_due: vatPosition.nextDue ? { period: vatPosition.nextDue.period, label: vatPosition.nextDue.label, estimated_amount: vatPosition.nextDue.estimatedAmount, provisional: vatPosition.nextDue.provisional } : undefined,
+    cash_unknown: cashUnknown,
     treasury:         parseFloat(treasury.toFixed(2)),
     transaction_flow: parseFloat(transactionFlow.toFixed(2)),
     bank_balance: bankBalance === undefined ? undefined : parseFloat(bankBalance.toFixed(2)),
     bank_balance_updated_at: bankBalanceUpdatedAt,
-    balance_difference: bankBalance === undefined ? undefined : parseFloat((bankBalance - transactionFlow).toFixed(2)),
+    balance_difference: ecosystem || bankBalance === undefined ? undefined : parseFloat((bankBalance - transactionFlow).toFixed(2)),
     bank_accounts: bankAccounts,
     accounting_result: parseFloat(netResult.toFixed(2)),
     accounting_revenue: parseFloat(accountingRevenue.toFixed(2)),

@@ -2,11 +2,11 @@
 
 ## Conception générale
 
-ComptaOS est composé d'un frontend React qui consomme une API HTTP Fastify. Le backend lit et écrit les données métier dans le dossier de l'entreprise active. Aucun ORM ni serveur de base de données métier n'est utilisé dans le code observé : les transactions sont des fichiers YAML et les index/configurations sont principalement des fichiers JSON.
+ComptaOS est composé d'un frontend React qui consomme une API HTTP Fastify. Le backend lit et écrit les données métier dans le dossier de l’espace résolu pour la requête. Aucun ORM ni serveur de base de données métier n'est utilisé dans le code observé : les transactions sont des fichiers YAML et les index/configurations sont principalement des fichiers JSON.
 
 Deux modes d'exécution partagent ce socle :
 
-- Web/PWA : Vite sert le frontend en développement et proxifie `/api` vers Fastify.
+- Web : Vite sert le frontend en développement et proxifie `/api` vers Fastify.
 - Electron : le processus principal démarre le build backend sur un port local libre, définit un workspace sous `userData`, attend `/api/health`, puis ouvre une `BrowserWindow` sur le backend.
 
 En production, Fastify peut servir `frontend/dist` avec un fallback SPA. Le frontend accepte aussi un `BASE_PATH` Vite, utilisé pour le déploiement sous `/comptaos/`.
@@ -29,7 +29,7 @@ En production, Fastify peut servir `frontend/dist` avec un fallback SPA. Le fron
 
 1. Une vue React appelle le client API partagé.
 2. Une route Fastify valide/interprète la requête et délègue au service métier.
-3. Le service résout le dossier de l'entreprise active puis lit ou écrit les fichiers du workspace.
+3. Le service résout le dossier de l’espace résolu pour la requête puis lit ou écrit les fichiers du workspace.
 4. Les réponses JSON mettent à jour l'état local React/Zustand.
 5. Les opérations prévues par les services peuvent créer un historique Git dans le workspace, indépendamment du dépôt source de ComptaOS.
 
@@ -40,6 +40,28 @@ Les transactions illisibles sont exclues du calcul, journalisées et exposées c
 - `LOCAL_API_KEY` active un contrôle optionnel par en-tête ou paramètre.
 - `AUTH_ENABLED=true` active une authentification JWT par cookie HTTP-only via les routes d'authentification.
 - En production, le cookie JWT reçoit automatiquement l'attribut `Secure`.
-- `resolveSafe` interdit les accès en dehors du workspace actif.
+- `resolveSafe` rejette la traversée et les liens symboliques dans les chemins de fichiers demandés.
 - Les secrets d'intégration proviennent des variables d'environnement ou de fichiers locaux non destinés au dépôt.
 - Les fichiers locaux d'authentification et de banque sont validés et écrits atomiquement avec des permissions restrictives ; le `.gitignore` du workspace les exclut de la synchronisation Git.
+
+
+## Foyer partagé
+
+Les API métier explicites utilisent /api/workspaces/:workspaceId. Le contexte
+AsyncLocalStorage fixe le dossier, l’acteur et le type d’espace pour toute la requête.
+Les appels historiques sans ID ne sont acceptés qu’avec un seul espace.
+La sélection frontend est dans l’URL ; les caches, watchers et statuts Git sont par espace.
+
+Le foyer utilise household.json (version, comptes, contextes, virements, budgets,
+échéances, imports, historique) et transactions/<id>.yaml. Un journal
+household.pending.json permet de terminer un lot interrompu avant toute lecture.
+Les écritures sont sérialisées et les modifications vérifient la révision attendue.
+La suppression d’un mouvement est logique. Les calculs utilisent des centimes entiers.
+
+Les fonctions comptables professionnelles sont interdites dans un foyer.
+L’authentification recharge le rôle et le statut actif ; les invitations de foyer
+accordent l’accès uniquement à l’espace indiqué. Les fichiers serveur et secrets
+ne sont pas exposés par le navigateur de fichiers.
+
+Le paquet Docker local est documenté dans deployment/LOCAL.md. Il inclut HTTPS,
+sauvegardes cohérentes quotidiennes et restauration hors ligne dans une destination vide.

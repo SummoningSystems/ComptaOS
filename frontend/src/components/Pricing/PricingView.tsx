@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { isAxiosError } from "axios";
-import { api } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface Plan {
   id: string;
@@ -38,6 +38,8 @@ const PLAN_BADGE: Record<string, string> = {
 };
 
 export function PricingView() {
+ const {api}=useWorkspaceApi();
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [license, setLicense] = useState<License | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ export function PricingView() {
         setVerifyMsg({ ok: false, text: "Impossible de vérifier le paiement. Utilisez votre clé reçue par email." });
       }).finally(() => setVerifying(false));
     }
-  }, []);
+  }, [api]);
 
   async function handleCheckout(plan: "pro" | "pro_plus") {
     setCheckoutLoading(plan);

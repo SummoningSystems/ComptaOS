@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Paramètres — profil entreprise", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?legacy=1");
     await page.getByTitle("Outils").click();
     await page.getByRole("button", { name: /Param/i }).click();
   });

@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+const EcosystemPrototype = React.lazy(() => import("./components/Ecosystem/EcosystemPrototype"));
+const prototype = import.meta.env.DEV && new URLSearchParams(window.location.search).get("prototype") === "ecosystem";
 import "./index.css";
 
 // Nettoyage de l'ancien service worker Workbox retiré pour éviter de servir
@@ -12,6 +14,6 @@ if ("serviceWorker" in navigator) {
 }
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    {prototype ? <React.Suspense fallback={<p>Chargement du prototype…</p>}><EcosystemPrototype /></React.Suspense> : <App />}
   </React.StrictMode>
 );

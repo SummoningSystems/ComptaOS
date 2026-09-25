@@ -1,0 +1,10 @@
+import {useTabState} from "./tabContext";
+import {useLive} from "./liveStore";
+import {scopeName,money,openScope,type ScopeTab} from "./model";
+import {financialTotals} from "../../../../backend/src/domain/ecosystemMetrics";
+import {exportCsv} from "./LiveOverview";
+export function LiveReports({spec}:{spec:ScopeTab}){
+ const s=useLive(x=>x.data)!;const [year,setYear]=useTabState("period",spec.period?.slice(0,4)??new Date().getFullYear().toString());
+ const months=Array.from({length:12},(_,i)=>year+"-"+String(i+1).padStart(2,"0"));const total=financialTotals(s,spec.scope,year);
+ return <div className="eco-work"><h1>{spec.toolId==="export"?"Exports":"Rapport financier"} · {scopeName(spec.scope)}</h1><label>Année<input type="number" min="1900" max="9999" value={year} onChange={e=>setYear(e.target.value)}/></label><p>Montants réels TTC affectés au périmètre. Virements exclus, remboursements déduits des dépenses. Les prévisions sont présentées dans Finance.</p><div className="eco-toolbar"><button onClick={()=>exportCsv(s,spec.scope,year,false)}>Exporter les mouvements CSV</button><button onClick={()=>exportCsv(s,spec.scope,year,true)}>Exporter les affectations CSV</button></div><table><thead><tr><th>Mois</th><th>Revenus</th><th>Dépenses nettes</th><th>Net</th></tr></thead><tbody>{months.map(month=>{const t=financialTotals(s,spec.scope,month);return <tr key={month}><td><button onClick={()=>openScope({view:"transactions",scope:spec.scope,period:month})}>{month}</button></td><td>{money(t.income)}</td><td>{money(t.expenses)}</td><td>{money(t.net)}</td></tr>;})}<tr><th>Total</th><td>{money(total.income)}</td><td>{money(total.expenses)}</td><td>{money(total.net)}</td></tr></tbody></table><h2>Exports comptables par entreprise</h2>{s.entities.filter(e=>e.kind==="company"&&e.accountingEnabled&&(spec.scope==="root"||s.relations.some(r=>r.kind==="activity"&&r.from===spec.scope&&r.to===e.id))).map(e=><p key={e.id}><button onClick={()=>openScope({view:"placeholder",scope:e.id,toolId:"export",label:"Export",period:year})}>{e.name} · Export comptable et justificatifs</button></p>)}</div>;
+}

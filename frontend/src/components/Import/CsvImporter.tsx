@@ -1,12 +1,14 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import * as XLSX from "xlsx";
-import { previewCsv, importCsv, fetchSmartSuggestions, applySmartCategories } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { CsvMappingConfig, Transaction } from "../../types";
 
 type Step = "drop" | "mapping" | "preview" | "done";
 
 export function CsvImporter() {
+ const {previewCsv,importCsv,fetchSmartSuggestions,applySmartCategories}=useWorkspaceApi();
+
   const [step, setStep] = useState<Step>("drop");
   const [rawContent, setRawContent] = useState("");
   const [columns, setColumns] = useState<string[]>([]);
@@ -52,7 +54,7 @@ export function CsvImporter() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [previewCsv]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

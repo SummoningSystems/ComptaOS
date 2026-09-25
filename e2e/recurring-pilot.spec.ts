@@ -4,7 +4,7 @@ test("pilote un frais annuel et simule sa réduction", async ({ page }) => {
   const label = `Assurance annuelle recette ${Date.now()}`;
   const nextYear = new Date().getFullYear() + 1;
 
-  await page.goto("/");
+  await page.goto("/?legacy=1");
   await page.getByTitle("Finance").click();
   await page.getByRole("button", { name: /Frais récurrents/i }).click();
   await expect(page.getByRole("heading", { name: /Pilotage des frais récurrents/i })).toBeVisible();
@@ -20,7 +20,7 @@ test("pilote un frais annuel et simule sa réduction", async ({ page }) => {
   const row = page.getByRole("row").filter({ hasText: label });
   await expect(row).toContainText("100 €/mois");
   await row.locator("select").selectOption("reduce");
-  await row.locator('input[type="number"]').fill("600");
+  await row.locator('input[inputmode="decimal"]').fill("600");
   await expect(row).toContainText("50 €/mois");
   await expect(page.getByText(/600.*économisés|Économie simulée/i).first()).toBeVisible();
 

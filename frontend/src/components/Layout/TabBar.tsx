@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../../stores/appStore";
+import { currentWorkspaceId } from "../../api/client";
 import { Tab } from "../../types";
 
 const TAB_ICONS: Record<string, string> = {
   dashboard: "▣", editor: "📄", import: "📥", transactions: "📋", ocr: "🔍", reports: "📊",
   recurring: "🔄", invoices: "🧾", quotes: "📋", plugins: "🧩", pricing: "⭐", banking: "🏦",
   settings: "⚙️", tiers: "🏢", vat: "💰", budgets: "🎯", spreadsheets: "🧭", history: "🕐",
-  hr: "👥",
+  hr: "👥", ecosystem: "◈",
 };
 
 export function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab, closeTabs, reorderTabs } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, closeTabs, reorderTabs } = useAppStore();
   const dragIdRef = useRef<string | null>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const menuRef = useRef<HTMLDivElement>(null);
@@ -25,7 +26,14 @@ export function TabBar() {
   }, []);
 
   function popOut(tab: Tab) {
-    const url = `${window.location.origin}${window.location.pathname}?view=${tab.type}`;
+    if (tab.type === "ecosystem") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("prototype") === "ecosystem") url.searchParams.set("prototypeTab", tab.path ?? "");
+      else url.searchParams.set("ecosystemTab", tab.path ?? "");
+      window.open(url, "_blank", "noopener");
+      return;
+    }
+    const url = `${window.location.origin}${window.location.pathname}?view=${tab.type}&workspace=${encodeURIComponent(currentWorkspaceId())}`;
     window.open(url, `comptaos_${tab.type}`, "popup,width=1400,height=900");
   }
 
@@ -40,10 +48,16 @@ export function TabBar() {
   const activeIndex = tabs.findIndex((tab) => tab.id === activeTabId);
 
   return <div className="flex h-9 shrink-0 border-b border-vscode-border bg-vscode-panel">
-    <div className="flex min-w-0 flex-1 items-end overflow-x-auto">
+    <div role="tablist" aria-label="Onglets ouverts" className="flex min-w-0 flex-1 items-end overflow-x-auto">
       {tabs.map((tab) => <div
         key={tab.id}
         ref={(node) => { tabRefs.current[tab.id] = node; }}
+        style={tab.type === "ecosystem" ? { width: 240, maxWidth: 288 } : undefined}
+        aria-label={tab.title}
+        role="tab"
+        aria-selected={activeTabId === tab.id}
+        tabIndex={0}
+        onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setActiveTab(tab.id); } }}
         draggable
         onClick={() => setActiveTab(tab.id)}
         onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); requestClose([tab.id]); } }}
@@ -55,7 +69,7 @@ export function TabBar() {
         className={`group flex h-full w-44 min-w-36 max-w-56 flex-none cursor-pointer select-none items-center gap-1.5 border-r border-vscode-border px-3 text-xs whitespace-nowrap ${activeTabId === tab.id ? "border-t border-t-vscode-accent bg-vscode-bg text-vscode-text" : "bg-vscode-panel text-vscode-muted hover:text-vscode-text"} ${dragOverId === tab.id ? "border-l-2 border-l-vscode-accent" : ""}`}
       >
         <span className="shrink-0 text-[10px]">{TAB_ICONS[tab.type] ?? "📄"}</span>
-        <span className="min-w-0 flex-1 truncate" title={tab.title}>{tab.title}</span>
+        <span className="min-w-0 flex-1 truncate" title={tab.title}>{tab.type === "ecosystem" ? <><span className="block text-[10px] leading-tight">{tab.title.split(" · ")[0]}</span><span className="block truncate text-[10px] leading-tight text-vscode-muted">{tab.title.slice(tab.title.indexOf(" · ")+3)}</span></> : tab.title}</span>
         {tab.dirty && <span className="shrink-0 text-[8px] text-yellow-400" title="Modifications non sauvegardées">●</span>}
         <button onClick={(event) => { event.stopPropagation(); popOut(tab); }} className="shrink-0 rounded px-0.5 text-[10px] text-vscode-muted opacity-0 hover:text-vscode-accent group-hover:opacity-100" title="Ouvrir dans une fenêtre séparée">↗</button>
         <button onClick={(event) => { event.stopPropagation(); requestClose([tab.id]); }} className="shrink-0 rounded px-0.5 text-vscode-muted hover:text-white" title="Fermer">×</button>

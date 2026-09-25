@@ -14,7 +14,7 @@ export interface VatPosition {
 }
 
 export function isVatPayment(transaction: Transaction): boolean {
-  if (transaction.amount_ttc >= 0) return false;
+  if (transaction.category === "internal_transfer" || transaction.amount_ttc >= 0) return false;
   if (transaction.tags?.some((tag) => tag.toLowerCase() === "vat_payment")) return true;
   return /\b(tva|ca\s*3|ca\s*12|3514|3310)\b/i.test(transaction.label);
 }

@@ -1,3 +1,5 @@
+import { loadCompanies } from "../services/companiesService.js";
+import { joinInviterWorkspaces } from "./workspaces.js";
 import { FastifyInstance } from "fastify";
 import jwt from "jsonwebtoken";
 import {
@@ -78,7 +80,9 @@ function getRequestUser(req: { headers: { cookie?: string } }): JwtPayload | nul
   const token = cookies[COOKIE_NAME];
   if (!token) return null;
   try {
-    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+    const payload = jwt.verify(token, getJwtSecret()) as JwtPayload;
+    const current = getUserById(payload.sub);
+    return current ? { sub: current.id, username: current.username, role: current.role } : null;
   } catch {
     return null;
   }
@@ -216,15 +220,16 @@ export async function authRoutes(app: FastifyInstance) {
   /**
    * POST /api/auth/invite — admin+
    */
-  app.post<{ Body: { role: Exclude<UserRole, "owner">; email?: string } }>(
+  app.post<{ Body: { role: Exclude<UserRole, "owner">; email?: string; workspaceId?: string } }>(
     "/invite",
     async (req, reply) => {
       const payload = getRequestUser(req);
       if (!payload) return reply.status(401).send({ error: "Non authentifié." });
       if (payload.role !== "owner" && payload.role !== "admin") return reply.status(403).send({ error: "Accès refusé." });
-      const { role, email } = req.body ?? {};
+      const { role, email, workspaceId } = req.body ?? {};
+      if (workspaceId && !loadCompanies().some(c => c.id === workspaceId && (!c.memberIds || c.memberIds.includes(payload.sub)))) return reply.code(403).send({ error: "Espace inaccessible." });
       if (!role) return reply.status(400).send({ error: "Rôle requis." });
-      const inv = createInvitation(role, payload.sub, email);
+      const inv = createInvitation(role, payload.sub, email, workspaceId);
       return reply.status(201).send(inv);
     },
   );
@@ -250,7 +255,9 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "Données invalides (mot de passe min. 8 caractères)." });
     }
     try {
+      const invitation = getInvitation(req.params.token);
       const user = await acceptInvitation(req.params.token, username, displayName, password);
+      if (invitation?.workspaceId) joinInviterWorkspaces(invitation.createdBy, user.id, invitation.workspaceId);
       setAuthCookie(reply, signToken({ sub: user.id, username: user.username, role: user.role }));
       return reply.status(201).send(user);
     } catch (e) {

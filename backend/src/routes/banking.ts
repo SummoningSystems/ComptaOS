@@ -11,10 +11,11 @@ import {
   BankingConfig,
 } from "../services/bankingService.js";
 
-export async function bankingRoutes(app: FastifyInstance) {
+export async function bankingRoutes(app: FastifyInstance, options: { scopePrefix?: string } = {}) {
+  const scopePrefix = options.scopePrefix ?? "/api";
   // â”€â”€ Configuration Powens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.get("/api/banking/config", async () => {
+  app.get(scopePrefix + "/banking/config", async () => {
     const viaEnv = isConfiguredViaEnv();
     if (viaEnv) {
       return { configured: true, mode: "hosted" };
@@ -24,7 +25,7 @@ export async function bankingRoutes(app: FastifyInstance) {
     return { configured: true, mode: "self_hosted", domain: config.domain, clientId: config.clientId };
   });
 
-  app.post("/api/banking/config", async (req, reply) => {
+  app.post(scopePrefix + "/banking/config", async (req, reply) => {
     if (isConfiguredViaEnv()) {
       return reply.status(403).send({ error: "Configuration gÃ©rÃ©e par l'opÃ©rateur" });
     }
@@ -43,11 +44,11 @@ export async function bankingRoutes(app: FastifyInstance) {
 
   // â”€â”€ Connexions existantes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.get("/api/banking/connections", async () => getConnections());
+  app.get(scopePrefix + "/banking/connections", async () => getConnections());
 
   // â”€â”€ DÃ©marrer une connexion via le webview Powens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.post("/api/banking/connect", async (req, reply) => {
+  app.post(scopePrefix + "/banking/connect", async (req, reply) => {
     const config = await getConfig();
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
 
@@ -67,7 +68,7 @@ export async function bankingRoutes(app: FastifyInstance) {
 
   // â”€â”€ RafraÃ®chir les connexions depuis l'API Powens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.post("/api/banking/refresh", async (req, reply) => {
+  app.post(scopePrefix + "/banking/refresh", async (req, reply) => {
     const config = await getConfig();
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
     try {
@@ -81,7 +82,7 @@ export async function bankingRoutes(app: FastifyInstance) {
 
   // â”€â”€ Synchroniser tous les comptes d'une connexion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.post("/api/banking/sync-all/:connectionId", async (req, reply) => {
+  app.post(scopePrefix + "/banking/sync-all/:connectionId", async (req, reply) => {
     const config = await getConfig();
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
 
@@ -119,7 +120,7 @@ export async function bankingRoutes(app: FastifyInstance) {
 
   // ── Dédoublonner les imports Powens ──────────────────────────────────────────
 
-  app.post("/api/banking/deduplicate", async (_req, reply) => {
+  app.post(scopePrefix + "/banking/deduplicate", async (_req, reply) => {
     const { loadAllTransactions, invalidateTransactionCache } = await import("../services/transactionService.js");
     const { default: yaml } = await import("yaml");
     const fsMod = await import("fs/promises");
@@ -156,7 +157,7 @@ export async function bankingRoutes(app: FastifyInstance) {
     return reply.send({ rejected });
   });
 
-  app.delete("/api/banking/connections/:connectionId", async (req, reply) => {
+  app.delete(scopePrefix + "/banking/connections/:connectionId", async (req, reply) => {
     const config = await getConfig();
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
 

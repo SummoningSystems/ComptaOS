@@ -1,7 +1,9 @@
+import {useCallback} from "react";
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit } from "../../types";
 import { needsTransactionEvidence } from "../../utils/transactionEvidence";
-import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
+import {type ReceiptOcrProposal} from '../../api/client';
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
@@ -417,6 +419,8 @@ type WorkFilter = "unjustified" | "misc" | "pending" | "duplicates" | "receipt-i
 const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
 
 export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilter; month?: string }) {
+ const {api,analyzeAttachment,fetchTransactions,updateTransaction,deleteTransaction,deleteTransactions,createTransaction,uploadAttachment,deleteAttachment,attachmentUrl,bulkUpdateStatus,fetchSmartSuggestions,applySmartCategories}=useWorkspaceApi();
+
   const { categories } = useCategoryCatalog();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -459,10 +463,10 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   const [ocrReview, setOcrReview] = useState<{ transaction: Transaction; proposal: ReceiptOcrProposal } | null>(null);
   const [multiInvoiceTransaction, setMultiInvoiceTransaction] = useState<Transaction | null>(null);
 
-  async function load() {
+  const load=useCallback(async () => {
     setLoading(true);
     try {
-      const [data, tags] = await Promise.all([fetchTransactions(), fetchAllTags()]);
+      const [data, tags] = await Promise.all([fetchTransactions(), fetchAllTags(api)]);
       const safeData = Array.isArray(data) ? data : [];
       const safeTags = Array.isArray(tags) ? tags : [];
       setTransactions(safeData);
@@ -481,9 +485,9 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchTransactions, api]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function handleSmartCategorize() {
     const { suggestions } = await fetchSmartSuggestions();
@@ -591,7 +595,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     setAiLoading(txn.id);
     setAiSuggestion(null);
     try {
-      const result = await aiCategorize(txn.label, txn.amount_ttc);
+      const result = await aiCategorize(txn.label, txn.amount_ttc, api);
       setAiSuggestion({ id: txn.id, ...result });
     } catch {
       alert("Erreur catégorisation IA — vérifiez ANTHROPIC_API_KEY.");
@@ -679,7 +683,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   function toggleOne(id: string) {
     setSelected((prev) => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) s.delete(id); else s.add(id);
       return s;
     });
   }
@@ -696,7 +700,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   function toggleCollapse(key: string) {
     setCollapsed((prev) => {
       const s = new Set(prev);
-      s.has(key) ? s.delete(key) : s.add(key);
+      if (s.has(key)) s.delete(key); else s.add(key);
       return s;
     });
   }
@@ -848,7 +852,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
           suggestions={smartSuggestions}
           selected={smartSelected}
           applying={smartApplying}
-          onToggle={(id) => setSmartSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; })}
+          onToggle={(id) => setSmartSelected((prev) => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; })}
           onToggleAll={() => setSmartSelected((prev) =>
             prev.size === smartSuggestions.length ? new Set() : new Set(smartSuggestions.map((s) => s.id))
           )}

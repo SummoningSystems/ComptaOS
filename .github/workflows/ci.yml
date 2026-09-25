@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Install root dependencies
@@ -44,6 +44,12 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Ecosystem UX prototype
+        run: npx playwright test --config playwright.ecosystem.config.ts
+
+      - name: Two-user financial ecosystem workflow
+        run: npx playwright test --config playwright.ecosystem-live.config.ts
+
       - name: End-to-end accounting workflow
         run: npm run test:e2e
         env:
@@ -61,11 +67,43 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
       - name: Lint frontend
-        run: npm run lint --prefix frontend --if-present
+        run: npm run lint --prefix frontend
+
+  local-server:
+    name: Local Docker server and HTTPS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Validate Compose configuration
+        run: docker compose --env-file deployment/local.env.example -f deployment/compose.local.yml config --quiet
+      - name: Build and start local server
+        run: docker compose --env-file deployment/local.env.example -f deployment/compose.local.yml up -d --build --wait
+      - name: Retrieve local CA
+        run: |
+          for i in $(seq 1 30); do
+            docker compose -f deployment/compose.local.yml cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/comptaos-ca.crt && break
+            sleep 1
+          done
+          test -s /tmp/comptaos-ca.crt
+      - name: Verify HTTPS, authentication, ecosystem and backup
+        run: node deployment/smoke-local.mjs
+      - name: Restart and verify persistence
+        run: |
+          docker compose -f deployment/compose.local.yml restart app
+          node deployment/smoke-local.mjs
+      - name: Container logs
+        if: failure()
+        run: docker compose -f deployment/compose.local.yml logs --tail=150
+      - name: Stop test containers
+        if: always()
+        run: docker compose -f deployment/compose.local.yml down

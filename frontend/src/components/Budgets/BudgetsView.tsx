@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchTransactions, fetchBudgets, saveBudgets } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { Category, CategoryBudget, Transaction } from "../../types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -33,6 +33,8 @@ function currentMonth() {
 }
 
 export function BudgetsView() {
+ const {fetchTransactions,fetchBudgets,saveBudgets}=useWorkspaceApi();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +47,7 @@ export function BudgetsView() {
     Promise.all([fetchTransactions(), fetchBudgets()])
       .then(([txns, b]) => { setTransactions(txns); setBudgets(b); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [fetchBudgets, fetchTransactions]);
 
   // Dépenses du mois sélectionné par catégorie
   const monthTxns = transactions.filter(

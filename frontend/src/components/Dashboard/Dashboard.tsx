@@ -14,7 +14,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
-import { fetchDashboard, fetchTransactions } from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 import { DashboardData, Transaction } from "../../types";
 import { needsTransactionEvidence } from "../../utils/transactionEvidence";
 import { format } from "date-fns";
@@ -41,6 +41,8 @@ function KpiCard({ label, value, sub, accent, help }: { label: string; value: st
 const CAT_COLORS = ["#0078d4", "#7c3aed", "#16a34a", "#d97706", "#dc2626"];
 
 export function Dashboard() {
+ const {fetchDashboard,fetchTransactions}=useWorkspaceApi();
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,7 @@ export function Dashboard() {
       .then(([dash, txns]) => { setData(dash); setTransactions(txns); })
       .catch(() => { /* data reste null → message d'erreur affiché */ })
       .finally(() => setLoading(false));
-  }, [year]);
+  }, [fetchDashboard, fetchTransactions, year]);
 
   if (loading) {
     return (
@@ -82,9 +84,6 @@ export function Dashboard() {
       revenue: data.monthly_revenue.find((r) => r.month === m)?.amount ?? 0,
       expenses: data.monthly_expenses.find((r) => r.month === m)?.amount ?? 0,
     }));
-
-  const totalRevenue = data.monthly_revenue.reduce((s, r) => s + r.amount, 0);
-  const totalExpenses = data.monthly_expenses.reduce((s, r) => s + r.amount, 0);
 
   // KPIs calculés depuis les transactions brutes
   const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
@@ -170,8 +169,8 @@ export function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           label={data.bank_balance !== undefined ? "Solde bancaire" : "Variation importée"}
-          value={`${data.treasury.toFixed(2)} €`}
-          sub={data.bank_balance_updated_at
+          value={data.cash_unknown?"Solde inconnu":`${data.treasury.toFixed(2)} €`}
+          sub={data.cash_unknown?"Renseignez les comptes détenus par l’entreprise et leur solde initial ou bancaire":data.bank_balance_updated_at
             ? `Powens, actualisé le ${new Date(data.bank_balance_updated_at).toLocaleString("fr-FR")}`
             : data.bank_balance !== undefined
               ? "dernier solde Powens connu — synchronisez la banque pour l'actualiser"
@@ -181,7 +180,7 @@ export function Dashboard() {
         />
         <KpiCard
           label="Disponible après TVA"
-          value={`${(data.spendable_cash ?? data.treasury).toFixed(2)} €`}
+          value={data.cash_unknown?"Non calculable":`${(data.spendable_cash ?? data.treasury).toFixed(2)} €`}
           sub={`provision TVA ${(data.vat_reserve ?? Math.max(0, data.vat_estimate)).toFixed(2)} €`}
           accent={(data.spendable_cash ?? data.treasury) >= 0 ? "text-green-400" : "text-red-400"}
           help="Solde bancaire diminué de la provision TVA conseillée. Estimation de pilotage, non officielle."
@@ -217,7 +216,7 @@ export function Dashboard() {
         />
         <KpiCard
           label="Runway trésorerie"
-          value={runwayLabel(data.runway_months ?? 999)}
+          value={data.cash_unknown?"Non calculable":runwayLabel(data.runway_months ?? 999)}
           sub="sur base dépenses 3 derniers mois"
           accent={
             (data.runway_months ?? 99) < 2 ? "text-red-400"

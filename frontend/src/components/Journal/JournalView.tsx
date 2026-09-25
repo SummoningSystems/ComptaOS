@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../../api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
 
 interface JournalEntry {
   date: string;
@@ -30,6 +30,8 @@ function fmt(n: number) {
 }
 
 export function JournalView() {
+ const {api}=useWorkspaceApi();
+
   const [data, setData] = useState<JournalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -37,7 +39,7 @@ export function JournalView() {
   const [search, setSearch] = useState("");
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ year });
@@ -49,9 +51,9 @@ export function JournalView() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [year, month, api]);
 
-  useEffect(() => { load(); }, [year, month]);
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -70,7 +72,6 @@ export function JournalView() {
   }, [data, search, onlyUnreconciled]);
 
   const totalDebit  = filtered.reduce((s, e) => s + e.amount_ttc, 0);
-  const totalCredit = totalDebit;
 
   function handlePrint() { window.print(); }
 

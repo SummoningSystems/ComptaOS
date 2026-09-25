@@ -2,46 +2,15 @@ import { useEffect, useState } from "react";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 import { CategoryRule, TreasuryAlert, Category, AiConfig, AiConfigStatus, AiProvider, CompanyProfile } from "../../types";
 import { GitSyncPanel } from "./GitSyncPanel";
-import { api } from "../../api/client";
-import {
-  fetchCategoryRules,
-  saveCategoryRules,
-  fetchTreasuryAlert,
-  saveTreasuryAlert,
-  fetchAiConfig,
-  saveAiConfig,
-  fetchCompanyProfile,
-  saveCompanyProfile,
-  createCategory,
-  deleteCategory,
-} from "../../api/client";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 
-const CATEGORIES: Category[] = [
-  "hosting", "software", "salary", "subcontracting", "professional_fees", "external_services", "travel", "restaurant", "food",
-  "taxes", "equipment", "subscription", "rent", "legal", "insurance", "misc",
-];
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  hosting: "Hébergement",
-  software: "Logiciel",
-  salary: "Salaire",
-  subcontracting: "Sous-traitance",
-  professional_fees: "Conseil et honoraires",
-  external_services: "Autres prestations",
-  travel: "Transport",
-  restaurant: "Restaurant",
-  food: "Alimentaire",
-  taxes: "Impôts/Taxes",
-  equipment: "Matériel",
-  subscription: "Abonnement",
-  rent: "Loyer",
-  legal: "Juridique",
-  insurance: "Assurance",
-  misc: "Divers",
-};
-
 export function SettingsView() {
+ const {fetchCategoryRules,saveCategoryRules,fetchTreasuryAlert,saveTreasuryAlert,fetchAiConfig,saveAiConfig,fetchCompanyProfile,saveCompanyProfile,createCategory,deleteCategory}=useWorkspaceApi();
+
+ const {api}=useWorkspaceApi();
+
   const { categories, allCategories, reload: reloadCategories } = useCategoryCatalog();
   const [rules, setRules] = useState<CategoryRule[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false });
@@ -83,7 +52,7 @@ export function SettingsView() {
     api.get<{ enabled: boolean }>("/encryption/status").then(({ data }) => {
       setEncEnabled(data.enabled);
     }).catch(() => {});
-  }, []);
+  }, [api, fetchAiConfig, fetchCategoryRules, fetchCompanyProfile, fetchTreasuryAlert]);
 
   async function handleSaveRules(updated: CategoryRule[]) {
     setRules(updated);

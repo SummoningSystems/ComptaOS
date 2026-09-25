@@ -3,7 +3,7 @@ import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 export function hasTransactionEvidence(transaction: Transaction): boolean {
   const attachments = new Set([...(transaction.attachments ?? []), ...(transaction.attachment ? [transaction.attachment] : [])].filter(Boolean));
-  return transaction.justified === true || attachments.size > 0 || Boolean(transaction.invoiceRef?.trim());
+  return transaction.justified === true || !!transaction.documentIds?.length || attachments.size > 0 || Boolean(transaction.invoiceRef?.trim());
 }
 
 export function needsTransactionEvidence(transaction: Transaction): boolean {

@@ -26,13 +26,14 @@ npm run dev
 ## 🌿 Workflow Git
 
 ```bash
-# Créer une branche à partir de main
-git checkout -b type/description-courte
+# Créer une branche à partir de develop
+git switch develop
+git switch -c type/description-courte
 
 # Exemples de noms de branches
-git checkout -b feat/export-fec
-git checkout -b fix/calcul-tva-intracom
-git checkout -b chore/mise-a-jour-deps
+git switch -c feat/export-fec
+git switch -c fix/calcul-tva-intracom
+git switch -c chore/mise-a-jour-deps
 ```
 
 Types de branches : `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
@@ -44,7 +45,7 @@ Types de branches : `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
 - [ ] Les tests E2E passent (`npm run test:e2e`)
 - [ ] Le code TypeScript compile sans erreurs (`npm run build`)
 - [ ] Aucune clé API, token ou secret dans le code
-- [ ] Les nouvelles routes backend ont une validation des entrées
+- [ ] Les nouvelles routes backend valident leurs entrées
 - [ ] L'UI fonctionne sur les 3 thèmes (light/dark/high-contrast)
 
 ---
@@ -53,7 +54,7 @@ Types de branches : `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
 
 ```
 backend/src/
-  routes/     ← Routes Fastify (validation Zod)
+  routes/     ← Routes Fastify
   services/   ← Logique métier (fileSystem, licenseService…)
   plugins/    ← Plugins Fastify (CORS, static…)
 
@@ -93,3 +94,5 @@ Utilisez le template [Feature Request](https://github.com/SummoningSystems/Compt
 ## 📄 Licence
 
 En contribuant, vous acceptez que votre code soit publié sous licence **MIT**.
+
+Les changements ordinaires partent de `develop` et sont proposés par Pull Request vers `develop`. `master` est protégé et reçoit les changements validés par Pull Request.

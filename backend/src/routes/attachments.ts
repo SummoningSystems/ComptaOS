@@ -24,7 +24,13 @@ const ALLOWED_MIMES = new Set([
 export async function attachmentsRoutes(app: FastifyInstance) {
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } }); // 20 MB
 
-  let batchOcr = { running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" };
+  type Batch = { running: boolean; done: number; total: number; succeeded: number; failed: number; currentName: string };
+  const batches = new Map<string, Batch>();
+  function batch(): Batch {
+    const root = getWorkspaceRoot();
+    if (!batches.has(root)) batches.set(root, { running: false, done: 0, total: 0, succeeded: 0, failed: 0, currentName: "" });
+    return batches.get(root)!;
+  }
   function applyLearnedRule(proposal: ReceiptProposal): ReceiptProposal {
     const rule = loadMerchantRules().find((item) => item.pattern === merchantPattern(proposal.supplier));
     if (!rule) return proposal;
@@ -42,23 +48,23 @@ export async function attachmentsRoutes(app: FastifyInstance) {
 
   app.get("/inbox", async (_req, reply) => reply.send(await loadPendingReceipts()));
 
-  app.get("/inbox/analyze-batch", async (_req, reply) => reply.send(batchOcr));
+  app.get("/inbox/analyze-batch", async (_req, reply) => reply.send(batch()));
 
   app.post<{ Body: { ids?: string[] } }>("/inbox/analyze-batch", async (req, reply) => {
-    if (batchOcr.running) return reply.status(202).send(batchOcr);
+    if (batch().running) return reply.status(202).send(batch());
     const requestedIds = new Set(Array.isArray(req.body?.ids) ? req.body.ids : []);
     const receipts = (await loadPendingReceipts()).filter((receipt) => requestedIds.size ? requestedIds.has(receipt.id) : receipt.ocr.status !== "success");
-    batchOcr = { running: receipts.length > 0, done: 0, total: receipts.length, succeeded: 0, failed: 0, currentName: receipts[0]?.originalName ?? "" };
+    Object.assign(batch(), { running: receipts.length > 0, done: 0, total: receipts.length, succeeded: 0, failed: 0, currentName: receipts[0]?.originalName ?? "" });
     if (receipts.length > 0) void (async () => {
       for (const receipt of receipts) {
-        batchOcr.currentName = receipt.originalName;
-        try { const analyzed = await analyzeInboxReceipt(receipt); analyzed.ocr.status === "success" ? batchOcr.succeeded += 1 : batchOcr.failed += 1; }
-        catch { batchOcr.failed += 1; }
-        batchOcr.done += 1;
+        batch().currentName = receipt.originalName;
+        try { const analyzed = await analyzeInboxReceipt(receipt); analyzed.ocr.status === "success" ? batch().succeeded += 1 : batch().failed += 1; }
+        catch { batch().failed += 1; }
+        batch().done += 1;
       }
-      batchOcr.running = false; batchOcr.currentName = "";
+      batch().running = false; batch().currentName = "";
     })();
-    return reply.status(202).send(batchOcr);
+    return reply.status(202).send(batch());
   });
 
   app.post<{ Querystring: { skipOcr?: string } }>("/inbox", async (req, reply) => {

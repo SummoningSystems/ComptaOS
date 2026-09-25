@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { fetchFileContent, rawFileUrl, saveFileContent } from "../../api/client";
-import { useAppStore } from "../../stores/appStore";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {useWorkspaceApi} from '../../api/WorkspaceApi';
+import { useWorkspaceStore as useAppStore } from "../../stores/WorkspaceStore";
 import { PdfPreview } from "./PdfPreview";
 
 interface FileEditorProps {
@@ -9,7 +9,9 @@ interface FileEditorProps {
 }
 
 export function FileEditor({ tabId, path }: FileEditorProps) {
-  const { markDirty } = useAppStore();
+ const {fetchFileContent,rawFileUrl,saveFileContent}=useWorkspaceApi();
+
+  const { markDirty,activeTabId } = useAppStore();
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,14 +39,14 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [path, previewKind]);
+  }, [path, previewKind, markDirty, tabId, fetchFileContent]);
 
   function handleChange(value: string) {
     setContent(value);
     markDirty(tabId, value !== originalRef.current);
   }
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaving(true);
     try {
       await saveFileContent(path, content);
@@ -55,19 +57,19 @@ export function FileEditor({ tabId, path }: FileEditorProps) {
     } finally {
       setSaving(false);
     }
-  }
+  }, [saveFileContent, path, content, markDirty, tabId]);
 
   // Ctrl+S / Cmd+S
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if (activeTabId===tabId && (e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         handleSave();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [content]);
+  }, [handleSave,activeTabId,tabId]);
 
   if (previewKind) {
     const url = rawFileUrl(path);
