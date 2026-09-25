@@ -10,6 +10,7 @@ import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAccountingConfig, loadCompanyProfile, saveAccountingConfig, AccountingConfig, defaultAccountingConfig } from "../services/settingsService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { activeClosing } from "../services/closingService.js";
+import { annualAccountingOptions, buildAnnualStatements, loadAnnualWorkspace } from "../services/annualAccountingService.js";
 
 async function appendSharedEvidence(archive:InstanceType<typeof ZipArchive>,transactions:Transaction[]) {
   const company=currentEcosystemCompany();if(!company)return;
@@ -21,8 +22,9 @@ async function appendSharedEvidence(archive:InstanceType<typeof ZipArchive>,tran
 async function context(year: string) {
   const config = loadAccountingConfig();
   const transactions = await loadAllTransactions();
-  const preview = buildAccountingPreview(transactions, config, year);
-  return { config, preview, transactions };
+  const annualWorkspace = loadAnnualWorkspace();
+  const preview = buildAccountingPreview(transactions, config, year, annualAccountingOptions(annualWorkspace, year, transactions));
+  return { config, preview, transactions, annualWorkspace, annualStatements: buildAnnualStatements(preview, annualWorkspace, year) };
 }
 
 function blockers(preview: Awaited<ReturnType<typeof context>>["preview"]) {
@@ -48,22 +50,24 @@ export async function accountingRoutes(app: FastifyInstance) {
     const { preview } = await context(year); const blocking = blockers(preview);
     if (blocking.length) return reply.status(409).send({ error: "Export bloqué par des anomalies comptables.", anomalies: blocking });
     const fec = generateFec(preview); const errors = validateFec(fec);
-    if (errors.length) return reply.status(500).send({ error: "Le validateur interne a rejeté le FEC.", errors });
+    if (errors.length) return reply.status(500).send({ error: "Le contrôle structurel interne a rejeté le FEC.", errors });
     const siren = (loadCompanyProfile().siren ?? "ENTREPRISE").replace(/\s/g, "");
     return reply.header("Content-Type", "text/plain; charset=utf-8").header("Content-Disposition", `attachment; filename="${siren}FEC${year}1231.txt"`).send("\uFEFF" + fec);
   });
   app.get<{ Querystring: { year?: string } }>("/package", async (request, reply) => {
     const year = request.query.year ?? String(new Date().getFullYear());
-    const { preview, config, transactions } = await context(year); const blocking = blockers(preview);
+    const { preview, config, transactions, annualWorkspace, annualStatements } = await context(year); const blocking = blockers(preview);
     if (blocking.length) return reply.status(409).send({ error: "Dossier bloqué par des anomalies comptables.", anomalies: blocking });
     const fec = generateFec(preview); const validationErrors = validateFec(fec);
-    if (validationErrors.length) return reply.status(500).send({ error: "Le validateur interne a rejeté le FEC.", errors: validationErrors });
+    if (validationErrors.length) return reply.status(500).send({ error: "Le contrôle structurel interne a rejeté le FEC.", errors: validationErrors });
     const profile = loadCompanyProfile(); const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on("error", (error: Error) => reply.raw.destroy(error));
     reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="dossier-expert-comptable-${year}.zip"`);
     archive.append("\uFEFF" + fec, { name: `FEC/${(profile.siren ?? "ENTREPRISE").replace(/\s/g, "")}FEC${year}1231.txt` });
     archive.append(generateJournalCsv(preview), { name: "journal-comptable.csv" });
     archive.append(generateBalanceCsv(preview), { name: "balance-generale.csv" });
+    archive.append(JSON.stringify(annualWorkspace, null, 2), { name: "cloture-annuelle/espace-de-travail.json" });
+    archive.append(JSON.stringify(annualStatements, null, 2), { name: "cloture-annuelle/etats-et-brouillons-fiscaux.json" });
     archive.append(JSON.stringify({ generatedAt: new Date().toISOString(), year, company: profile, accountingConfig: config, controls: { eligibleTransactions: preview.eligibleCount, excludedTransactions: preview.excludedCount, totalDebit: preview.totalDebit, totalCredit: preview.totalCredit, balanced: preview.balanced, fecValidator: "valid", fecValidationErrors: validationErrors }, warnings: preview.anomalies.filter((item) => item.severity === "warning") }, null, 2), { name: "manifest.json" });
     const added = new Set<string>();
     for (const item of preview.lines) {
@@ -77,6 +81,17 @@ export async function accountingRoutes(app: FastifyInstance) {
       }
     }
     await appendSharedEvidence(archive,transactions.filter(t=>preview.lines.some(l=>l.transactionId===t.id)));
+    const annualFiles = [
+      ...annualWorkspace.schedules.filter((item) => item.startDate.startsWith(year) || item.endDate.startsWith(year) || item.settlement?.date.startsWith(year)).flatMap((item) => [item.attachment, item.settlement?.attachment]),
+      ...annualWorkspace.documents.filter((item) => item.date.startsWith(year)).map((item) => item.attachment),
+      ...annualWorkspace.adjustments.filter((item) => item.year === year).map((item) => item.attachment),
+      ...annualWorkspace.assets.map((item) => item.attachment),
+    ].filter((item): item is string => Boolean(item));
+    const addedAnnualFiles = new Set<string>();
+    for (const filename of annualFiles) {
+      const safeName = basename(filename); const attachmentPath = join(getWorkspaceRoot(), "attachments", safeName);
+      if (!addedAnnualFiles.has(safeName) && existsSync(attachmentPath)) { addedAnnualFiles.add(safeName); archive.append(createReadStream(attachmentPath), { name: `justificatifs-cloture/${safeName.replace(/[^a-zA-Z0-9._-]/g, "_")}` }); }
+    }
     void archive.finalize();
     return reply.send(archive);
   });
@@ -84,7 +99,9 @@ export async function accountingRoutes(app: FastifyInstance) {
     const month = request.query.month ?? new Date().toISOString().slice(0, 7);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return reply.status(400).send({ error: "Mois invalide" });
     const transactions = (await loadAllTransactions()).filter((item) => item.date.startsWith(month));
-    const config = loadAccountingConfig(); const preview = buildAccountingPreview(transactions, config, month.slice(0, 4));
+    const config = loadAccountingConfig(); const annual = annualAccountingOptions(loadAnnualWorkspace(), month.slice(0, 4), transactions);
+    const transactionIds = new Set(transactions.map((item) => item.id));
+    const preview = buildAccountingPreview(transactions, config, month.slice(0, 4), { ...annual, extraLines: [], extraAnomalies: annual.extraAnomalies.filter((item) => item.transactionId && transactionIds.has(item.transactionId)) });
     const blocking = blockers(preview); if (blocking.length) return reply.status(409).send({ error: "Dossier mensuel bloqué par des anomalies comptables.", anomalies: blocking });
     const closing = await activeClosing(month); const profile = loadCompanyProfile(); const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on("error", (error: Error) => reply.raw.destroy(error));

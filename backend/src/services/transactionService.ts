@@ -9,6 +9,7 @@ import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
 import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
+import { assertAnnualYearOpen, loadAnnualWorkspace, recurringEvidenceTransactionIds } from "./annualAccountingService.js";
 
 const TXN_DIR = "transactions";
 
@@ -159,7 +160,10 @@ function ensureWatcher() {
 export async function loadAllTransactions(): Promise<Transaction[]> {
   const ecosystem = await ecosystemTransactions(); if (ecosystem) return ecosystem;
   ensureWatcher();
-  if (cache().data) return cache().data!;
+  if (cache().data) {
+    const evidenceIds = recurringEvidenceTransactionIds();
+    return cache().data!.map((item) => evidenceIds.has(item.id) ? { ...item, justified: true } : item);
+  }
 
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
@@ -187,17 +191,23 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
 
   cache().issues = issues;
   cache().data = transactions.sort((a, b) => b.date.localeCompare(a.date));
-  return cache().data!;
+  const evidenceIds = recurringEvidenceTransactionIds();
+  return cache().data!.map((item) => evidenceIds.has(item.id) ? { ...item, justified: true } : item);
 }
 
 /** Sauvegarde une transaction dans un fichier YAML. */
+export async function assertTransactionDateOpen(date: string): Promise<void> {
+  await assertMonthOpen(date);
+  assertAnnualYearOpen(loadAnnualWorkspace(), date.slice(0, 4));
+}
+
 export async function saveTransaction(txn: Transaction): Promise<void> {
   if (await writeEcosystemTransaction(normalizeTransaction(txn))) return;
   return workspaceLock(getWorkspaceRoot(), () => saveTransactionUnlocked(txn));
 }
 async function saveTransactionUnlocked(txn: Transaction): Promise<void> {
   if (!txn.id || !/^[A-Za-z0-9._-]+$/.test(txn.id) || txn.id === "." || txn.id === "..") throw Object.assign(new Error("Identifiant invalide"), { statusCode: 400 });
-  await assertMonthOpen(txn.date);
+  await assertTransactionDateOpen(txn.date);
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
   const normalized = normalizeTransaction(txn);
@@ -244,8 +254,8 @@ async function updateTransactionUnlocked(id: string, patch: Partial<Transaction>
   const filePath = await findTransactionFile(id);
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
-  await assertMonthOpen(txn.date);
-  if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
+  await assertTransactionDateOpen(txn.date);
+  if (patch.date && patch.date !== txn.date) await assertTransactionDateOpen(patch.date);
   const merged = { ...txn, ...patch, id: txn.id };
   const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
@@ -266,7 +276,7 @@ export async function deleteTransaction(id: string): Promise<void> {
 async function deleteTransactionUnlocked(id: string): Promise<void> {
   const filePath = await findTransactionFile(id);
   const txn = yaml.parse(await fs.readFile(filePath, "utf-8")) as Transaction;
-  await assertMonthOpen(txn.date);
+  await assertTransactionDateOpen(txn.date);
   await fs.unlink(filePath);
   invalidateCache();
 }

@@ -121,7 +121,7 @@ export async function bankingRoutes(app: FastifyInstance, options: { scopePrefix
   // ── Dédoublonner les imports Powens ──────────────────────────────────────────
 
   app.post(scopePrefix + "/banking/deduplicate", async (_req, reply) => {
-    const { loadAllTransactions, invalidateTransactionCache } = await import("../services/transactionService.js");
+    const { loadAllTransactions, invalidateTransactionCache, assertTransactionDateOpen } = await import("../services/transactionService.js");
     const { default: yaml } = await import("yaml");
     const fsMod = await import("fs/promises");
     const pathMod = await import("path");
@@ -146,6 +146,7 @@ export async function bankingRoutes(app: FastifyInstance, options: { scopePrefix
 
     let rejected = 0;
     for (const txn of toReject) {
+      await assertTransactionDateOpen(txn.date);
       const file = files.find((f) => f.includes(txn.id) && f.endsWith(".yaml"));
       if (!file) continue;
       const filePath = pathMod.default.join(txnDir, file);

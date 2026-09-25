@@ -81,6 +81,20 @@ const exportXlsx = await request(`/api/workspaces/${testWorkspace.id}/export/xls
 assert.equal(exportXlsx.status, 200);
 assert(exportXlsx.contentType.includes("spreadsheetml"));
 assert(exportXlsx.body.length > 1000, "Export XLSX vide.");
+const annualThirdParty = await request(`/api/workspaces/${testWorkspace.id}/annual-accounting/third-parties`, {
+  method: "POST",
+  body: { kind: "supplier", name: "Fournisseur migration", accountNumber: "401100" },
+});
+assert.equal(annualThirdParty.status, 201);
+const annualAdjustment = await request(`/api/workspaces/${testWorkspace.id}/annual-accounting/adjustments`, {
+  method: "POST",
+  body: { year: "2026", date: "2026-12-31", type: "other", label: "OD migration", debitAccount: "606300", debitLabel: "Fournitures", creditAccount: "401100", creditLabel: "Fournisseur", amount: 12, status: "draft" },
+});
+assert.equal(annualAdjustment.status, 201);
+const annualState = await request(`/api/workspaces/${testWorkspace.id}/annual-accounting?year=2026`);
+assert.equal(annualState.status, 200);
+assert.equal(annualState.body.workspace.thirdParties.length, 1);
+assert.equal(annualState.body.workspace.adjustments.length, 1);
 
 const ecosystemResponse = await request("/api/ecosystems", { method: "POST", body: { name: `Écosystème migration ${suffix}` } });
 assert.equal(ecosystemResponse.status, 201);
@@ -110,6 +124,8 @@ assert(visible.body.some((item) => item.id === testWorkspace.id), "L'espace invi
 assert.equal((await request(`/api/workspaces/${testWorkspace.id}/transactions/${transaction.id}`, { method: "PATCH", body: { notes: "Interdit" }, cookie: readonlyCookie })).status, 403);
 const privateWorkspace = await request(`/api/workspaces/${ecosystem.entities.find((entity) => entity.kind === "company").workspaceId}/transactions`, { cookie: readonlyCookie });
 assert.equal(privateWorkspace.status, 403);
+const privateAnnualWorkspace = await request(`/api/workspaces/${ecosystem.entities.find((entity) => entity.kind === "company").workspaceId}/annual-accounting?year=2026`, { cookie: readonlyCookie });
+assert.equal(privateAnnualWorkspace.status, 403);
 
 console.log(JSON.stringify({
   ok: true,
@@ -120,5 +136,6 @@ console.log(JSON.stringify({
   createdWorkspace: testWorkspace.id,
   createdEcosystem: ecosystem.id,
   accountingExportBytes: exportXlsx.body.length,
+  annualAccountingScoped: true,
   readonlyVisibilityChecked: true,
 }, null, 2));

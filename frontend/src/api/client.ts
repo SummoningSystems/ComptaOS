@@ -15,6 +15,14 @@ import {
   CategoryDefinition,
   Company,
   CompanyProfile,
+  AnnualThirdParty,
+  AnnualThirdPartyDocument,
+  AnnualSchedule,
+  AnnualSettlement,
+  AnnualAdjustment,
+  AnnualAsset,
+  AnnualFiscalAdjustment,
+  AnnualCheckId,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 export function buildApiUrl(basePath: string, path = ""): string {
@@ -144,6 +152,34 @@ export interface VatSummaryData {
   nextDue?: { period: string; label: string; estimatedAmount: number; provisional: boolean };
   details: VatTransactionDetail[];
 }
+// ── Clôture annuelle et comptabilité d'engagement ───────────────────────────
+export interface AnnualAccountingData {
+  workspace: { version: 1; thirdParties: AnnualThirdParty[]; documents: AnnualThirdPartyDocument[]; schedules: AnnualSchedule[]; adjustments: AnnualAdjustment[]; assets: AnnualAsset[]; fiscalAdjustments: AnnualFiscalAdjustment[]; confirmations: Array<{ year: string; checks: Partial<Record<AnnualCheckId, boolean>>; notes?: string }>; closings: Array<{ year: string; status: "closed" | "reopened"; closedAt: string; fingerprint: string; reopenedAt?: string; reopenReason?: string }> };
+  transactions: Array<Pick<Transaction, "id" | "date" | "label" | "amount_ttc" | "status" | "reconciled">>;
+  statements: { year: string; profitAndLoss: { revenue: number; charges: number; accountingResult: number }; balanceSheet: { assets: Array<{ account: string; label: string; amount: number }>; liabilities: Array<{ account: string; label: string; amount: number }>; balanced: boolean }; fiscal: { accountingResult: number; reinstatements: number; deductions: number; taxableResult: number }; checklist: Array<{ id: AnnualCheckId; done: boolean }>; forms: { form2065: { status: "draft"; taxableResult: number; warning: string }; simplified2033: Record<string, string | number>; normal2050: Record<string, string | number>; ediTdfc: { connected: boolean; exportable: boolean; message: string } } };
+  preview: { eligibleCount: number; excludedCount: number; anomalies: Array<{ severity: "blocking" | "warning"; code: string; message: string; transactionId?: string }>; totalDebit: number; totalCredit: number; balanced: boolean };
+  scheduleIssues: Array<{ code: string; message: string; scheduleId: string }>;
+  draftAdjustments: number; draftDocuments: number; closing?: { year: string; status: "closed"; closedAt: string; fingerprint: string; integrity: boolean }; ready: boolean;
+}
+export async function fetchAnnualAccounting(year: string): Promise<AnnualAccountingData> { const { data } = await api.get<AnnualAccountingData>("/annual-accounting", { params: { year } }); return data; }
+export async function createAnnualThirdParty(value: Omit<AnnualThirdParty, "id">): Promise<AnnualThirdParty> { const { data } = await api.post<AnnualThirdParty>("/annual-accounting/third-parties", value); return data; }
+export async function createAnnualThirdPartyDocument(value: Omit<AnnualThirdPartyDocument, "id">): Promise<AnnualThirdPartyDocument> { const { data } = await api.post<AnnualThirdPartyDocument>("/annual-accounting/documents", value); return data; }
+export async function updateAnnualThirdPartyDocument(id: string, value: Partial<AnnualThirdPartyDocument>): Promise<AnnualThirdPartyDocument> { const { data } = await api.patch<AnnualThirdPartyDocument>(`/annual-accounting/documents/${id}`, value); return data; }
+export async function createAnnualSchedule(value: Omit<AnnualSchedule, "id" | "createdAt">): Promise<AnnualSchedule> { const { data } = await api.post<AnnualSchedule>("/annual-accounting/schedules", value); return data; }
+export async function updateAnnualSchedule(id: string, value: Partial<AnnualSchedule>): Promise<AnnualSchedule> { const { data } = await api.patch<AnnualSchedule>(`/annual-accounting/schedules/${id}`, value); return data; }
+export async function saveAnnualSettlement(id: string, value: AnnualSettlement): Promise<AnnualSchedule> { const { data } = await api.put<AnnualSchedule>(`/annual-accounting/schedules/${id}/settlement`, value); return data; }
+export async function createAnnualAdjustment(value: Omit<AnnualAdjustment, "id">): Promise<AnnualAdjustment> { const { data } = await api.post<AnnualAdjustment>("/annual-accounting/adjustments", value); return data; }
+export async function updateAnnualAdjustment(id: string, value: Partial<AnnualAdjustment>): Promise<AnnualAdjustment> { const { data } = await api.patch<AnnualAdjustment>(`/annual-accounting/adjustments/${id}`, value); return data; }
+export async function createAnnualAsset(value: Omit<AnnualAsset, "id">): Promise<AnnualAsset> { const { data } = await api.post<AnnualAsset>("/annual-accounting/assets", value); return data; }
+export async function createAnnualFiscalAdjustment(value: Omit<AnnualFiscalAdjustment, "id">): Promise<AnnualFiscalAdjustment> { const { data } = await api.post<AnnualFiscalAdjustment>("/annual-accounting/fiscal-adjustments", value); return data; }
+export async function deleteAnnualItem(collection: string, id: string, year: string): Promise<void> { await api.delete(`/annual-accounting/${collection}/${id}`, { params: { year } }); }
+export async function setAnnualConfirmation(year: string, check: AnnualCheckId, done: boolean): Promise<void> { await api.put("/annual-accounting/confirmation", { year, check, done }); }
+export async function closeAnnualYear(year: string): Promise<void> { await api.post("/annual-accounting/close", { year }); }
+export async function reopenAnnualYear(year: string, reason: string): Promise<void> { await api.post("/annual-accounting/reopen", { year, reason }); }
+export async function uploadAnnualDocument(kind: "schedule" | "settlement" | "document" | "adjustment" | "asset", id: string, file: File): Promise<{ filename: string }> { const compressed = await compressAttachment(file); const form = new FormData(); form.append("file", compressed.file); const { data } = await api.post(`/annual-accounting/upload/${kind}/${id}`, form, { headers: { "Content-Type": "multipart/form-data" } }); return data; }
+
+// ── Git / Historique ──────────────────────────────────────────────────────────
+
 export interface GitCommit {
   hash: string;
   shortHash: string;

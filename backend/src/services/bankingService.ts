@@ -357,6 +357,7 @@ export async function syncAccountTransactions(
   for (const raw of data.transactions) {
     const id = `bank_powens_${raw.id}`;
     if (existingIds.has(id)) { skipped++; continue; }
+    await txnModule.assertTransactionDateOpen(raw.date);
 
     const amount = raw.value;
     const label = raw.wording || raw.original_wording || "Virement bancaire";
