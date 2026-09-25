@@ -6,7 +6,7 @@ ROOT="${PREPROD_ROOT:-$HOME/apps/comptaos-preprod}"
 REPO="$ROOT/repo"
 WORKSPACE="$ROOT/workspace"
 PRODUCTION_WORKSPACE="${PRODUCTION_WORKSPACE:-$HOME/apps/comptaos/workspace}"
-NETWORK="${NETWORK:-tipforgood_tipforgood-network}"
+NETWORK="${NETWORK:-comptaos-preprod-network}"
 FRONTEND_CONTAINER="${FRONTEND_CONTAINER:-tipforgood_frontend_1}"
 NGINX_CONFIG="/etc/nginx/conf.d/default.conf"
 BACKEND="comptaos-preprod-backend"
@@ -38,6 +38,10 @@ backend_image="comptaos-preprod-backend:$commit"
 web_image="comptaos-preprod-web:$commit"
 docker build -f deployment/preproduction-backend.Dockerfile -t "$backend_image" .
 docker build -f deployment/preproduction-web.Dockerfile -t "$web_image" .
+docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
+if ! docker inspect "$FRONTEND_CONTAINER" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$NETWORK\""; then
+  docker network connect "$NETWORK" "$FRONTEND_CONTAINER"
+fi
 
 rollback_backend="${BACKEND}-rollback-$timestamp"
 rollback_web="${WEB}-rollback-$timestamp"
@@ -66,7 +70,7 @@ docker run -d --name "$BACKEND" --restart unless-stopped \
   -e AUTH_ENABLED=true -e NODE_ENV=production -e HTTPS_ONLY=true \
   -e AUTH_COOKIE_NAME=comptaos_preprod_token -e AUTH_COOKIE_PATH=/comptaos-preprod \
   -e HOST=0.0.0.0 -e PORT=3004 -e WORKSPACE_PATH=/workspace \
-  -e OCR_LOCAL_URL=http://comptaos-ocr:8000 -e OCR_REMOTE_FALLBACK=false \
+  -e OCR_LOCAL_URL= -e OCR_REMOTE_FALLBACK=false \
   -v "$WORKSPACE:/workspace" \
   "$backend_image" >/dev/null
 
@@ -97,5 +101,4 @@ done
 
 trap - ERR
 docker rm "$rollback_web" "$rollback_backend" >/dev/null 2>&1 || true
-docker image prune -f --filter 'until=168h' >/dev/null
 printf '%s\n' "Préproduction déployée: commit=$commit url=https://tipforgood.com/comptaos-preprod/"
