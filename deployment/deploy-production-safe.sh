@@ -29,8 +29,9 @@ trap recover_backend ERR INT TERM
 
 docker stop "$BACKEND_CONTAINER" >/dev/null
 backend_was_stopped=true
-tar -C "$REPO" -czf "$archive" workspace
-tar -tzf "$archive" >/dev/null
+docker run --rm -v "$REPO:/source:ro" -v "$release_dir:/backup" alpine:3.20 tar -C /source -czf "/backup/$(basename "$archive")" workspace
+docker run --rm -v "$release_dir:/backup" alpine:3.20 tar -tzf "/backup/$(basename "$archive")" >/dev/null
+docker run --rm -v "$release_dir:/backup" alpine:3.20 chown "$(id -u):$(id -g)" "/backup/$(basename "$archive")"
 sha256sum "$archive" > "$archive.sha256"
 cat > "$release_dir/release.env" <<EOF
 PREVIOUS_COMMIT=$previous

@@ -31,7 +31,10 @@ if [[ ! -d "$WORKSPACE" ]]; then
   umask 077
   openssl rand -hex 32 > "$WORKSPACE/.jwt_secret"
 else
-  tar -C "$ROOT" -czf "$ROOT/backups/workspace-before-$timestamp.tar.gz" workspace
+  backup_name="workspace-before-$timestamp.tar.gz"
+  docker run --rm -v "$ROOT:/source:ro" -v "$ROOT/backups:/backup" alpine:3.20 tar -C /source -czf "/backup/$backup_name" workspace
+  docker run --rm -v "$ROOT/backups:/backup" alpine:3.20 tar -tzf "/backup/$backup_name" >/dev/null
+  docker run --rm -v "$ROOT/backups:/backup" alpine:3.20 chown "$(id -u):$(id -g)" "/backup/$backup_name"
 fi
 
 backend_image="comptaos-preprod-backend:$commit"
