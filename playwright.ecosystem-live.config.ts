@@ -5,7 +5,7 @@ import path from "node:path";
 const workspace=mkdtempSync(path.join(tmpdir(),"comptaos-ecosystem-live-e2e-"));
 export default defineConfig({
   testDir:"./e2e",outputDir:".artifacts/ecosystem-live",testMatch:"ecosystem-live.spec.ts",workers:1,retries:0,timeout:120000,
-  reporter:[["list"]],
+  reporter:process.env.CI?[["github"],["list"]]:[["list"]],
   use:{baseURL:"http://localhost:5176",trace:"retain-on-failure",screenshot:"only-on-failure"},
   projects:[{name:"chromium",use:{...devices["Desktop Chrome"]}}],
   webServer:[
