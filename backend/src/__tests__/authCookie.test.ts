@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isAuthEnabled, shouldUseSecureCookies } from "../routes/auth.js";
+import { isAuthEnabled } from "../routes/auth.js";
+import { authCookieName, authCookiePath, shouldUseSecureCookies } from "../services/authCookie.js";
 
 describe("secure auth cookies", () => {
   it("active Secure automatiquement en production", () => {
@@ -12,6 +13,19 @@ describe("secure auth cookies", () => {
 
   it("conserve les cookies HTTP pour le développement local", () => {
     expect(shouldUseSecureCookies({ NODE_ENV: "development" })).toBe(false);
+  });
+});
+
+describe("isolation des cookies d'instance", () => {
+  it("permet un nom et un chemin dédiés à la préproduction", () => {
+    const env = { AUTH_COOKIE_NAME: "comptaos_preprod_token", AUTH_COOKIE_PATH: "/comptaos-preprod" } as NodeJS.ProcessEnv;
+    expect(authCookieName(env)).toBe("comptaos_preprod_token");
+    expect(authCookiePath(env)).toBe("/comptaos-preprod");
+  });
+
+  it("refuse les valeurs pouvant injecter des attributs de cookie", () => {
+    expect(authCookieName({ AUTH_COOKIE_NAME: "bad; Secure" })).toBe("comptaos_token");
+    expect(authCookiePath({ AUTH_COOKIE_PATH: "/bad; Secure" })).toBe("/");
   });
 });
 

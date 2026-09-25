@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { getUserById, getJwtSecret } from "./authService.js";
 import { ensureDefaultCompany, loadCompanies, resolveCompanyPath } from "./companiesService.js";
 import { actorContext, workspaceContext } from "./workspaceContext.js";
+import { authCookieName } from "./authCookie.js";
 
 export function registerAccessControl(app: FastifyInstance) {
   app.addHook("onRequest", (req, reply, done) => {
@@ -11,7 +12,8 @@ export function registerAccessControl(app: FastifyInstance) {
     let actor = { id: "local", role: "owner" };
     if (process.env.AUTH_ENABLED === "true" && !publicRoute) {
       try {
-        const token = (req.headers.cookie ?? "").split(";").map(c => c.trim()).find(c => c.startsWith("comptaos_token="))?.slice(15);
+        const cookiePrefix = `${authCookieName()}=`;
+        const token = (req.headers.cookie ?? "").split(";").map(c => c.trim()).find(c => c.startsWith(cookiePrefix))?.slice(cookiePrefix.length);
         const payload = jwt.verify(decodeURIComponent(token ?? ""), getJwtSecret()) as jwt.JwtPayload;
         const user = getUserById(payload.sub ?? "");
         if (!user) throw new Error("Utilisateur désactivé");

@@ -2,6 +2,7 @@ import { loadCompanies } from "../services/companiesService.js";
 import { joinInviterWorkspaces } from "./workspaces.js";
 import { FastifyInstance } from "fastify";
 import jwt from "jsonwebtoken";
+import { authCookieName, authCookiePath, shouldUseSecureCookies } from "../services/authCookie.js";
 import {
   hasUsers,
   createOwner,
@@ -22,22 +23,21 @@ import {
 
 // ── Helpers cookies ───────────────────────────────────────────────────────────
 
-export const COOKIE_NAME = "comptaos_token";
-export function shouldUseSecureCookies(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.HTTPS_ONLY === "true" || env.NODE_ENV === "production";
-}
+export const COOKIE_NAME = authCookieName();
+export { shouldUseSecureCookies } from "../services/authCookie.js";
 
 export function isAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.AUTH_ENABLED === "true";
 }
 
 const SECURE = shouldUseSecureCookies();
+const COOKIE_PATH = authCookiePath();
 
 function setAuthCookie(reply: { header: (k: string, v: string) => void }, token: string): void {
   const maxAge = 30 * 24 * 3600; // 30 jours
   const flags = [
     `${COOKIE_NAME}=${token}`,
-    "Path=/",
+    `Path=${COOKIE_PATH}`,
     "HttpOnly",
     `SameSite=Lax`,
     `Max-Age=${maxAge}`,
@@ -50,7 +50,7 @@ function clearAuthCookie(reply: { header: (k: string, v: string) => void }): voi
   const secureFlag = SECURE ? "; Secure" : "";
   reply.header(
     "Set-Cookie",
-    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureFlag}`,
+    `${COOKIE_NAME}=; Path=${COOKIE_PATH}; HttpOnly; SameSite=Lax; Max-Age=0${secureFlag}`,
   );
 }
 
