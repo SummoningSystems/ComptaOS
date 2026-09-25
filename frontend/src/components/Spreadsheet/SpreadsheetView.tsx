@@ -1259,7 +1259,10 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
                   if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); applyAutocompleteSuggestion(acSuggestions[autocompleteIdx].name); return; }
                   if (e.key === "Escape") { setAutocompleteOpen(false); return; }
                 }
-                if (e.key === "Enter" && editingCell) commitEdit(editingCell);
+                if (e.key === "Enter" && editingCell) {
+                  e.preventDefault();
+                  commitEdit(editingCell);
+                }
                 if (e.key === "Escape") { setEditingCell(null); setAutocompleteOpen(false); }
               }}
               placeholder="=SUM(A1:A10)  •  =REVENUS_2025  •  =IF(A1>0,…)"
