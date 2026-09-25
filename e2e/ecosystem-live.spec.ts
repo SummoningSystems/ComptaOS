@@ -29,6 +29,7 @@ test("two partners use one persisted ecosystem from personal bank movement to co
  // Shared and company spreadsheets keep separate storage and preserve formulas.
  await page.getByRole("button",{name:"Analyses & Export",exact:true}).click();await page.getByRole("button",{name:"🧮 Tableaux",exact:true}).click();
  await page.getByRole("button",{name:"+ Nouveau",exact:true}).click();await page.getByPlaceholder("Nom…",{exact:true}).fill("Budget partagé");await page.getByRole("button",{name:"✓",exact:true}).click();
+ await page.getByRole("button",{name:"📄 Budget partagé",exact:true}).click();
  const sheetPanel=page.getByRole("tabpanel",{name:"Tableaux · Vue d’ensemble",exact:true});
  const firstCell=sheetPanel.locator("tbody tr").first().locator("td").nth(1);await firstCell.click();
  const formula=sheetPanel.getByPlaceholder("=SUM(A1:A10)  •  =REVENUS_2025  •  =IF(A1>0,…)");await formula.fill("=SUM(1,2)");await formula.press("Enter");await expect(firstCell).toHaveText("3");
