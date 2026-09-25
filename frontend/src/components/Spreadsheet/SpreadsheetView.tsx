@@ -1166,6 +1166,7 @@ export function SpreadsheetView({apiBase}:{apiBase?:string} = {}) {
           )}
           {docs.map(doc => (
             <button
+              type="button"
               key={doc.id}
               onClick={() => loadDoc(doc.id)}
               className={`w-full text-left px-3 py-2 text-xs truncate transition-colors ${
