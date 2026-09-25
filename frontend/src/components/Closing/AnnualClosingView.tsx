@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   attachmentUrl, closeAnnualYear, createAnnualAdjustment, createAnnualAsset, createAnnualFiscalAdjustment,
   createAnnualSchedule, createAnnualThirdParty, createAnnualThirdPartyDocument, deleteAnnualItem, fetchAnnualAccounting, reopenAnnualYear,
@@ -44,8 +44,8 @@ export function AnnualClosingView() {
   const [asset, setAsset] = useState<Omit<AnnualAsset, "id">>({ label: "", acquisitionDate: `${year}-01-01`, cost: 0, residualValue: 0, durationYears: 3, assetAccount: "218300", depreciationAccount: "281830", expenseAccount: "681120" });
   const [fiscal, setFiscal] = useState({ kind: "reinstatement" as "reinstatement" | "deduction", label: "", amount: 0, notes: "" });
 
-  async function load(selectedYear = year) { setLoading(true); setError(""); try { const value = await fetchAnnualAccounting(selectedYear); setData(value); setSettlements(Object.fromEntries(value.workspace.schedules.map((item) => [item.id, item.settlement ?? { date: `${selectedYear}-12-31`, invoiceRef: "", amountHt: 0, amountVat: 0, amountTtc: 0, supplierAccount: "401000", expenseAccount: "606100", vatAccount: "445660", status: "draft" }] as const))); } catch (caught) { setError(errorText(caught)); } finally { setLoading(false); } }
-  useEffect(() => { void load(); }, [year]);
+  const load = useCallback(async (selectedYear = year) => { setLoading(true); setError(""); try { const value = await fetchAnnualAccounting(selectedYear); setData(value); setSettlements(Object.fromEntries(value.workspace.schedules.map((item) => [item.id, item.settlement ?? { date: `${selectedYear}-12-31`, invoiceRef: "", amountHt: 0, amountVat: 0, amountTtc: 0, supplierAccount: "401000", expenseAccount: "606100", vatAccount: "445660", status: "draft" }] as const))); } catch (caught) { setError(errorText(caught)); } finally { setLoading(false); } }, [year]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => { setScheduleForm((current) => ({ ...current, startDate: `${year}-01-01`, endDate: `${year}-12-31` })); setAdjustment((current) => ({ ...current, year, date: `${year}-12-31` })); setDocumentForm((current) => ({ ...current, date: `${year}-12-31` })); }, [year]);
   const checks = data?.workspace.confirmations.find((item) => item.year === year)?.checks ?? {};
   const completed = CHECKS.filter((item) => checks[item.id]).length; const locked = Boolean(data?.closing);
