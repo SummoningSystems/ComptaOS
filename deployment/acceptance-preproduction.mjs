@@ -15,7 +15,7 @@ try {
   const loginPage = await loginContext.newPage();
   const loginResponse = await loginPage.goto(baseUrl, { waitUntil: "networkidle" });
   assert.equal(loginResponse?.status(), 200);
-  await loginPage.getByRole("button", { name: /connexion/i }).waitFor({ timeout: 15_000 });
+  await loginPage.getByRole("button", { name: /se connecter|connexion/i }).waitFor({ timeout: 15_000 });
   await loginPage.screenshot({ path: path.join(output, "desktop-login.png"), fullPage: true });
   await loginContext.close();
 
@@ -26,10 +26,13 @@ try {
   await page.getByText("Transactions", { exact: true }).first().waitFor({ timeout: 20_000 });
   await page.screenshot({ path: path.join(output, "desktop-dashboard.png"), fullPage: true });
   await page.getByText("Transactions", { exact: true }).first().click();
-  await page.getByText(/transactions/i).first().waitFor();
+  await page.getByText("Chargement de la vue…").waitFor({ state: "hidden", timeout: 30_000 });
+  await page.getByText(/transactions affichées|transactions$/i).first().waitFor({ timeout: 20_000 });
   await page.screenshot({ path: path.join(output, "desktop-transactions.png"), fullPage: true });
   await page.getByText("Clôture annuelle", { exact: true }).first().click();
-  await page.getByText(/clôture annuelle/i).last().waitFor({ timeout: 20_000 });
+  await page.getByText("Chargement de la vue…").waitFor({ state: "hidden", timeout: 30_000 });
+  await page.getByRole("heading", { name: "Clôture annuelle guidée" }).waitFor({ timeout: 20_000 });
+  await page.getByText("Calcul de l'exercice…").waitFor({ state: "hidden", timeout: 60_000 });
   await page.screenshot({ path: path.join(output, "desktop-annual-closing.png"), fullPage: true });
   await desktop.close();
 

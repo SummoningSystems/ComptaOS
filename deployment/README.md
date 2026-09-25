@@ -1,5 +1,7 @@
 # Déploiement de production
 
+Pour une migration de modèle de données, utiliser la procédure renforcée décrite dans `PRODUCTION_RELEASE.md` et le wrapper `deploy-production-safe.sh`. Le script ci-dessous reste le mécanisme interne appelé par ce wrapper.
+
 `deploy-production.sh` compare le commit cible au dernier commit effectivement validé en production. Il ne reconstruit que les composants concernés :
 
 - `frontend/` ou `deployment/nginx/` : frontend uniquement ;
