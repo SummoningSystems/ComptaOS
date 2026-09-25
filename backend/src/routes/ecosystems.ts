@@ -21,12 +21,15 @@ import { actorContext, workspaceLock, workspaceContext } from "../services/works
 import { extractTextLocally } from "../services/localOcrService.js";
 import type { HouseholdImport } from "../types/household.js";
 import { ecosystemBankingRoutes } from "./ecosystemBanking.js";
+import { migrateLegacyToEcosystem, previewLegacyMigration } from "../services/legacyEcosystemMigration.js";
 type Params={id:string;documentId:string};
 export async function ecosystemsRoutes(app:FastifyInstance){
   await app.register(multipart,{limits:{fileSize:20*1024*1024,files:1}});
   app.get("/",async()=>listEcosystems());
   app.post<{Body:{name:string}}>("/",async(req,reply)=>reply.code(201).send(await createEcosystem(req.body?.name)));
   app.get<{Params:Params}>("/:id",async req=>loadEcosystem(req.params.id));
+  app.get<{Params:Params}>("/:id/legacy-migration",async req=>previewLegacyMigration(req.params.id));
+  app.post<{Params:Params;Body:{revision:number}}>("/:id/legacy-migration",async req=>migrateLegacyToEcosystem(req.params.id,req.body?.revision));
   app.get<{Params:Params}>("/:id/variables",async req=>{const s=await loadEcosystem(req.params.id);return resolveVariables(s,s.variables??[]);});
   app.post<{Params:Params;Body:Record<string,unknown>}>("/:id/commands",{bodyLimit:12*1024*1024},async req=>ecosystemCommand(req.params.id,req.body??{}));
   app.post<{Params:Params;Body:{content:string}}>("/:id/imports/columns",{bodyLimit:12*1024*1024},async req=>{ecosystemRoot(req.params.id);return {columns:Papa.parse(req.body.content,{header:true,preview:1}).meta.fields??[]};});

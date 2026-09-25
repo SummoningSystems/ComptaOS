@@ -214,4 +214,23 @@ describe("persisted financial ecosystem",()=>{
   const after=(await app.inject({url:endpoint,headers:cookie()})).json();expect(after.revision).toBe(before.revision);expect(after.movements).toEqual(before.movements);expect(after.treatments).toEqual(before.treatments);
  });
 
+ it("migrates the legacy workspace once with evidence and the reusable PSD2 profile",async()=>{
+  const legacy=companies.loadCompanies().find(c=>c.id==="default")!;
+  const {workspaceContext}=await import("../services/workspaceContext.js");
+  await workspaceContext.run({id:legacy.id,root:companies.resolveCompanyPath(legacy),kind:"business",actor:owner.id,role:"owner"},async()=>{
+   const transaction={id:"bank_powens_9001",date:"2026-09-20",label:"Legacy supplier",amount_ttc:-120,amount_ht:-100,vat:-20,vat_rate:20,vat_splits:[{rate:20,amount_ttc:-120}],currency:"EUR",category:"equipment",account:"Compte pro historique",status:"validated" as const,reconciled:true,attachment:"legacy.pdf",tags:["bank_import"]};
+   await (await import("../services/transactionService.js")).saveTransaction(transaction);
+   await fs.mkdir(path.join(companies.resolveCompanyPath(legacy),"attachments"),{recursive:true});await fs.writeFile(path.join(companies.resolveCompanyPath(legacy),"attachments","legacy.pdf"),"%PDF-1.4\n%%EOF");
+   await (await import("../services/bankingService.js")).saveConnections([{connectionId:77,connectorName:"Test Bank",createdAt:"2026-01-01T00:00:00.000Z",status:"active",accounts:[{id:99,name:"Compte pro",iban:"FR7612345678901234567890123",currency:"EUR",balance:500,balanceUpdatedAt:"2026-09-20T12:00:00.000Z"}]}]);
+  });
+  await (await import("../services/bankingService.js")).saveConfig({domain:"test",clientId:"client",clientSecret:"secret",userToken:"legacy-token"});
+  const preview=await app.inject({url:endpoint+"/legacy-migration",headers:cookie()});expect(preview.statusCode,preview.body).toBe(200);expect(preview.json()).toMatchObject({available:true,totals:{transactions:1,attachments:1,bankAccounts:1},bankProfileReusable:true});
+  const migrated=await app.inject({method:"POST",url:endpoint+"/legacy-migration",headers:cookie(),payload:{revision:state.revision}});expect(migrated.statusCode,migrated.body).toBe(200);const result=migrated.json();state=result.state;
+  expect(result.report.bankProfileMigrated).toBe(true);expect(state.movements.find(m=>(m.source?.raw as {migratedFrom?:string})?.migratedFrom==="bank_powens_9001")?.source?.key).toBe(owner.id+":99:9001");expect(state.feeds).toEqual(expect.arrayContaining([expect.objectContaining({providerAccountId:99,balance:50000})]));
+  const company=state.entities.find(e=>e.workspaceId==="default")!;expect(company.accountingEnabled).toBe(true);expect(companies.loadCompanies().find(c=>c.id==="default")?.ecosystemId).toBe(state.id);
+  expect(state.treatments.find(t=>t.transaction.id==="bank_powens_9001")?.transaction).toMatchObject({status:"validated",reconciled:true,vat:-20});expect(state.documents).toEqual(expect.arrayContaining([expect.objectContaining({fileName:"legacy.pdf",links:[company.id]})]));
+  const ecosystemFolder=companies.resolveCompanyPath(companies.loadCompanies().find(c=>c.id===state.id)!);expect(JSON.parse(await fs.readFile(path.join(ecosystemFolder,".powens_profiles.json"),"utf8"))[owner.id].token).toBe("legacy-token");expect(await fs.readFile(path.join(companies.resolveCompanyPath(legacy),"attachments","legacy.pdf"),"utf8")).toContain("%PDF");
+  expect((await app.inject({url:endpoint+"/legacy-migration",headers:cookie()})).json().available).toBe(false);expect((await app.inject({method:"POST",url:endpoint+"/legacy-migration",headers:cookie(),payload:{revision:state.revision}})).statusCode).toBe(409);
+ });
+
 });

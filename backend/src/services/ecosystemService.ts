@@ -37,7 +37,9 @@ async function materialize(root:string,state:Ecosystem){
   await workspaceLock(path.join(getCompaniesRoot(),"_registry"),async()=>{
     const registry=loadCompanies();
     for(const e of state.entities.filter(e=>e.kind==="company"&&e.workspaceId)){
-      if(!registry.some(c=>c.id===e.workspaceId))registry.push({id:e.workspaceId!,name:e.name,path:"companies/"+e.workspaceId,createdAt:new Date().toISOString(),ecosystemId:state.id,memberIds:[]});
+      const existing=registry.find(c=>c.id===e.workspaceId);
+      if(existing){existing.ecosystemId=state.id;existing.name=e.name;}
+      else registry.push({id:e.workspaceId!,name:e.name,path:"companies/"+e.workspaceId,createdAt:new Date().toISOString(),ecosystemId:state.id,memberIds:[]});
     }
     saveCompanies(registry);
   });
@@ -122,7 +124,7 @@ export async function mutateEcosystem(id:string,revision:number|undefined,action
     const details=await work(s);
     for(const m of s.movements)refreshTreatments(s,m);
     for(const old of before.treatments){const next=s.treatments.find(t=>t.transaction.id===old.transaction.id);if(JSON.stringify(old)!==JSON.stringify(next)){await companyOpen(before,old);if(old.transaction.status==="validated"&&action!=="reopen")fail("Rouvrez les traitements validés avant cette modification.",409);}}
-    for(const next of s.treatments){const old=before.treatments.find(t=>t.transaction.id===next.transaction.id);if(JSON.stringify(next)!==JSON.stringify(old))await companyOpen(s,next);}
+    for(const next of s.treatments){const old=before.treatments.find(t=>t.transaction.id===next.transaction.id);if(JSON.stringify(next)!==JSON.stringify(old)&&action!=="legacy-workspace-migration")await companyOpen(s,next);}
     s.revision++;s.history.push({at:new Date().toISOString(),actor:actor().id,scopeIds:affectedScopes(before,s),action,details:details??null});
     // All linked movements and accounting treatments share one atomic commit.
     await atomicWriteFile(path.join(root,"ecosystem.pending.json"),JSON.stringify(s));

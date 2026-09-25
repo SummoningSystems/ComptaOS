@@ -32,6 +32,7 @@ import type {Ecosystem} from "../../types/ecosystem";
 import type {Tab,TabType} from "../../types";
 import "./ecosystem.css";
 const SpreadsheetView=lazy(()=>import("../Spreadsheet/SpreadsheetView").then(m=>({default:m.SpreadsheetView})));
+type LegacyMigrationPreview={available:boolean;candidates:{id:string;name:string;transactions:number;activeTransactions:number;rejectedTransactions:number;attachments:number;bankAccounts:number}[];totals:{transactions:number;activeTransactions:number;rejectedTransactions:number;attachments:number;bankAccounts:number};bankProfileReusable:boolean;notes:string[]};
 export default function LiveApp({user,onLogout}:{user:AuthUser|null;onLogout:()=>Promise<void>}){
  const [list,setList]=useState<{id:string;name:string}[]|null>(null),[chosen,setChosen]=useState(""),[name,setName]=useState("Mon écosystème"),[error,setError]=useState("");const data=useLive(s=>s.data);
  const preference="comptaos_ecosystem_"+(user?.id??"local");
@@ -95,12 +96,31 @@ function LiveShell({user,onLogout}:{user:AuthUser|null;onLogout:()=>Promise<void
  function switchScope(scope:string){const next=switchToolScope(spec,scope,entities.find(e=>e.id===scope));setNotice(next.notice??"");openScope(next.spec);}
  const tree=<div className="eco-sidebar-content"><button onClick={()=>openScope({view:"placeholder",scope:ROOT,label:"Vue d’ensemble"})}>◈ Vue d’ensemble</button><button onClick={()=>openScope({view:"structure",scope:ROOT})}>◇ Structure</button><button onClick={()=>openScope({view:"flows",scope:ROOT})}>⇄ Tous les flux</button>{(["person","company","account"] as const).map(kind=><details open key={kind}><summary>{kinds[kind]}</summary>{entities.filter(e=>e.kind===kind&&!e.archived).map(e=><button key={e.id} onClick={()=>switchScope(e.id)}>{e.name}</button>)}</details>)}</div>;
  return <div className="eco-app flex flex-col h-screen bg-vscode-bg text-vscode-text"><header className="eco-titlebar"><strong>ComptaOS</strong><select aria-label="Périmètre actif" value={spec.scope} onChange={e=>switchScope(e.target.value)}><option value={ROOT}>Vue d’ensemble</option>{(["person","company","account"] as const).map(kind=><optgroup key={kind} label={kinds[kind]}>{entities.filter(e=>e.kind===kind&&!e.archived).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>)}</select><span className="flex-1"/><button onClick={()=>setSearch("")}>Rechercher</button><button onClick={()=>setApplication(true)}>Application</button><span>{user?.displayName}</span><button onClick={()=>void onLogout()}>Déconnexion</button></header>
+ <LegacyMigration ecosystemId={ecosystemId}/>
  {notice&&<div role="status">{notice}<button onClick={()=>setNotice("")}>Fermer</button></div>}
  {error&&<div role="alert" className="eco-error">{error} <button onClick={()=>void useLive.getState().load(ecosystemId).then(()=>useLive.setState({error:""})).catch(()=>undefined)}>Recharger</button></div>}
  <WorkspaceLayout sidebar={<Sidebar activeSection={section} onSectionChange={setSection} ecosystem={tree} groups={groups} scopeLabel={scopeName(spec.scope)} onOpenTab={tab=>openScope(tab.type==="dashboard"?{view:"placeholder",scope:spec.scope,toolId:"overview",label:"Dashboard"}:parseTab(tab.path))} explorerContent={tree}/>}><div className="eco-panels flex-1 min-h-0">{tabs.filter(t=>t.type==="ecosystem").map(t=><div key={t.id} role="tabpanel" aria-label={t.title} hidden={t.id!==activeTabId} className="eco-panel"><LiveTabContext.Provider value={t.id}><LivePanel spec={parseTab(t.path)} user={user} tabId={t.id}/></LiveTabContext.Provider></div>)}</div></WorkspaceLayout>
  <footer className="eco-live-status"><span>{s!.name} · {busy?"Enregistrement…":"Enregistré sur le serveur"} · révision {s!.revision}</span><span>{user?.role==="readonly"?"Lecture seule":"Espace partagé"}</span></footer>
  {search!==null&&<LiveSearch scope={spec.scope} onClose={()=>setSearch(null)}/>}
  {application&&<ApplicationSettings toggleTheme={toggle} user={user} onClose={()=>setApplication(false)}/>}</div>;
+}
+function LegacyMigration({ecosystemId}:{ecosystemId:string}){
+ const [preview,setPreview]=useState<LegacyMigrationPreview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[done,setDone]=useState("");
+ useEffect(()=>{let active=true;void liveRequest<LegacyMigrationPreview>("get","legacy-migration").then(value=>{if(active)setPreview(value);}).catch(e=>{if(active)setError(errorText(e));});return()=>{active=false;};},[ecosystemId]);
+ if(!preview?.available&&!error&&!done)return null;
+ const run=async()=>{
+  if(!confirm(`Migrer ${preview!.totals.transactions} transactions historiques et ${preview!.totals.attachments} justificatifs dans cet écosystème ?\n\nLes dossiers d’origine seront conservés et une sauvegarde de l’état actuel sera créée.`))return;
+  setBusy(true);setError("");
+  try{
+   const result=await liveRequest<{state:Ecosystem;report:LegacyMigrationPreview&{bankProfileMigrated:boolean}}>("post","legacy-migration",{revision:useLive.getState().data!.revision});
+   useLive.getState().accept(result.state);bindLiveStructure();setPreview(null);
+   setDone(result.report.bankProfileMigrated?"Migration terminée. La connexion PSD2 existante a été reprise ; vérifiez les comptes puis lancez une synchronisation.":"Migration terminée. Les données sont reprises ; reconnectez la banque dans Connexions bancaires pour réactiver la synchronisation PSD2.");
+  }catch(e){setError(errorText(e));}finally{setBusy(false);}
+ };
+ return <section className="eco-migration" aria-label="Migration des données historiques">
+  {preview?.available&&<><div><strong>Données historiques détectées</strong><span>{preview.candidates.map(c=>c.name).join(", ")} · {preview.totals.activeTransactions} opérations actives · {preview.totals.rejectedTransactions} rejetées · {preview.totals.attachments} justificatifs · {preview.totals.bankAccounts} comptes bancaires</span><small>{preview.bankProfileReusable?"Le profil PSD2 existant sera réutilisé.":"Les données bancaires seront reprises, mais une reconnexion Powens pourra être nécessaire."}</small></div><button className="eco-primary" disabled={busy} onClick={()=>void run()}>{busy?"Migration en cours…":"Migrer toutes mes données"}</button></>}
+  {done&&<span role="status">{done}</span>}{error&&<span role="alert">{error}</span>}
+ </section>;
 }
 function ApplicationSettings({user,onClose,toggleTheme}:{user:AuthUser|null;onClose:()=>void;toggleTheme:()=>void}){
  const s=useLive(x=>x.data)!;const [users,setUsers]=useState<AuthUser[]>([]),[existing,setExisting]=useState("");const [members,setMembers]=useState<{id:string;displayName:string;role:string}[]>([]),[invite,setInvite]=useState(""),[error,setError]=useState(""),[backup,setBackup]=useState<{enabled:boolean;lastSuccess?:string;error?:string}|null>(null);
