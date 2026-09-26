@@ -41,7 +41,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.14.0",
     "@types/papaparse": "^5.3.14",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/coverage-v8": "^4.1.10",
     "tsx": "^4.15.7",
     "typescript": "^5.4.5",
     "vitest": "^4.1.7"
