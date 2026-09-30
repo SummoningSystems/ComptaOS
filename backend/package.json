@@ -16,7 +16,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.97.1",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/multipart": "^10.1.0",
     "@fastify/static": "^10.1.2",
