@@ -44,8 +44,13 @@ describe("person-centric platform registry", () => {
     const withBob = createPerson({ name: "Bob", expectedRevision: withAlice.revision });
     const linked = createRelation({ fromId: withBob.people[0].id, toId: withBob.people[1].id, type: "family", expectedRevision: withBob.revision });
 
-    expect(linked.people.map((person) => person.name)).toEqual(["Alice", "Bob"]);
-    expect(linked.relations.some((relation) => relation.type === "family")).toBe(true);
+    expect(linked.created).toBe(true);
+    expect(linked.state.people.map((person) => person.name)).toEqual(["Alice", "Bob"]);
+    expect(linked.state.relations.some((relation) => relation.type === "family")).toBe(true);
+    const duplicate = createRelation({ fromId: withBob.people[0].id, toId: withBob.people[1].id, type: "family", expectedRevision: linked.state.revision });
+    expect(duplicate.created).toBe(false);
+    expect(duplicate.relation.id).toBe(linked.relation.id);
+    expect(duplicate.state.revision).toBe(linked.state.revision);
     expect(() => createPerson({ name: "Conflit", expectedRevision: initial.revision })).toThrow("modifiée ailleurs");
   });
 

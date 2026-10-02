@@ -54,6 +54,12 @@ export interface PlatformRelation {
   createdAt: string;
 }
 
+export interface CreateRelationResult {
+  state: PlatformState;
+  relation: PlatformRelation;
+  created: boolean;
+}
+
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
 
@@ -202,7 +208,7 @@ export function updatePerson(id: string, input: { name?: string; profile?: Platf
 
 const RELATION_TYPES = new Set<PlatformRelationType>(["family", "spouse", "parent", "child", "accountant", "advisor", "owner", "director", "employee", "beneficiary", "shareholder", "subsidiary", "management", "holder", "uses", "other"]);
 
-export function createRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number }): PlatformState {
+export function createRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number }): CreateRelationResult {
   const state = getPlatformState();
   assertRevision(state, input.expectedRevision);
   const nodes = new Set([...state.people, ...state.entities, ...state.accounts].map((node) => node.id));
@@ -210,11 +216,12 @@ export function createRelation(input: { fromId: string; toId: string; type: Plat
   if (input.fromId === input.toId) throw new Error("Un élément ne peut pas être relié à lui-même.");
   if (!RELATION_TYPES.has(input.type)) throw new Error("Type de relation invalide.");
   if (input.ownershipPercent !== undefined && (input.ownershipPercent < 0 || input.ownershipPercent > 100)) throw new Error("Le pourcentage doit être compris entre 0 et 100.");
-  const duplicate = state.relations.some((relation) => relation.fromId === input.fromId && relation.toId === input.toId && relation.type === input.type);
-  if (!duplicate) {
-    state.relations.push({ id: `relation_${randomUUID()}`, fromId: input.fromId, toId: input.toId, type: input.type, label: input.label?.trim() || undefined, ownershipPercent: input.ownershipPercent, source: "manual", createdAt: new Date().toISOString() });
-  }
-  return duplicate ? state : writeState(state);
+  const duplicate = state.relations.find((relation) => relation.fromId === input.fromId && relation.toId === input.toId && relation.type === input.type);
+  if (duplicate) return { state, relation: duplicate, created: false };
+
+  const relation: PlatformRelation = { id: `relation_${randomUUID()}`, fromId: input.fromId, toId: input.toId, type: input.type, label: input.label?.trim() || undefined, ownershipPercent: input.ownershipPercent, source: "manual", createdAt: new Date().toISOString() };
+  state.relations.push(relation);
+  return { state: writeState(state), relation, created: true };
 }
 
 export function deleteRelation(id: string, expectedRevision?: number): PlatformState {

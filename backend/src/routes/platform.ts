@@ -54,7 +54,8 @@ export async function platformRoutes(app: FastifyInstance) {
   app.post("/relations", async (req, reply) => {
     if (!requireAdmin(reply)) return;
     try {
-      return reply.status(201).send(createRelation(req.body as { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number }));
+      const result = createRelation(req.body as { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number });
+      return reply.status(result.created ? 201 : 200).send(result);
     } catch (error) { return sendError(reply, error); }
   });
 

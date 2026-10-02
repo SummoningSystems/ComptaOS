@@ -16,6 +16,7 @@ import {
   Company,
   CompanyProfile,
   PlatformState,
+  PlatformRelation,
   PlatformRelationType,
   PlatformAccessRole,
 } from "../types";
@@ -416,8 +417,8 @@ export async function createPlatformPerson(input: { name: string; profile: "indi
   return data;
 }
 
-export async function createPlatformRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision: number }): Promise<PlatformState> {
-  const { data } = await api.post<PlatformState>("/platform/relations", input);
+export async function createPlatformRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision: number }): Promise<{ state: PlatformState; relation: PlatformRelation; created: boolean }> {
+  const { data } = await api.post<{ state: PlatformState; relation: PlatformRelation; created: boolean }>("/platform/relations", input);
   return data;
 }
 
