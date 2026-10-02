@@ -244,7 +244,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
     <div className="h-full overflow-auto bg-vscode-bg">
       <header className="border-b border-vscode-border px-8 py-6">
         <div className="text-[10px] uppercase tracking-[0.22em] text-vscode-muted">Écosystème / vue d’ensemble</div>
-        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="mt-2 text-2xl font-semibold text-vscode-text">Structure financière</h1><button onClick={() => openTab({ id: "allocation", title: "Répartition", type: "allocation" })} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Arbitrer les flux →</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="mt-2 text-2xl font-semibold text-vscode-text">Structure financière</h1><div className="flex gap-2"><button onClick={() => openTab({ id: "allocation", title: "Répartition", type: "allocation" })} className="rounded border border-vscode-accent px-4 py-2 text-xs font-semibold text-vscode-accent">Arbitrer les flux</button><button onClick={() => openTab({ id: "portfolio", title: "Consolidation", type: "portfolio" })} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Voir la big picture →</button></div></div>
         <p className="mt-2 max-w-3xl text-xs text-vscode-muted">Plusieurs personnes peuvent partager des liens familiaux, professionnels ou patrimoniaux et être reliées à plusieurs structures. Chaque entreprise conserve son espace ComptaOS complet.</p>
       </header>
 

@@ -112,7 +112,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "structure" | "allocation" | "personal" | "household" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+export type TabType = "editor" | "dashboard" | "structure" | "allocation" | "portfolio" | "personal" | "household" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
 
 export interface Quote {
   id: string;
@@ -237,6 +237,9 @@ export interface PersonalFinanceSnapshot {
 
 export interface HouseholdTransaction extends AllocatedTransaction { allocatedAmount: number; allocatedScopes: Array<{ scopeId: string; name: string; amount: number }>; internalTransfer: boolean }
 export interface HouseholdFinanceSnapshot { household: { id: string; name: string }; month: string; members: Array<{ id: string; name: string; income: number; expenses: number; net: number }>; accounts: PlatformAccount[]; transactions: HouseholdTransaction[]; budgets: PersonalBudget[]; categories: Array<{ id: PersonalCategory; label: string; kind: "income" | "expense" | "both" }>; summary: { balance: number; income: number; expenses: number; net: number; internalTransfers: number } }
+export interface PortfolioTransfer { id: string; kind: "confirmed" | "planned"; sourceScopeId: string; destinationScopeId: string; amount: number; date: string; label: string; sourceTransactionKey?: string; destinationTransactionKey?: string; frequency?: "once" | "monthly"; endDate?: string; createdAt: string }
+export interface ConsolidatedForecastMonth { month: string; openingBalance: number; income: number; expenses: number; transfersIn: number; transfersOut: number; closingBalance: number; recurringItems: Array<{ scopeId: string; label: string; amount: number }> }
+export interface PortfolioSnapshot { rootScopeId: string; scopes: FinanceScope[]; suggestedScopeIds: string[]; selectedScopeIds: string[]; balance: number; averageIncome: number; averageExpenses: number; transfers: PortfolioTransfer[]; transferCandidates: AllocatedTransaction[]; forecast: ConsolidatedForecastMonth[] }
 
 export interface CategoryBudget {
   category: string;

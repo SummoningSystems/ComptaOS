@@ -7,6 +7,7 @@ import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocatio
 import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
 import { getPlatformLayout, savePlatformLayout, type PlatformLayout } from "../services/platformLayoutService.js";
 import { ensureAccountingDossier, getAccountingDossiers } from "../services/accountingDossierService.js";
+import { createPortfolioTransfer, deletePortfolioTransfer, getPortfolioSnapshot, type PortfolioTransfer } from "../services/portfolioService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
@@ -157,6 +158,26 @@ export async function platformRoutes(app: FastifyInstance) {
 
   app.put("/allocations/transactions/batch", async (req, reply) => {
     try { const input = req.body as { month: string; keys: string[]; scopeId: string }; return { saved: await saveBatchAllocation(actor(), input.month, input.keys, input.scopeId) }; }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.get("/portfolio", async (req, reply) => {
+    try {
+      const query = req.query as { rootScopeId?: string; scopeIds?: string; horizon?: string; month?: string };
+      if (!query.rootScopeId) throw new Error("Périmètre racine requis.");
+      const horizon = Math.min(36, Math.max(1, Number(query.horizon) || 12));
+      const scopeIds = query.scopeIds?.split(",").filter(Boolean);
+      return await getPortfolioSnapshot(actor(), query.rootScopeId, horizon, scopeIds, query.month);
+    } catch (error) { return sendError(reply, error); }
+  });
+
+  app.post("/portfolio/transfers", async (req, reply) => {
+    try { return reply.status(201).send(await createPortfolioTransfer(actor(), req.body as Omit<PortfolioTransfer, "id" | "createdAt">)); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.delete("/portfolio/transfers/:id", async (req, reply) => {
+    try { const { id } = req.params as { id: string }; deletePortfolioTransfer(actor(), id); return { deleted: true }; }
     catch (error) { return sendError(reply, error); }
   });
 }

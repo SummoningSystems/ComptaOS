@@ -56,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Finance",
     items: [
       { icon: "◎", label: "Répartition globale", tab: { id: "allocation", title: "Répartition", type: "allocation" } },
+      { icon: "◇", label: "Vision consolidée",   tab: { id: "portfolio",  title: "Consolidation", type: "portfolio" } },
       { icon: "💰", label: "Trésorerie",        tab: { id: "treasury",   title: "Trésorerie",     type: "treasury" } },
       { icon: "🎯", label: "Budgets",           tab: { id: "budgets",    title: "Budgets",        type: "budgets" } },
       { icon: "📈", label: "Bilan / P&L",       tab: { id: "profitloss", title: "Bilan / P&L",    type: "profitloss" } },

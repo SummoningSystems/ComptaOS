@@ -468,6 +468,18 @@ export async function saveFinanceBatchAllocation(month: string, keys: string[], 
   await api.put("/platform/allocations/transactions/batch", { month, keys, scopeId });
 }
 
+export async function fetchPortfolio(rootScopeId: string, scopeIds: string[], horizon: number, month: string): Promise<import("../types").PortfolioSnapshot> {
+  const { data } = await api.get<import("../types").PortfolioSnapshot>("/platform/portfolio", { params: { rootScopeId, scopeIds: scopeIds.join(","), horizon, month } });
+  return data;
+}
+
+export async function createPortfolioTransfer(input: Omit<import("../types").PortfolioTransfer, "id" | "createdAt">): Promise<import("../types").PortfolioTransfer> {
+  const { data } = await api.post<import("../types").PortfolioTransfer>("/platform/portfolio/transfers", input);
+  return data;
+}
+
+export async function deletePortfolioTransfer(id: string): Promise<void> { await api.delete(`/platform/portfolio/transfers/${encodeURIComponent(id)}`); }
+
 export async function fetchHouseholdFinance(householdId: string, month: string): Promise<HouseholdFinanceSnapshot> {
   const { data } = await api.get<HouseholdFinanceSnapshot>(`/platform/households/${encodeURIComponent(householdId)}/finance`, { params: { month } });
   return data;

@@ -18,6 +18,7 @@ import { MobileCaptureView } from "./components/Mobile/MobileCaptureView";
 
 const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
+const PortfolioView = lazy(() => import("./components/Platform/PortfolioView").then((m) => ({ default: m.PortfolioView })));
 const ImportView = lazy(() => import("./components/Import/ImportView").then((m) => ({ default: m.ImportView })));
 const PdfImporter = lazy(() => import("./components/Import/PdfImporter").then((m) => ({ default: m.PdfImporter })));
 const TransactionsView = lazy(() => import("./components/Transactions/TransactionsView").then((m) => ({ default: m.TransactionsView })));
@@ -57,6 +58,7 @@ const TAB_LABELS: Record<TabType, string> = {
   dashboard:    "Dashboard",
   structure:    "Structure financière",
   allocation:   "Répartition des flux",
+  portfolio:    "Vision consolidée",
   personal:     "Comptabilité personnelle",
   household:    "Foyer",
   editor:       "Éditeur",
@@ -124,6 +126,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "dashboard"    && <Dashboard />}
       {type === "structure"    && <StructureView currentUser={currentUser} />}
       {type === "allocation"   && <AllocationView />}
+      {type === "portfolio"    && <PortfolioView />}
       {type === "personal"     && personId && <PersonalFinanceView personId={personId} />}
       {type === "household"    && householdId && <HouseholdFinanceView householdId={householdId} />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
