@@ -107,7 +107,7 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
 
   return (
     <div
-      className="flex shrink-0 border-r border-vscode-border bg-vscode-sidebar"
+      className="flex shrink-0 border-r border-vscode-border bg-vscode-sidebar max-sm:!w-10"
       style={{ width: sidebarWidth }}
     >
       {/* Activity bar */}
@@ -154,7 +154,7 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
       </div>
 
       {/* Panel */}
-      <div className="flex-1 min-w-0 overflow-y-auto">
+      <div className="hidden flex-1 min-w-0 overflow-y-auto sm:block">
         {/* Header de la section */}
         {activeGroup && (
           <div className="px-3 py-2 border-b border-vscode-border shrink-0">
