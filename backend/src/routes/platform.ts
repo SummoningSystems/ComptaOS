@@ -1,12 +1,14 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { actorHasGlobalAccess, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, setAccessGrant, updatePerson, type PlatformAccessRole, type PlatformRelationType } from "../services/platformService.js";
+import { actorHasGlobalAccess, createHousehold, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, setAccessGrant, updatePerson, type PlatformAccessRole, type PlatformRelationType } from "../services/platformService.js";
 import { actorContext } from "../services/workspaceContext.js";
 import { getUserById } from "../services/authService.js";
 import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
+import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocation, saveTransactionAllocations, type AccountUsage, type FinanceAllocation } from "../services/financeAllocationService.js";
+import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
-  const status = typed.code === "REVISION_CONFLICT" ? 409 : typed.code === "NOT_FOUND" ? 404 : 400;
+  const status = typed.code === "REVISION_CONFLICT" ? 409 : typed.code === "NOT_FOUND" ? 404 : typed.code === "FORBIDDEN" ? 403 : 400;
   return reply.status(status).send({ error: typed.message || "Requête invalide." });
 }
 
@@ -24,6 +26,11 @@ export async function platformRoutes(app: FastifyInstance) {
     if (!visible || (write && !actorHasGlobalAccess(current) && access !== "owner" && access !== "manager")) {
       void reply.status(403).send({ error: write ? "Droits de gestion requis sur cette personne." : "Cette personne ne vous est pas attribuée." }); return null;
     }
+    return current;
+  };
+  const requireHouseholdAccess = (householdId: string, reply: FastifyReply, write = false) => {
+    const current = actor(); const visible = getVisiblePlatformState(current).households.some((household) => household.id === householdId); const access = getScopeAccess(current, householdId);
+    if (!visible || (write && !actorHasGlobalAccess(current) && access !== "owner" && access !== "manager")) { void reply.status(403).send({ error: write ? "Droits de gestion requis sur ce foyer." : "Ce foyer ne vous est pas attribué." }); return null; }
     return current;
   };
 
@@ -51,6 +58,12 @@ export async function platformRoutes(app: FastifyInstance) {
     try {
       return reply.status(201).send(createPerson(req.body as { name: string; profile?: "individual" | "professional"; notes?: string; expectedRevision?: number }));
     } catch (error) { return sendError(reply, error); }
+  });
+
+  app.post("/households", async (req, reply) => {
+    if (!requireAdmin(reply)) return;
+    try { return reply.status(201).send(createHousehold(req.body as { name: string; notes?: string; expectedRevision?: number })); }
+    catch (error) { return sendError(reply, error); }
   });
 
   app.patch("/people/:id", async (req, reply) => {
@@ -96,6 +109,38 @@ export async function platformRoutes(app: FastifyInstance) {
   app.put("/people/:id/finance/budgets", async (req, reply) => {
     const { id } = req.params as { id: string }; if (!requirePersonAccess(id, reply, true)) return;
     try { return savePersonalBudgets(id, req.body as Array<{ category: string; monthlyLimit: number }>); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.get("/households/:id/finance", async (req, reply) => {
+    const { id } = req.params as { id: string }; const current = requireHouseholdAccess(id, reply); if (!current) return;
+    try { const query = req.query as { month?: string }; const month = /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : new Date().toISOString().slice(0, 7); return await getHouseholdFinance(id, month, current); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.put("/households/:id/finance/budgets", async (req, reply) => {
+    const { id } = req.params as { id: string }; if (!requireHouseholdAccess(id, reply, true)) return;
+    try { return saveHouseholdBudgets(id, req.body as Array<{ category: string; monthlyLimit: number }>); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.get("/allocations", async (req, reply) => {
+    try { const query = req.query as { month?: string }; const month = /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : new Date().toISOString().slice(0, 7); return await getFinanceAllocationSnapshot(actor(), month); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.put("/allocations/accounts/:id", async (req, reply) => {
+    try { const { id } = req.params as { id: string }; return saveAccountAssignment(id, req.body as { usage: AccountUsage; defaultScopeId?: string }, actor()); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.put("/allocations/transactions", async (req, reply) => {
+    try { const input = req.body as { month: string; key: string; allocations: FinanceAllocation[]; rememberRule?: boolean }; return await saveTransactionAllocations(actor(), input.month, input.key, input.allocations, input.rememberRule); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.put("/allocations/transactions/batch", async (req, reply) => {
+    try { const input = req.body as { month: string; keys: string[]; scopeId: string }; return { saved: await saveBatchAllocation(actor(), input.month, input.keys, input.scopeId) }; }
     catch (error) { return sendError(reply, error); }
   });
 }

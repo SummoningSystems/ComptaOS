@@ -10,6 +10,7 @@ const state: PlatformState = {
   schemaVersion: 1,
   revision: 2,
   people: [person],
+  households: [],
   entities: [entity],
   accounts: [account],
   grants: [],

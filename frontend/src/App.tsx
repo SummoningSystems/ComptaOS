@@ -46,6 +46,8 @@ const UsersView = lazy(() => import("./components/Auth/UsersView").then((m) => (
 const HrView = lazy(() => import("./components/Hr/HrView").then((m) => ({ default: m.HrView })));
 const StructureView = lazy(() => import("./components/Platform/StructureView").then((m) => ({ default: m.StructureView })));
 const PersonalFinanceView = lazy(() => import("./components/Personal/PersonalFinanceView").then((m) => ({ default: m.PersonalFinanceView })));
+const HouseholdFinanceView = lazy(() => import("./components/Personal/HouseholdFinanceView").then((m) => ({ default: m.HouseholdFinanceView })));
+const AllocationView = lazy(() => import("./components/Platform/AllocationView").then((m) => ({ default: m.AllocationView })));
 
 function ViewLoading() {
   return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de la vue…</div>;
@@ -54,7 +56,9 @@ function ViewLoading() {
 const TAB_LABELS: Record<TabType, string> = {
   dashboard:    "Dashboard",
   structure:    "Structure financière",
+  allocation:   "Répartition des flux",
   personal:     "Comptabilité personnelle",
+  household:    "Foyer",
   editor:       "Éditeur",
   import:       "Import",
   transactions: "Transactions",
@@ -114,11 +118,14 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
   const workFilter = params.get("filter") ?? path;
   const contextMonth = params.get("month") ?? undefined;
   const personId = params.get("person") ?? "";
+  const householdId = params.get("household") ?? "";
   return (
     <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
       {type === "structure"    && <StructureView currentUser={currentUser} />}
+      {type === "allocation"   && <AllocationView />}
       {type === "personal"     && personId && <PersonalFinanceView personId={personId} />}
+      {type === "household"    && householdId && <HouseholdFinanceView householdId={householdId} />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}

@@ -22,6 +22,10 @@ import {
   PersonalBudget,
   PersonalCategory,
   PersonalFinanceSnapshot,
+  FinanceAllocation,
+  FinanceAllocationSnapshot,
+  AccountUsage,
+  HouseholdFinanceSnapshot,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -417,6 +421,38 @@ export async function fetchPlatformState(): Promise<PlatformState> {
 
 export async function createPlatformPerson(input: { name: string; profile: "individual" | "professional"; notes?: string; expectedRevision: number }): Promise<PlatformState> {
   const { data } = await api.post<PlatformState>("/platform/people", input);
+  return data;
+}
+
+export async function createPlatformHousehold(input: { name: string; notes?: string; expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.post<PlatformState>("/platform/households", input);
+  return data;
+}
+
+export async function fetchFinanceAllocations(month: string): Promise<FinanceAllocationSnapshot> {
+  const { data } = await api.get<FinanceAllocationSnapshot>("/platform/allocations", { params: { month } });
+  return data;
+}
+
+export async function saveFinanceAccountAssignment(accountId: string, usage: AccountUsage, defaultScopeId?: string): Promise<void> {
+  await api.put(`/platform/allocations/accounts/${encodeURIComponent(accountId)}`, { usage, defaultScopeId });
+}
+
+export async function saveFinanceTransactionAllocations(month: string, key: string, allocations: FinanceAllocation[], rememberRule = false): Promise<void> {
+  await api.put("/platform/allocations/transactions", { month, key, allocations, rememberRule });
+}
+
+export async function saveFinanceBatchAllocation(month: string, keys: string[], scopeId: string): Promise<void> {
+  await api.put("/platform/allocations/transactions/batch", { month, keys, scopeId });
+}
+
+export async function fetchHouseholdFinance(householdId: string, month: string): Promise<HouseholdFinanceSnapshot> {
+  const { data } = await api.get<HouseholdFinanceSnapshot>(`/platform/households/${encodeURIComponent(householdId)}/finance`, { params: { month } });
+  return data;
+}
+
+export async function saveHouseholdFinanceBudgets(householdId: string, budgets: PersonalBudget[]): Promise<PersonalBudget[]> {
+  const { data } = await api.put<PersonalBudget[]>(`/platform/households/${encodeURIComponent(householdId)}/finance/budgets`, budgets);
   return data;
 }
 

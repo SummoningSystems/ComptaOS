@@ -2,11 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Transaction } from "../types/index.js";
 import { atomicWriteFileSync } from "./atomicFile.js";
-import { getCompaniesRoot, loadCompanies, resolveCompanyPath } from "./companiesService.js";
+import { getCompaniesRoot } from "./companiesService.js";
+import { loadFinanceTransactions } from "./financeAllocationService.js";
 import { getPlatformState, type PlatformAccount } from "./platformService.js";
 import type { RequestActor } from "./requestActor.js";
-import { loadAllTransactions } from "./transactionService.js";
-import { workspaceContext } from "./workspaceContext.js";
 
 export const PERSONAL_CATEGORIES = [
   { id: "personal_income", label: "Revenus professionnels", kind: "income" },
@@ -43,6 +42,7 @@ export interface PersonalTransaction extends Transaction {
   accountName: string;
   personalCategory: PersonalCategory;
   internalTransfer: boolean;
+  originalAmountTtc?: number;
 }
 
 export interface PersonalFinanceSnapshot {
@@ -108,24 +108,18 @@ export async function getPersonalFinance(personId: string, month: string, actor:
   const state = getPlatformState();
   const person = state.people.find((item) => item.id === personId);
   if (!person) throw Object.assign(new Error("Personne introuvable."), { code: "NOT_FOUND" });
-  const accounts = personalAccounts(personId);
+  const linkedAccounts = personalAccounts(personId);
   const store = readStore(personId);
-  const byWorkspace = new Map<string, PlatformAccount[]>();
-  for (const account of accounts) byWorkspace.set(account.sourceWorkspaceId, [...(byWorkspace.get(account.sourceWorkspaceId) ?? []), account]);
   const transactions: PersonalTransaction[] = [];
-
-  for (const [workspaceId, workspaceAccounts] of byWorkspace) {
-    const company = loadCompanies().find((item) => item.id === workspaceId);
-    if (!company) continue;
-    const sourceIds = new Set(workspaceAccounts.map((account) => account.sourceAccountId));
-    const source = await workspaceContext.run({ companyId: company.id, root: resolveCompanyPath(company), actor, accessRole: "viewer" }, () => loadAllTransactions());
-    for (const transaction of source) {
-      if (!sourceIds.has(transaction.account) || !transaction.date.startsWith(month) || transaction.status === "rejected") continue;
-      const key = `${workspaceId}:${transaction.id}`;
-      const account = workspaceAccounts.find((item) => item.sourceAccountId === transaction.account)!;
-      transactions.push({ ...transaction, key, sourceWorkspaceId: workspaceId, sourceAccountId: transaction.account, accountName: account.name, personalCategory: store.categories[key] ?? defaultCategory(transaction), internalTransfer: false });
-    }
+  const allocated = await loadFinanceTransactions(actor, month);
+  for (const transaction of allocated.transactions) {
+    const allocation = transaction.allocations.find((item) => item.scopeId === personId);
+    if (!allocation) continue;
+    const ratio = transaction.amount_ttc === 0 ? 1 : allocation.amount / transaction.amount_ttc;
+    transactions.push({ ...transaction, amount_ttc: allocation.amount, amount_ht: Math.round(transaction.amount_ht * ratio * 100) / 100, vat: Math.round(transaction.vat * ratio * 100) / 100, sourceAccountId: transaction.account, personalCategory: store.categories[transaction.key] ?? defaultCategory(transaction), internalTransfer: false, originalAmountTtc: allocation.amount === transaction.amount_ttc ? undefined : transaction.amount_ttc });
   }
+  const accountIds = new Set([...linkedAccounts.map((account) => account.id), ...allocated.transactions.filter((transaction) => transaction.allocations.some((item) => item.scopeId === personId)).map((transaction) => transaction.platformAccountId)]);
+  const accounts = allocated.accounts.filter((account) => accountIds.has(account.id));
   transactions.sort((a, b) => b.date.localeCompare(a.date));
   markInternalTransfers(transactions);
   const relevant = transactions.filter((transaction) => !transaction.internalTransfer);

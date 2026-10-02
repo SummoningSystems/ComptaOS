@@ -4,7 +4,7 @@ import { resolve, sep, join } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
 import { getCompaniesRoot, loadCompanies } from "./companiesService.js";
 
-export type PlatformNodeKind = "person" | "entity" | "account";
+export type PlatformNodeKind = "person" | "household" | "entity" | "account";
 
 export interface PlatformPerson {
   id: string;
@@ -23,6 +23,14 @@ export interface PlatformEntity {
   createdAt: string;
 }
 
+export interface PlatformHousehold {
+  id: string;
+  kind: "household";
+  name: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface PlatformAccount {
   id: string;
   kind: "account";
@@ -38,6 +46,7 @@ export interface PlatformAccount {
 
 export type PlatformRelationType =
   | "family" | "spouse" | "parent" | "child"
+  | "member"
   | "accountant" | "advisor"
   | "owner" | "director" | "employee" | "beneficiary"
   | "shareholder" | "subsidiary" | "management"
@@ -67,6 +76,7 @@ export interface PlatformState {
   schemaVersion: 1;
   revision: number;
   people: PlatformPerson[];
+  households: PlatformHousehold[];
   entities: PlatformEntity[];
   accounts: PlatformAccount[];
   relations: PlatformRelation[];
@@ -79,7 +89,7 @@ function root(): string { return getCompaniesRoot(); }
 function storeFile(): string { return join(root(), "_platform.json"); }
 
 function emptyState(): PlatformState {
-  return { schemaVersion: 1, revision: 0, people: [], entities: [], accounts: [], relations: [], grants: [], updatedAt: new Date(0).toISOString() };
+  return { schemaVersion: 1, revision: 0, people: [], households: [], entities: [], accounts: [], relations: [], grants: [], updatedAt: new Date(0).toISOString() };
 }
 
 function isState(value: unknown): value is PlatformState {
@@ -95,7 +105,7 @@ function readState(): PlatformState {
   if (!existsSync(storeFile())) return emptyState();
   try {
     const parsed: unknown = JSON.parse(readFileSync(storeFile(), "utf-8"));
-    return isState(parsed) ? { ...parsed, grants: parsed.grants ?? [] } : emptyState();
+    return isState(parsed) ? { ...parsed, households: parsed.households ?? [], grants: parsed.grants ?? [] } : emptyState();
   } catch {
     return emptyState();
   }
@@ -198,6 +208,15 @@ export function createPerson(input: { name: string; profile?: PlatformPerson["pr
   return writeState(state);
 }
 
+export function createHousehold(input: { name: string; notes?: string; expectedRevision?: number }): PlatformState {
+  const state = getPlatformState();
+  assertRevision(state, input.expectedRevision);
+  const name = input.name.trim();
+  if (!name) throw new Error("Le nom du foyer est requis.");
+  state.households.push({ id: `household_${randomUUID()}`, kind: "household", name, notes: input.notes?.trim() || undefined, createdAt: new Date().toISOString() });
+  return writeState(state);
+}
+
 export function updatePerson(id: string, input: { name?: string; profile?: PlatformPerson["profile"]; notes?: string; expectedRevision?: number }): PlatformState {
   const state = getPlatformState();
   assertRevision(state, input.expectedRevision);
@@ -212,12 +231,12 @@ export function updatePerson(id: string, input: { name?: string; profile?: Platf
   return writeState(state);
 }
 
-const RELATION_TYPES = new Set<PlatformRelationType>(["family", "spouse", "parent", "child", "accountant", "advisor", "owner", "director", "employee", "beneficiary", "shareholder", "subsidiary", "management", "holder", "uses", "other"]);
+const RELATION_TYPES = new Set<PlatformRelationType>(["family", "spouse", "parent", "child", "member", "accountant", "advisor", "owner", "director", "employee", "beneficiary", "shareholder", "subsidiary", "management", "holder", "uses", "other"]);
 
 export function createRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number }): CreateRelationResult {
   const state = getPlatformState();
   assertRevision(state, input.expectedRevision);
-  const nodes = new Set([...state.people, ...state.entities, ...state.accounts].map((node) => node.id));
+  const nodes = new Set([...state.people, ...state.households, ...state.entities, ...state.accounts].map((node) => node.id));
   if (!nodes.has(input.fromId) || !nodes.has(input.toId)) throw new Error("Les deux éléments de la relation doivent exister.");
   if (input.fromId === input.toId) throw new Error("Un élément ne peut pas être relié à lui-même.");
   if (!RELATION_TYPES.has(input.type)) throw new Error("Type de relation invalide.");
@@ -267,18 +286,24 @@ export function getVisiblePlatformState(actor: { id: string; role: string }): Pl
   const state = getPlatformState();
   if (actorHasGlobalAccess(actor)) return state;
   const visible = new Set(state.grants.filter((grant) => grant.userId === actor.id).map((grant) => grant.scopeId));
-  for (const relation of state.relations) {
-    const fromVisibleScope = visible.has(relation.fromId) && [...state.people, ...state.entities].some((scope) => scope.id === relation.fromId);
-    const toVisibleScope = visible.has(relation.toId) && [...state.people, ...state.entities].some((scope) => scope.id === relation.toId);
-    if (fromVisibleScope && state.accounts.some((account) => account.id === relation.toId)) visible.add(relation.toId);
-    if (toVisibleScope && state.accounts.some((account) => account.id === relation.fromId)) visible.add(relation.fromId);
+  const scopes = new Set([...state.people, ...state.households, ...state.entities].map((scope) => scope.id));
+  const accounts = new Set(state.accounts.map((account) => account.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const relation of state.relations) {
+      const memberLink = relation.type === "member" && scopes.has(relation.fromId) && scopes.has(relation.toId);
+      const accountLink = relation.type === "holder" || relation.type === "uses";
+      if ((memberLink || accountLink) && visible.has(relation.fromId) && !visible.has(relation.toId) && (memberLink || accounts.has(relation.toId))) { visible.add(relation.toId); changed = true; }
+      if ((memberLink || accountLink) && visible.has(relation.toId) && !visible.has(relation.fromId) && (memberLink || accounts.has(relation.fromId))) { visible.add(relation.fromId); changed = true; }
+    }
   }
-  return { ...state, people: state.people.filter((item) => visible.has(item.id)), entities: state.entities.filter((item) => visible.has(item.id)), accounts: state.accounts.filter((item) => visible.has(item.id)), relations: state.relations.filter((item) => visible.has(item.fromId) && visible.has(item.toId)), grants: state.grants.filter((grant) => grant.userId === actor.id) };
+  return { ...state, people: state.people.filter((item) => visible.has(item.id)), households: state.households.filter((item) => visible.has(item.id)), entities: state.entities.filter((item) => visible.has(item.id)), accounts: state.accounts.filter((item) => visible.has(item.id)), relations: state.relations.filter((item) => visible.has(item.fromId) && visible.has(item.toId)), grants: state.grants.filter((grant) => grant.userId === actor.id) };
 }
 
 export function setAccessGrant(input: { userId: string; scopeId: string; role: PlatformAccessRole; createdBy: string; expectedRevision?: number }): PlatformState {
   const state = getPlatformState(); assertRevision(state, input.expectedRevision);
-  const nodes = new Set([...state.people, ...state.entities, ...state.accounts].map((node) => node.id));
+  const nodes = new Set([...state.people, ...state.households, ...state.entities, ...state.accounts].map((node) => node.id));
   if (!nodes.has(input.scopeId)) throw new Error("Périmètre introuvable.");
   const existing = state.grants.find((grant) => grant.userId === input.userId && grant.scopeId === input.scopeId);
   if (existing) existing.role = input.role;

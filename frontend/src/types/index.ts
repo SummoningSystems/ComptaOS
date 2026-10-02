@@ -112,7 +112,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "structure" | "personal" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+export type TabType = "editor" | "dashboard" | "structure" | "allocation" | "personal" | "household" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
 
 export interface Quote {
   id: string;
@@ -203,18 +203,25 @@ export interface Company {
   createdAt: string;
 }
 
-export type PlatformRelationType = "family" | "spouse" | "parent" | "child" | "accountant" | "advisor" | "owner" | "director" | "employee" | "beneficiary" | "shareholder" | "subsidiary" | "management" | "holder" | "uses" | "other";
+export type PlatformRelationType = "family" | "spouse" | "parent" | "child" | "member" | "accountant" | "advisor" | "owner" | "director" | "employee" | "beneficiary" | "shareholder" | "subsidiary" | "management" | "holder" | "uses" | "other";
 export interface PlatformPerson { id: string; kind: "person"; name: string; profile: "individual" | "professional"; notes?: string; createdAt: string }
+export interface PlatformHousehold { id: string; kind: "household"; name: string; notes?: string; createdAt: string }
 export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; createdAt: string }
 export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
 export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; source: "manual" | "workspace"; createdAt: string }
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
-export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
+export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; households: PlatformHousehold[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
+
+export type AccountUsage = "personal" | "business" | "shared" | "mixed";
+export interface FinanceAllocation { scopeId: string; amount: number }
+export interface FinanceScope { id: string; name: string; kind: "person" | "household" | "entity" }
+export interface AllocatedTransaction extends Transaction { key: string; platformAccountId: string; accountName: string; sourceWorkspaceId: string; allocations: FinanceAllocation[]; allocationSource: "manual" | "rule" | "account" | "relation" | "unassigned" }
+export interface FinanceAllocationSnapshot { month: string; scopes: FinanceScope[]; accounts: Array<PlatformAccount & { usage: AccountUsage; defaultScopeId?: string }>; transactions: AllocatedTransaction[]; rules: Array<{ id: string; pattern: string; scopeId: string }>; unassignedCount: number }
 
 export type PersonalCategory = "personal_income" | "salary_income" | "benefits_income" | "refund_income" | "investment_income" | "housing" | "groceries" | "dining" | "transport" | "health" | "insurance" | "utilities" | "subscriptions" | "leisure" | "shopping" | "education" | "personal_taxes" | "savings" | "family" | "pets" | "personal_misc";
 export interface PersonalBudget { category: PersonalCategory; monthlyLimit: number }
-export interface PersonalTransaction extends Transaction { key: string; sourceWorkspaceId: string; sourceAccountId: string; accountName: string; personalCategory: PersonalCategory; internalTransfer: boolean }
+export interface PersonalTransaction extends Transaction { key: string; sourceWorkspaceId: string; sourceAccountId: string; accountName: string; personalCategory: PersonalCategory; internalTransfer: boolean; originalAmountTtc?: number }
 export interface PersonalFinanceSnapshot {
   person: { id: string; name: string };
   month: string;
@@ -224,6 +231,9 @@ export interface PersonalFinanceSnapshot {
   categories: Array<{ id: PersonalCategory; label: string; kind: "income" | "expense" | "both" }>;
   summary: { balance: number; income: number; expenses: number; net: number; internalTransfers: number };
 }
+
+export interface HouseholdTransaction extends AllocatedTransaction { allocatedAmount: number; allocatedScopes: Array<{ scopeId: string; name: string; amount: number }>; internalTransfer: boolean }
+export interface HouseholdFinanceSnapshot { household: { id: string; name: string }; month: string; members: Array<{ id: string; name: string; income: number; expenses: number; net: number }>; accounts: PlatformAccount[]; transactions: HouseholdTransaction[]; budgets: PersonalBudget[]; categories: Array<{ id: PersonalCategory; label: string; kind: "income" | "expense" | "both" }>; summary: { balance: number; income: number; expenses: number; net: number; internalTransfers: number } }
 
 export interface CategoryBudget {
   category: string;
