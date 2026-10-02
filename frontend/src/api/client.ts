@@ -473,12 +473,22 @@ export async function fetchPortfolio(rootScopeId: string, scopeIds: string[], ho
   return data;
 }
 
-export async function createPortfolioTransfer(input: Omit<import("../types").PortfolioTransfer, "id" | "createdAt">): Promise<import("../types").PortfolioTransfer> {
+export async function createPortfolioTransfer(input: Omit<import("../types").PortfolioTransfer, "id" | "createdAt" | "accountingLines">): Promise<import("../types").PortfolioTransfer> {
   const { data } = await api.post<import("../types").PortfolioTransfer>("/platform/portfolio/transfers", input);
   return data;
 }
 
 export async function deletePortfolioTransfer(id: string): Promise<void> { await api.delete(`/platform/portfolio/transfers/${encodeURIComponent(id)}`); }
+
+export async function savePortfolioAssumptions(input: import("../types").PortfolioAssumptions): Promise<import("../types").PortfolioAssumptions> {
+  const { data } = await api.put<import("../types").PortfolioAssumptions>("/platform/portfolio/assumptions", input); return data;
+}
+
+export async function createPortfolioCommitment(input: Omit<import("../types").PortfolioCommitment, "id" | "createdAt">): Promise<import("../types").PortfolioCommitment> {
+  const { data } = await api.post<import("../types").PortfolioCommitment>("/platform/portfolio/commitments", input); return data;
+}
+
+export async function deletePortfolioCommitment(id: string): Promise<void> { await api.delete(`/platform/portfolio/commitments/${encodeURIComponent(id)}`); }
 
 export async function fetchHouseholdFinance(householdId: string, month: string): Promise<HouseholdFinanceSnapshot> {
   const { data } = await api.get<HouseholdFinanceSnapshot>(`/platform/households/${encodeURIComponent(householdId)}/finance`, { params: { month } });

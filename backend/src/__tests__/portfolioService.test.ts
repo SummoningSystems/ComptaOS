@@ -8,7 +8,7 @@ const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: str
 vi.mock("../services/companiesService.js", () => ({ getCompaniesRoot: () => workspace.root, getActiveCompanyPath: () => workspace.root, loadCompanies: () => workspace.companies, resolveCompanyPath: (company: { path: string }) => path.resolve(workspace.root, company.path) }));
 
 import { createPerson, getPlatformState } from "../services/platformService.js";
-import { createPortfolioTransfer, getPortfolioSnapshot } from "../services/portfolioService.js";
+import { createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions } from "../services/portfolioService.js";
 import { loadFinanceTransactions, saveTransactionAllocations } from "../services/financeAllocationService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
 
@@ -41,5 +41,23 @@ describe("portfolio transfers and consolidated forecast", () => {
     await createPortfolioTransfer(actor, { kind: "planned", sourceScopeId: personId, destinationScopeId: "entity_default", amount: 250, date: "2026-10-15", label: "Apport", frequency: "once" });
     const group = await getPortfolioSnapshot(actor, personId, 3, [personId, "entity_default"], "2026-10"); const personOnly = await getPortfolioSnapshot(actor, personId, 3, [personId], "2026-10");
     expect(group.forecast[0]).toMatchObject({ transfersIn: 0, transfersOut: 0 }); expect(personOnly.forecast[0].transfersOut).toBe(250);
+  });
+
+  it("gère un transfert partiel intermois avec frais et propose les écritures", async () => {
+    const initial = getPlatformState(); const state = createPerson({ name: "Alice", expectedRevision: initial.revision }); const personId = state.people[0].id; const actor = { id: "local", role: "local" as const };
+    const base = { amount_ht: 0, vat: 0, currency: "EUR", category: "misc", status: "validated" } as const;
+    await fs.writeFile(path.join(workspace.root, "transactions", "out.yaml"), yaml.stringify({ ...base, id: "out", date: "2026-09-30", label: "Prêt filiale", amount_ttc: -102, account: "pro" }));
+    await fs.writeFile(path.join(workspace.root, "transactions", "in.yaml"), yaml.stringify({ ...base, id: "in", date: "2026-10-01", label: "Prêt reçu", amount_ttc: 100, account: "perso" })); invalidateTransactionCache();
+    await saveTransactionAllocations(actor, "2026-10", "default:in", [{ scopeId: personId, amount: 100 }]);
+    const transfer = await createPortfolioTransfer(actor, { kind: "confirmed", treatment: "intercompany_loan", sourceScopeId: "entity_default", destinationScopeId: personId, amount: 100, fee: 2, date: "2026-10-01", label: "Prêt", sourceTransactionKey: "default:out", destinationTransactionKey: "default:in" });
+    expect(transfer.accountingLines.map((line) => line.accountCode)).toEqual(["267000", "168000", "627000"]);
+  });
+
+  it("intègre les engagements et les hypothèses dans trois scénarios", async () => {
+    const initial = getPlatformState(); const state = createPerson({ name: "Alice", expectedRevision: initial.revision }); const personId = state.people[0].id; const actor = { id: "local", role: "local" as const };
+    createPortfolioCommitment(actor, { scopeId: personId, kind: "investment", label: "Machine", amount: 500, dueDate: "2026-10-15", frequency: "once" });
+    savePortfolioAssumptions(actor, { prudent: { revenueMultiplier: 0, expenseMultiplier: 1.2, safetyBuffer: 100 }, probable: { revenueMultiplier: 1, expenseMultiplier: 1, safetyBuffer: 0 }, optimistic: { revenueMultiplier: 1.2, expenseMultiplier: .9, safetyBuffer: 0 } });
+    const snapshot = await getPortfolioSnapshot(actor, personId, 3, [personId], "2026-10");
+    expect(snapshot.forecasts.prudent[0].expenses).toBe(600); expect(snapshot.timeline.some((item) => item.label === "Machine")).toBe(true); expect(snapshot.assumptions.prudent.safetyBuffer).toBe(100);
   });
 });

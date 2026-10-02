@@ -237,9 +237,19 @@ export interface PersonalFinanceSnapshot {
 
 export interface HouseholdTransaction extends AllocatedTransaction { allocatedAmount: number; allocatedScopes: Array<{ scopeId: string; name: string; amount: number }>; internalTransfer: boolean }
 export interface HouseholdFinanceSnapshot { household: { id: string; name: string }; month: string; members: Array<{ id: string; name: string; income: number; expenses: number; net: number }>; accounts: PlatformAccount[]; transactions: HouseholdTransaction[]; budgets: PersonalBudget[]; categories: Array<{ id: PersonalCategory; label: string; kind: "income" | "expense" | "both" }>; summary: { balance: number; income: number; expenses: number; net: number; internalTransfers: number } }
-export interface PortfolioTransfer { id: string; kind: "confirmed" | "planned"; sourceScopeId: string; destinationScopeId: string; amount: number; date: string; label: string; sourceTransactionKey?: string; destinationTransactionKey?: string; frequency?: "once" | "monthly"; endDate?: string; createdAt: string }
-export interface ConsolidatedForecastMonth { month: string; openingBalance: number; income: number; expenses: number; transfersIn: number; transfersOut: number; closingBalance: number; recurringItems: Array<{ scopeId: string; label: string; amount: number }> }
-export interface PortfolioSnapshot { rootScopeId: string; scopes: FinanceScope[]; suggestedScopeIds: string[]; selectedScopeIds: string[]; balance: number; averageIncome: number; averageExpenses: number; transfers: PortfolioTransfer[]; transferCandidates: AllocatedTransaction[]; forecast: ConsolidatedForecastMonth[] }
+export type TransferTreatment = "internal_transfer" | "capital_contribution" | "shareholder_current_account" | "intercompany_loan" | "dividend" | "reimbursement";
+export type ForecastScenario = "prudent" | "probable" | "optimistic";
+export type CommitmentKind = "supplier_invoice" | "tax" | "loan_payment" | "investment" | "other";
+export interface AccountingLine { scopeId: string; accountCode: string; label: string; debit: number; credit: number }
+export interface PortfolioTransfer { id: string; kind: "confirmed" | "planned"; sourceScopeId: string; destinationScopeId: string; amount: number; fee?: number; date: string; label: string; treatment: TransferTreatment; sourceTransactionKey?: string; destinationTransactionKey?: string; frequency?: "once" | "monthly"; endDate?: string; accountingLines: AccountingLine[]; createdAt: string }
+export interface PortfolioCommitment { id: string; scopeId: string; kind: CommitmentKind; label: string; amount: number; dueDate: string; frequency: "once" | "monthly" | "quarterly" | "annual"; endDate?: string; createdAt: string }
+export interface ScenarioAssumption { revenueMultiplier: number; expenseMultiplier: number; safetyBuffer: number }
+export type PortfolioAssumptions = Record<ForecastScenario, ScenarioAssumption>;
+export interface ForecastItem { scopeId: string; kind: string; label: string; amount: number; date: string }
+export interface ConsolidatedForecastMonth { month: string; openingBalance: number; income: number; expenses: number; transfersIn: number; transfersOut: number; closingBalance: number; items: ForecastItem[] }
+export interface PortfolioPosition { scopeId: string; name: string; balance: number; vatReserve: number; commitments90Days: number; available: number }
+export interface OwnershipPosition { scopeId: string; name: string; ownershipPercent: number; minorityPercent: number; balance: number; groupShare: number; minorityShare: number }
+export interface PortfolioSnapshot { rootScopeId: string; scopes: FinanceScope[]; suggestedScopeIds: string[]; selectedScopeIds: string[]; balance: number; averageIncome: number; averageExpenses: number; transfers: PortfolioTransfer[]; commitments: PortfolioCommitment[]; assumptions: PortfolioAssumptions; transferCandidates: AllocatedTransaction[]; forecasts: Record<ForecastScenario, ConsolidatedForecastMonth[]>; forecast: ConsolidatedForecastMonth[]; positions: PortfolioPosition[]; timeline: ForecastItem[]; ownership: OwnershipPosition[]; consolidation: { grossBalance: number; groupShareBalance: number; minorityShareBalance: number; eliminatedTransfers: number; eliminatedAmount: number; reciprocalAccounts: Array<{ from: string; to: string; treatment: TransferTreatment; amount: number }> } }
 
 export interface CategoryBudget {
   category: string;
