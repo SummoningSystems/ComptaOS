@@ -28,7 +28,7 @@ describe("financial allocation and household consolidation", () => {
     const person = createPerson({ name: "Alice", expectedRevision: initial.revision });
     const household = createHousehold({ name: "Foyer Alice", expectedRevision: person.revision });
     createRelation({ fromId: person.people[0].id, toId: household.households[0].id, type: "member", expectedRevision: household.revision });
-    const actor = { id: "local", role: "local" };
+    const actor = { id: "local", role: "local" as const };
     saveAccountAssignment(initial.accounts[0].id, { usage: "mixed" }, actor);
     const before = await getFinanceAllocationSnapshot(actor, "2026-10");
     expect(before.unassignedCount).toBe(2);
