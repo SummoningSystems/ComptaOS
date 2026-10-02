@@ -313,7 +313,7 @@ export default function App() {
       <div className="flex items-center gap-3 px-4 h-10 bg-vscode-panel border-b border-vscode-border shrink-0 select-none">
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
-          {activeTab?.type === "personal" ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Espace personnel</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}
+          {activeTab?.type === "personal" ? <span className="rounded border border-blue-700 bg-blue-950/30 px-2 py-0.5 text-xs text-blue-300">Comptabilité personnelle</span> : activeTab?.type === "household" ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Comptabilité du foyer</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}
           <button onClick={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} className="rounded border border-vscode-border px-2 py-0.5 text-xs text-vscode-muted transition-colors hover:border-vscode-accent hover:text-vscode-text" title="Personnes, entreprises, comptes et relations">Structure</button>
         </div>
         <div className="flex-1" />

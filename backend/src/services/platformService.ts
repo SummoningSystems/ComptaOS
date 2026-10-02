@@ -20,6 +20,7 @@ export interface PlatformEntity {
   kind: "entity";
   name: string;
   workspaceId: string;
+  legalType?: "company" | "sci" | "holding";
   createdAt: string;
 }
 
@@ -146,8 +147,11 @@ export function getPlatformState(): PlatformState {
   for (const company of loadCompanies()) {
     const entityId = `entity_${company.id}`;
     if (!state.entities.some((entity) => entity.id === entityId)) {
-      state.entities.push({ id: entityId, kind: "entity", name: company.name, workspaceId: company.id, createdAt: company.createdAt });
+      state.entities.push({ id: entityId, kind: "entity", name: company.name, workspaceId: company.id, legalType: company.legalType, createdAt: company.createdAt });
       changed = true;
+    } else {
+      const entity = state.entities.find((item) => item.id === entityId)!;
+      if (entity.name !== company.name || entity.legalType !== company.legalType) { entity.name = company.name; entity.legalType = company.legalType; changed = true; }
     }
 
     const companyPath = safeCompanyPath(company.path);

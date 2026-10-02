@@ -52,9 +52,10 @@ export async function companiesRoutes(app: FastifyInstance) {
   app.post("/", async (req, reply) => {
     const actor = actorContext.getStore();
     if (actor && !actorHasGlobalAccess(actor)) return reply.status(403).send({ error: "Droits administrateur requis." });
-    const { name } = req.body as { name: string };
+    const { name, legalType } = req.body as { name: string; legalType?: "company" | "sci" | "holding" };
     if (!name?.trim()) return reply.status(400).send({ error: "Nom requis" });
-    const company = createCompany(name.trim());
+    if (legalType && !["company", "sci", "holding"].includes(legalType)) return reply.status(400).send({ error: "Type de structure invalide" });
+    const company = createCompany(name.trim(), legalType);
     return reply.status(201).send(company);
   });
 }

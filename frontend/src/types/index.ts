@@ -198,6 +198,7 @@ export interface AiConfigStatus {
 export interface Company {
   id: string;
   kind?: "business" | "household" | "ecosystem";
+  legalType?: "company" | "sci" | "holding";
   name: string;
   path: string;
   createdAt: string;
@@ -206,13 +207,14 @@ export interface Company {
 export type PlatformRelationType = "family" | "spouse" | "parent" | "child" | "member" | "accountant" | "advisor" | "owner" | "director" | "employee" | "beneficiary" | "shareholder" | "subsidiary" | "management" | "holder" | "uses" | "other";
 export interface PlatformPerson { id: string; kind: "person"; name: string; profile: "individual" | "professional"; notes?: string; createdAt: string }
 export interface PlatformHousehold { id: string; kind: "household"; name: string; notes?: string; createdAt: string }
-export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; createdAt: string }
+export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; legalType?: "company" | "sci" | "holding"; createdAt: string }
 export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
 export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; source: "manual" | "workspace"; createdAt: string }
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
 export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; households: PlatformHousehold[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
 export type PlatformLayout = Record<string, { x: number; y: number }>;
+export interface AccountingDossier { scopeId: string; name: string; scopeKind: "person" | "household" | "entity"; mode: "personal" | "household" | "full"; workspaceId?: string; legalType?: "company" | "sci" | "holding"; created: boolean; createdAt?: string; features: string[] }
 
 export type AccountUsage = "personal" | "business" | "shared" | "mixed";
 export interface FinanceAllocation { scopeId: string; amount: number }

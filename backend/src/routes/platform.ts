@@ -6,6 +6,7 @@ import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory
 import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocation, saveTransactionAllocations, type AccountUsage, type FinanceAllocation } from "../services/financeAllocationService.js";
 import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
 import { getPlatformLayout, savePlatformLayout, type PlatformLayout } from "../services/platformLayoutService.js";
+import { ensureAccountingDossier, getAccountingDossiers } from "../services/accountingDossierService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
@@ -41,6 +42,13 @@ export async function platformRoutes(app: FastifyInstance) {
 
   app.put("/layout", async (req, reply) => {
     try { return savePlatformLayout(actor(), (req.body as { positions?: PlatformLayout }).positions ?? {}); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.get("/dossiers", async () => getAccountingDossiers(actor()));
+
+  app.post("/dossiers/:scopeId", async (req, reply) => {
+    try { const { scopeId } = req.params as { scopeId: string }; return reply.status(201).send(ensureAccountingDossier(scopeId, actor())); }
     catch (error) { return sendError(reply, error); }
   });
 

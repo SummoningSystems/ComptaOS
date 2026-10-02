@@ -27,6 +27,7 @@ import {
   AccountUsage,
   HouseholdFinanceSnapshot,
   PlatformLayout,
+  AccountingDossier,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -409,8 +410,18 @@ export async function setActiveCompanyApi(companyId: string): Promise<void> {
   await api.put("/companies/active", { companyId });
 }
 
-export async function createCompanyApi(name: string): Promise<Company> {
-  const { data } = await api.post<Company>("/companies", { name });
+export async function createCompanyApi(name: string, legalType?: "company" | "sci" | "holding"): Promise<Company> {
+  const { data } = await api.post<Company>("/companies", { name, legalType });
+  return data;
+}
+
+export async function fetchAccountingDossiers(): Promise<AccountingDossier[]> {
+  const { data } = await api.get<AccountingDossier[]>("/platform/dossiers");
+  return data;
+}
+
+export async function ensureAccountingDossier(scopeId: string): Promise<AccountingDossier> {
+  const { data } = await api.post<AccountingDossier>(`/platform/dossiers/${encodeURIComponent(scopeId)}`);
   return data;
 }
 

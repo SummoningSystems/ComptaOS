@@ -11,6 +11,7 @@ export interface Company {
   id: string;
   /** Compatibilité avec les registres créés par l'ancienne branche expérimentale. */
   kind?: "business" | "household" | "ecosystem";
+  legalType?: "company" | "sci" | "holding";
   ecosystemId?: string;
   memberIds?: string[];
   name: string;
@@ -120,7 +121,7 @@ export function ensureDefaultCompany(): void {
 }
 
 /** Crée une nouvelle entreprise avec son arborescence de dossiers. */
-export function createCompany(name: string): Company {
+export function createCompany(name: string, legalType: Company["legalType"] = "company"): Company {
   ensureDefaultCompany();
 
   const id = `co_${Date.now().toString(36)}`;
@@ -133,6 +134,8 @@ export function createCompany(name: string): Company {
 
   const company: Company = {
     id,
+    kind: "business",
+    legalType,
     name,
     path: companyRelPath,
     createdAt: new Date().toISOString(),
