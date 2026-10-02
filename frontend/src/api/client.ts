@@ -15,6 +15,8 @@ import {
   CategoryDefinition,
   Company,
   CompanyProfile,
+  PlatformState,
+  PlatformRelationType,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -399,6 +401,27 @@ export async function setActiveCompanyApi(companyId: string): Promise<void> {
 
 export async function createCompanyApi(name: string): Promise<Company> {
   const { data } = await api.post<Company>("/companies", { name });
+  return data;
+}
+
+// ── Structure financière multi-personnes ───────────────────────────────────
+export async function fetchPlatformState(): Promise<PlatformState> {
+  const { data } = await api.get<PlatformState>("/platform");
+  return data;
+}
+
+export async function createPlatformPerson(input: { name: string; profile: "individual" | "professional"; notes?: string; expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.post<PlatformState>("/platform/people", input);
+  return data;
+}
+
+export async function createPlatformRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.post<PlatformState>("/platform/relations", input);
+  return data;
+}
+
+export async function deletePlatformRelation(id: string, expectedRevision: number): Promise<PlatformState> {
+  const { data } = await api.delete<PlatformState>(`/platform/relations/${encodeURIComponent(id)}`, { params: { expectedRevision } });
   return data;
 }
 

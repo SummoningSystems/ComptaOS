@@ -112,7 +112,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+export type TabType = "editor" | "dashboard" | "structure" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
 
 export interface Quote {
   id: string;
@@ -201,6 +201,13 @@ export interface Company {
   path: string;
   createdAt: string;
 }
+
+export type PlatformRelationType = "family" | "spouse" | "parent" | "child" | "accountant" | "advisor" | "owner" | "director" | "employee" | "beneficiary" | "shareholder" | "subsidiary" | "management" | "holder" | "uses" | "other";
+export interface PlatformPerson { id: string; kind: "person"; name: string; profile: "individual" | "professional"; notes?: string; createdAt: string }
+export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; createdAt: string }
+export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
+export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; source: "manual" | "workspace"; createdAt: string }
+export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; updatedAt: string }
 
 export interface CategoryBudget {
   category: string;

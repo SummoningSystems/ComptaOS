@@ -44,6 +44,7 @@ const PricingView = lazy(() => import("./components/Pricing/PricingView").then((
 const BankingView = lazy(() => import("./components/Banking/BankingView").then((m) => ({ default: m.BankingView })));
 const UsersView = lazy(() => import("./components/Auth/UsersView").then((m) => ({ default: m.UsersView })));
 const HrView = lazy(() => import("./components/Hr/HrView").then((m) => ({ default: m.HrView })));
+const StructureView = lazy(() => import("./components/Platform/StructureView").then((m) => ({ default: m.StructureView })));
 
 function ViewLoading() {
   return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de la vue…</div>;
@@ -51,6 +52,7 @@ function ViewLoading() {
 
 const TAB_LABELS: Record<TabType, string> = {
   dashboard:    "Dashboard",
+  structure:    "Structure financière",
   editor:       "Éditeur",
   import:       "Import",
   transactions: "Transactions",
@@ -112,6 +114,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
   return (
     <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
+      {type === "structure"    && <StructureView />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
@@ -299,6 +302,7 @@ export default function App() {
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
           <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />
+          <button onClick={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} className="rounded border border-vscode-border px-2 py-0.5 text-xs text-vscode-muted transition-colors hover:border-vscode-accent hover:text-vscode-text" title="Personnes, entreprises, comptes et relations">Structure</button>
         </div>
         <div className="flex-1" />
         {/* Actions fixes */}
