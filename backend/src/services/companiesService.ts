@@ -8,6 +8,10 @@ const ACTIVE_FILE = join(ROOT, "_active.json");
 
 export interface Company {
   id: string;
+  /** Compatibilité avec les registres créés par l'ancienne branche expérimentale. */
+  kind?: "business" | "household" | "ecosystem";
+  ecosystemId?: string;
+  memberIds?: string[];
   name: string;
   /** Chemin relatif depuis ROOT vers le dossier de l'entreprise (ex: "." ou "companies/co_abc123") */
   path: string;
@@ -24,7 +28,10 @@ export function getCompaniesRoot(): string {
 export function loadCompanies(): Company[] {
   if (!existsSync(COMPANIES_FILE)) return [];
   try {
-    return JSON.parse(readFileSync(COMPANIES_FILE, "utf-8")) as Company[];
+    const entries = JSON.parse(readFileSync(COMPANIES_FILE, "utf-8")) as Company[];
+    return Array.isArray(entries)
+      ? entries.filter((entry) => entry?.kind !== "ecosystem" && entry?.kind !== "household")
+      : [];
   } catch {
     return [];
   }
@@ -32,7 +39,16 @@ export function loadCompanies(): Company[] {
 
 function saveCompanies(companies: Company[]): void {
   if (!existsSync(ROOT)) mkdirSync(ROOT, { recursive: true });
-  atomicWriteFileSync(COMPANIES_FILE, JSON.stringify(companies, null, 2));
+  let metadataEntries: Company[] = [];
+  if (existsSync(COMPANIES_FILE)) {
+    try {
+      const entries = JSON.parse(readFileSync(COMPANIES_FILE, "utf-8")) as Company[];
+      metadataEntries = Array.isArray(entries)
+        ? entries.filter((entry) => entry?.kind === "ecosystem" || entry?.kind === "household")
+        : [];
+    } catch { /* le prochain enregistrement répare le registre */ }
+  }
+  atomicWriteFileSync(COMPANIES_FILE, JSON.stringify([...companies, ...metadataEntries], null, 2));
 }
 
 export function getActiveCompanyId(): string | null {

@@ -197,6 +197,7 @@ export interface AiConfigStatus {
 
 export interface Company {
   id: string;
+  kind?: "business" | "household" | "ecosystem";
   name: string;
   path: string;
   createdAt: string;
