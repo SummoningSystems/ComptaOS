@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { createPlatformHousehold, createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, fetchPlatformState, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPlatformHousehold, createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, fetchPlatformLayout, fetchPlatformState, savePlatformLayout, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
 import { fetchUsers, type AuthUser } from "../../api/auth";
-import type { PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformHousehold, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
+import type { PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformHousehold, PlatformLayout, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 
 type Node = PlatformPerson | PlatformHousehold | PlatformEntity | PlatformAccount;
@@ -28,13 +28,6 @@ function NodeCard({ node, selected, dimmed, onSelect }: { node: Node; selected: 
   );
 }
 
-const graphColumns = [
-  { kind: "person", label: "PERSONNES" },
-  { kind: "household", label: "FOYERS" },
-  { kind: "entity", label: "ENTREPRISES ET STRUCTURES" },
-  { kind: "account", label: "COMPTES BANCAIRES" },
-] as const;
-
 function relationAppearance(type: PlatformRelationType): { color: string; dash?: string } {
   if (["family", "spouse", "parent", "child", "member", "beneficiary"].includes(type)) return { color: "#c084fc" };
   if (["owner", "shareholder", "subsidiary"].includes(type)) return { color: "#22d3ee" };
@@ -43,52 +36,86 @@ function relationAppearance(type: PlatformRelationType): { color: string; dash?:
   return { color: "#94a3b8", dash: "4 4" };
 }
 
-export function StructureGraph({ nodes, state, selectedId, onSelect }: { nodes: Node[]; state: PlatformState; selectedId: string | null; onSelect: (id: string | null) => void }) {
-  const markerId = useId().replace(/:/g, "");
-  const cardWidth = 280;
-  const columnGap = 76;
-  const rowGap = 112;
-  const left = 28;
-  const top = 54;
-  const positions = new Map<string, { x: number; y: number }>();
-  graphColumns.forEach((column, columnIndex) => {
-    nodes.filter((node) => node.kind === column.kind).forEach((node, rowIndex) => {
-      positions.set(node.id, { x: left + columnIndex * (cardWidth + columnGap), y: top + rowIndex * rowGap });
-    });
+const CARD_WIDTH = 250;
+const CARD_HEIGHT = 76;
+const CANVAS_WIDTH = 1800;
+const CANVAS_HEIGHT = 1100;
+const EMPTY_LAYOUT: PlatformLayout = {};
+
+function organicLayout(nodes: Node[], state: PlatformState): PlatformLayout {
+  const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
+  const positions: PlatformLayout = {};
+  nodes.forEach((node, index) => {
+    const angle = (index / Math.max(1, nodes.length)) * Math.PI * 2 - Math.PI / 2;
+    const radius = 230 + (index % 3) * 85;
+    positions[node.id] = { x: center.x + Math.cos(angle) * radius - CARD_WIDTH / 2, y: center.y + Math.sin(angle) * radius - CARD_HEIGHT / 2 };
   });
-  const maxRows = Math.max(1, ...graphColumns.map((column) => nodes.filter((node) => node.kind === column.kind).length));
-  const width = left * 2 + cardWidth * graphColumns.length + columnGap * (graphColumns.length - 1);
-  const height = Math.max(330, top + maxRows * rowGap + 30);
+  for (let iteration = 0; iteration < 180; iteration += 1) {
+    const forces = new Map(nodes.map((node) => [node.id, { x: 0, y: 0 }]));
+    for (let a = 0; a < nodes.length; a += 1) for (let b = a + 1; b < nodes.length; b += 1) {
+      const pa = positions[nodes[a].id]; const pb = positions[nodes[b].id];
+      const dx = pa.x - pb.x || .1; const dy = pa.y - pb.y || .1; const distance2 = Math.max(1200, dx * dx + dy * dy); const strength = 52000 / distance2;
+      forces.get(nodes[a].id)!.x += dx * strength; forces.get(nodes[a].id)!.y += dy * strength;
+      forces.get(nodes[b].id)!.x -= dx * strength; forces.get(nodes[b].id)!.y -= dy * strength;
+    }
+    for (const relation of state.relations) {
+      const from = positions[relation.fromId]; const to = positions[relation.toId]; if (!from || !to) continue;
+      const dx = to.x - from.x; const dy = to.y - from.y; const distance = Math.max(1, Math.hypot(dx, dy)); const pull = (distance - 310) * .012;
+      forces.get(relation.fromId)!.x += dx / distance * pull; forces.get(relation.fromId)!.y += dy / distance * pull;
+      forces.get(relation.toId)!.x -= dx / distance * pull; forces.get(relation.toId)!.y -= dy / distance * pull;
+    }
+    for (const node of nodes) {
+      const position = positions[node.id]; const force = forces.get(node.id)!;
+      position.x = Math.max(30, Math.min(CANVAS_WIDTH - CARD_WIDTH - 30, position.x + force.x * .12 + (center.x - position.x) * .0015));
+      position.y = Math.max(30, Math.min(CANVAS_HEIGHT - CARD_HEIGHT - 30, position.y + force.y * .12 + (center.y - position.y) * .0015));
+    }
+  }
+  return positions;
+}
+
+export function StructureGraph({ nodes, state, selectedId, onSelect, initialPositions = EMPTY_LAYOUT, onPositionsChange }: { nodes: Node[]; state: PlatformState; selectedId: string | null; onSelect: (id: string | null) => void; initialPositions?: PlatformLayout; onPositionsChange?: (positions: PlatformLayout) => void }) {
+  const markerId = useId().replace(/:/g, "");
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const suppressClick = useRef(false);
+  const generated = useMemo(() => organicLayout(nodes, state), [nodes, state.relations]);
+  const [positions, setPositions] = useState<PlatformLayout>(() => Object.fromEntries(nodes.map((node) => [node.id, initialPositions[node.id] ?? generated[node.id]])));
+  const [view, setView] = useState({ x: -430, y: -245, zoom: .82 });
+  const drag = useRef<{ mode: "node" | "canvas"; id?: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  useEffect(() => { setPositions((current) => Object.fromEntries(nodes.map((node) => [node.id, current[node.id] ?? initialPositions[node.id] ?? generated[node.id]]))); }, [nodes, initialPositions, generated]);
   const linked = new Set<string>(selectedId ? [selectedId] : []);
   if (selectedId) state.relations.filter((relation) => relation.fromId === selectedId || relation.toId === selectedId).forEach((relation) => { linked.add(relation.fromId); linked.add(relation.toId); });
 
+  function fit(nextPositions = positions) {
+    if (!nodes.length || !viewportRef.current) return;
+    const values = nodes.map((node) => nextPositions[node.id]).filter(Boolean); const minX = Math.min(...values.map((p) => p.x)); const maxX = Math.max(...values.map((p) => p.x + CARD_WIDTH)); const minY = Math.min(...values.map((p) => p.y)); const maxY = Math.max(...values.map((p) => p.y + CARD_HEIGHT));
+    const rect = viewportRef.current.getBoundingClientRect(); const zoom = Math.max(.35, Math.min(1.35, Math.min((rect.width - 90) / Math.max(1, maxX - minX), (rect.height - 90) / Math.max(1, maxY - minY))));
+    setView({ zoom, x: (rect.width - (minX + maxX) * zoom) / 2, y: (rect.height - (minY + maxY) * zoom) / 2 });
+  }
+  function reorganize() { const next = organicLayout(nodes, state); setPositions(next); onPositionsChange?.(next); window.setTimeout(() => fit(next), 0); }
+  function pointerMove(event: React.PointerEvent) {
+    if (!drag.current) return;
+    if (Math.abs(event.clientX - drag.current.startX) + Math.abs(event.clientY - drag.current.startY) > 4) suppressClick.current = drag.current.mode === "node";
+    if (drag.current.mode === "canvas") setView((current) => ({ ...current, x: drag.current!.originX + event.clientX - drag.current!.startX, y: drag.current!.originY + event.clientY - drag.current!.startY }));
+    else setPositions((current) => ({ ...current, [drag.current!.id!]: { x: drag.current!.originX + (event.clientX - drag.current!.startX) / view.zoom, y: drag.current!.originY + (event.clientY - drag.current!.startY) / view.zoom } }));
+  }
+  function pointerUp() { if (drag.current?.mode === "node") onPositionsChange?.(positions); drag.current = null; }
+
   return (
     <div>
-      <div className="overflow-auto rounded border border-vscode-border bg-[radial-gradient(circle,_var(--vscode-border)_0.7px,_transparent_0.8px)] bg-[length:18px_18px]">
-        <div className="relative" style={{ width, height }}>
-          <svg className="pointer-events-none absolute inset-0" width={width} height={height} aria-label="Carte des liens entre les personnes, entreprises et comptes">
+      <div className="mb-3 flex flex-wrap items-center gap-2"><button onClick={() => setView((current) => ({ ...current, zoom: Math.min(1.8, current.zoom * 1.18) }))} className="rounded border border-vscode-border px-3 py-1 text-xs">＋</button><button onClick={() => setView((current) => ({ ...current, zoom: Math.max(.25, current.zoom / 1.18) }))} className="rounded border border-vscode-border px-3 py-1 text-xs">−</button><button onClick={() => fit()} className="rounded border border-vscode-border px-3 py-1 text-xs">Recentrer</button><button onClick={reorganize} className="rounded border border-vscode-accent px-3 py-1 text-xs text-vscode-accent">Réorganiser automatiquement</button><span className="ml-auto text-[10px] text-vscode-muted">Glisser le fond pour naviguer · molette pour zoomer · glisser les cartes pour les ranger</span></div>
+      <div ref={viewportRef} className="relative h-[620px] cursor-grab touch-none overflow-hidden rounded border border-vscode-border bg-[radial-gradient(circle,_var(--vscode-border)_0.7px,_transparent_0.8px)] bg-[length:18px_18px] active:cursor-grabbing" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { mode: "canvas", startX: event.clientX, startY: event.clientY, originX: view.x, originY: view.y }; }} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={(event) => { event.preventDefault(); const rect = viewportRef.current!.getBoundingClientRect(); const factor = event.deltaY < 0 ? 1.1 : .9; const zoom = Math.max(.25, Math.min(1.8, view.zoom * factor)); const mouseX = event.clientX - rect.left; const mouseY = event.clientY - rect.top; setView({ zoom, x: mouseX - (mouseX - view.x) * zoom / view.zoom, y: mouseY - (mouseY - view.y) * zoom / view.zoom }); }}>
+        <div className="absolute left-0 top-0 origin-top-left" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT, transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
+          <svg className="pointer-events-none absolute inset-0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} aria-label="Carte des liens entre les personnes, entreprises et comptes">
             <defs>
               {Object.entries({ personal: "#c084fc", ownership: "#22d3ee", account: "#38bdf8", professional: "#f59e0b", other: "#94a3b8" }).map(([key, color]) => <marker key={key} id={`${markerId}-${key}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill={color} /></marker>)}
             </defs>
             {state.relations.map((relation, relationIndex) => {
-              const from = positions.get(relation.fromId); const to = positions.get(relation.toId);
+              const from = positions[relation.fromId]; const to = positions[relation.toId];
               if (!from || !to) return null;
               const appearance = relationAppearance(relation.type);
               const active = !selectedId || relation.fromId === selectedId || relation.toId === selectedId;
-              const forward = from.x <= to.x;
-              const sameColumn = Math.abs(from.x - to.x) < 10;
               const reversePair = state.relations.some((candidate) => candidate.id !== relation.id && candidate.fromId === relation.toId && candidate.toId === relation.fromId);
-              let path: string; let labelX: number; let labelY: number;
-              if (sameColumn) {
-                const side = from.x + cardWidth + 34 + (relationIndex % 2) * 18;
-                path = `M ${from.x + cardWidth} ${from.y + 36} C ${side} ${from.y + 36}, ${side} ${to.y + 36}, ${to.x + cardWidth} ${to.y + 36}`;
-                labelX = side + 3; labelY = (from.y + to.y) / 2 + 30;
-              } else {
-                const startX = from.x + (forward ? cardWidth : 0); const endX = to.x + (forward ? 0 : cardWidth);
-                const curve = reversePair ? (relation.fromId < relation.toId ? -24 : 24) : 0;
-                path = `M ${startX} ${from.y + 36} C ${startX + (forward ? 58 : -58)} ${from.y + 36 + curve}, ${endX + (forward ? -58 : 58)} ${to.y + 36 + curve}, ${endX} ${to.y + 36}`;
-                labelX = (startX + endX) / 2; labelY = (from.y + to.y) / 2 + 31 + curve;
-              }
+              const fromCenter = { x: from.x + CARD_WIDTH / 2, y: from.y + CARD_HEIGHT / 2 }; const toCenter = { x: to.x + CARD_WIDTH / 2, y: to.y + CARD_HEIGHT / 2 }; const dx = toCenter.x - fromCenter.x; const dy = toCenter.y - fromCenter.y; const distance = Math.max(1, Math.hypot(dx, dy)); const ux = dx / distance; const uy = dy / distance; const boundaryDistance = Math.min(Math.abs((CARD_WIDTH / 2) / (ux || .0001)), Math.abs((CARD_HEIGHT / 2) / (uy || .0001))); const startX = fromCenter.x + ux * boundaryDistance; const startY = fromCenter.y + uy * boundaryDistance; const endX = toCenter.x - ux * (boundaryDistance + 5); const endY = toCenter.y - uy * (boundaryDistance + 5); const curve = reversePair ? (relation.fromId < relation.toId ? -38 : 38) : ((relationIndex % 3) - 1) * 10; const normalX = -uy * curve; const normalY = ux * curve; const controlX = (startX + endX) / 2 + normalX; const controlY = (startY + endY) / 2 + normalY; const path = `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`; const labelX = controlX; const labelY = controlY - 7;
               const markerKey = ["family", "spouse", "parent", "child", "member", "beneficiary"].includes(relation.type) ? "personal" : ["owner", "shareholder", "subsidiary"].includes(relation.type) ? "ownership" : ["holder", "uses"].includes(relation.type) ? "account" : ["accountant", "advisor", "director", "employee", "management"].includes(relation.type) ? "professional" : "other";
               return <g key={relation.id} opacity={active ? 1 : 0.18}>
                 <path d={path} fill="none" stroke={appearance.color} strokeWidth={active && selectedId ? 2.6 : 1.7} strokeDasharray={appearance.dash} markerEnd={`url(#${markerId}-${markerKey})`}><title>{`${relationLabels[relation.type]} : ${nodes.find((node) => node.id === relation.fromId)?.name} → ${nodes.find((node) => node.id === relation.toId)?.name}`}</title></path>
@@ -96,10 +123,9 @@ export function StructureGraph({ nodes, state, selectedId, onSelect }: { nodes: 
               </g>;
             })}
           </svg>
-          {graphColumns.map((column, index) => <div key={column.kind} className="absolute top-5 text-[10px] tracking-[0.16em] text-vscode-muted" style={{ left: left + index * (cardWidth + columnGap) }}>{column.label}</div>)}
           {nodes.map((node) => {
-            const position = positions.get(node.id)!;
-            return <div key={node.id} className="absolute" style={{ left: position.x, top: position.y, width: cardWidth }}><NodeCard node={node} selected={node.id === selectedId} dimmed={Boolean(selectedId && !linked.has(node.id))} onSelect={() => onSelect(node.id === selectedId ? null : node.id)} /></div>;
+            const position = positions[node.id]; if (!position) return null;
+            return <div key={node.id} className="absolute cursor-move select-none" style={{ left: position.x, top: position.y, width: CARD_WIDTH }} onPointerDown={(event) => { event.stopPropagation(); suppressClick.current = false; event.currentTarget.setPointerCapture(event.pointerId); drag.current = { mode: "node", id: node.id, startX: event.clientX, startY: event.clientY, originX: position.x, originY: position.y }; }} onPointerMove={pointerMove} onPointerUp={(event) => { event.stopPropagation(); pointerUp(); }} onPointerCancel={pointerUp}><NodeCard node={node} selected={node.id === selectedId} dimmed={Boolean(selectedId && !linked.has(node.id))} onSelect={() => { if (suppressClick.current) { suppressClick.current = false; return; } onSelect(node.id === selectedId ? null : node.id); }} /></div>;
           })}
         </div>
       </div>
@@ -113,6 +139,7 @@ export function StructureGraph({ nodes, state, selectedId, onSelect }: { nodes: 
 export function StructureView({ currentUser }: { currentUser: AuthUser | null }) {
   const openTab = useAppStore((store) => store.openTab);
   const [state, setState] = useState<PlatformState | null>(null);
+  const [layout, setLayout] = useState<PlatformLayout>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [profile, setProfile] = useState<"individual" | "professional">("individual");
@@ -129,12 +156,13 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
   const [accessRole, setAccessRole] = useState<PlatformAccessRole>("viewer");
   const canAdminister = !currentUser || currentUser.role === "owner" || currentUser.role === "admin";
 
-  useEffect(() => { fetchPlatformState().then(setState).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible")); }, []);
+  useEffect(() => { Promise.all([fetchPlatformState(), fetchPlatformLayout()]).then(([nextState, nextLayout]) => { setState(nextState); setLayout(nextLayout); }).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible")); }, []);
   useEffect(() => { if (canAdminister) fetchUsers().then(setUsers).catch(() => setUsers([])); }, [canAdminister]);
   const nodes = useMemo<Node[]>(() => state ? [...state.people, ...state.households, ...state.entities, ...state.accounts] : [], [state]);
   const selected = nodes.find((node) => node.id === selectedId);
   const relations = state?.relations.filter((relation) => !selectedId || relation.fromId === selectedId || relation.toId === selectedId) ?? [];
   const nodeName = (id: string) => nodes.find((node) => node.id === id)?.name ?? "Élément inconnu";
+  const persistLayout = (positions: PlatformLayout) => { setLayout(positions); void savePlatformLayout(positions).catch((e) => setError(e instanceof Error ? e.message : "Enregistrement de la disposition impossible")); };
 
   async function addPerson() {
     if (!state || !name.trim()) return;
@@ -201,7 +229,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
 
       <main className="grid gap-6 p-8 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded border border-vscode-border bg-black/10 p-5">
-          <StructureGraph nodes={nodes} state={state} selectedId={selectedId} onSelect={setSelectedId} />
+          <StructureGraph nodes={nodes} state={state} selectedId={selectedId} onSelect={setSelectedId} initialPositions={layout} onPositionsChange={persistLayout} />
         </section>
 
         <aside className="space-y-4">

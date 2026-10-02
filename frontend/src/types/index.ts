@@ -212,6 +212,7 @@ export interface PlatformRelation { id: string; fromId: string; toId: string; ty
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
 export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; households: PlatformHousehold[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
+export type PlatformLayout = Record<string, { x: number; y: number }>;
 
 export type AccountUsage = "personal" | "business" | "shared" | "mixed";
 export interface FinanceAllocation { scopeId: string; amount: number }

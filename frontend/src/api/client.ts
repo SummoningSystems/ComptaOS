@@ -26,6 +26,7 @@ import {
   FinanceAllocationSnapshot,
   AccountUsage,
   HouseholdFinanceSnapshot,
+  PlatformLayout,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -416,6 +417,16 @@ export async function createCompanyApi(name: string): Promise<Company> {
 // ── Structure financière multi-personnes ───────────────────────────────────
 export async function fetchPlatformState(): Promise<PlatformState> {
   const { data } = await api.get<PlatformState>("/platform");
+  return data;
+}
+
+export async function fetchPlatformLayout(): Promise<PlatformLayout> {
+  const { data } = await api.get<PlatformLayout>("/platform/layout");
+  return data;
+}
+
+export async function savePlatformLayout(positions: PlatformLayout): Promise<PlatformLayout> {
+  const { data } = await api.put<PlatformLayout>("/platform/layout", { positions });
   return data;
 }
 

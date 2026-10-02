@@ -5,6 +5,7 @@ import { getUserById } from "../services/authService.js";
 import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
 import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocation, saveTransactionAllocations, type AccountUsage, type FinanceAllocation } from "../services/financeAllocationService.js";
 import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
+import { getPlatformLayout, savePlatformLayout, type PlatformLayout } from "../services/platformLayoutService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
@@ -35,6 +36,13 @@ export async function platformRoutes(app: FastifyInstance) {
   };
 
   app.get("/", async () => getVisiblePlatformState(actor()));
+
+  app.get("/layout", async () => getPlatformLayout(actor()));
+
+  app.put("/layout", async (req, reply) => {
+    try { return savePlatformLayout(actor(), (req.body as { positions?: PlatformLayout }).positions ?? {}); }
+    catch (error) { return sendError(reply, error); }
+  });
 
   app.get("/access", async (_req, reply) => requireAdmin(reply) ? getPlatformState().grants : undefined);
 
