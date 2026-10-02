@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { actorHasGlobalAccess, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getVisiblePlatformState, setAccessGrant, updatePerson, type PlatformAccessRole, type PlatformRelationType } from "../services/platformService.js";
+import { actorHasGlobalAccess, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, setAccessGrant, updatePerson, type PlatformAccessRole, type PlatformRelationType } from "../services/platformService.js";
 import { actorContext } from "../services/workspaceContext.js";
 import { getUserById } from "../services/authService.js";
+import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
@@ -14,6 +15,15 @@ export async function platformRoutes(app: FastifyInstance) {
   const requireAdmin = (reply: FastifyReply) => {
     const current = actor();
     if (!actorHasGlobalAccess(current)) { void reply.status(403).send({ error: "Droits administrateur requis." }); return null; }
+    return current;
+  };
+  const requirePersonAccess = (personId: string, reply: FastifyReply, write = false) => {
+    const current = actor();
+    const visible = getVisiblePlatformState(current).people.some((person) => person.id === personId);
+    const access = getScopeAccess(current, personId);
+    if (!visible || (write && !actorHasGlobalAccess(current) && access !== "owner" && access !== "manager")) {
+      void reply.status(403).send({ error: write ? "Droits de gestion requis sur cette personne." : "Cette personne ne vous est pas attribuée." }); return null;
+    }
     return current;
   };
 
@@ -66,5 +76,26 @@ export async function platformRoutes(app: FastifyInstance) {
       const query = req.query as { expectedRevision?: string };
       return deleteRelation(id, query.expectedRevision === undefined ? undefined : Number(query.expectedRevision));
     } catch (error) { return sendError(reply, error); }
+  });
+
+  app.get("/people/:id/finance", async (req, reply) => {
+    const { id } = req.params as { id: string }; const current = requirePersonAccess(id, reply); if (!current) return;
+    try {
+      const query = req.query as { month?: string };
+      const month = /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : new Date().toISOString().slice(0, 7);
+      return await getPersonalFinance(id, month, current);
+    } catch (error) { return sendError(reply, error); }
+  });
+
+  app.patch("/people/:id/finance/category", async (req, reply) => {
+    const { id } = req.params as { id: string }; if (!requirePersonAccess(id, reply, true)) return;
+    try { const input = req.body as { key: string; category: string }; if (!input.key) throw new Error("Transaction requise."); setPersonalTransactionCategory(id, input.key, input.category); return { saved: true }; }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.put("/people/:id/finance/budgets", async (req, reply) => {
+    const { id } = req.params as { id: string }; if (!requirePersonAccess(id, reply, true)) return;
+    try { return savePersonalBudgets(id, req.body as Array<{ category: string; monthlyLimit: number }>); }
+    catch (error) { return sendError(reply, error); }
   });
 }

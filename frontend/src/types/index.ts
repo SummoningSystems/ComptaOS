@@ -112,7 +112,7 @@ export interface Invoice {
   transaction_id?: string;
 }
 
-export type TabType = "editor" | "dashboard" | "structure" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
+export type TabType = "editor" | "dashboard" | "structure" | "personal" | "import" | "transactions" | "ocr" | "reports" | "recurring" | "invoices" | "quotes" | "settings" | "tiers" | "vat" | "budgets" | "spreadsheets" | "history" | "journal" | "alerts" | "closing" | "templates" | "reconcile" | "treasury" | "export" | "profitloss" | "plugins" | "pricing" | "banking" | "users" | "hr";
 
 export interface Quote {
   id: string;
@@ -211,6 +211,19 @@ export interface PlatformRelation { id: string; fromId: string; toId: string; ty
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
 export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
+
+export type PersonalCategory = "personal_income" | "salary_income" | "benefits_income" | "refund_income" | "investment_income" | "housing" | "groceries" | "dining" | "transport" | "health" | "insurance" | "utilities" | "subscriptions" | "leisure" | "shopping" | "education" | "personal_taxes" | "savings" | "family" | "pets" | "personal_misc";
+export interface PersonalBudget { category: PersonalCategory; monthlyLimit: number }
+export interface PersonalTransaction extends Transaction { key: string; sourceWorkspaceId: string; sourceAccountId: string; accountName: string; personalCategory: PersonalCategory; internalTransfer: boolean }
+export interface PersonalFinanceSnapshot {
+  person: { id: string; name: string };
+  month: string;
+  accounts: PlatformAccount[];
+  transactions: PersonalTransaction[];
+  budgets: PersonalBudget[];
+  categories: Array<{ id: PersonalCategory; label: string; kind: "income" | "expense" | "both" }>;
+  summary: { balance: number; income: number; expenses: number; net: number; internalTransfers: number };
+}
 
 export interface CategoryBudget {
   category: string;

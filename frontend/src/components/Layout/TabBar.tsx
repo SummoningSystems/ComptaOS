@@ -6,7 +6,7 @@ const TAB_ICONS: Record<string, string> = {
   dashboard: "▣", editor: "📄", import: "📥", transactions: "📋", ocr: "🔍", reports: "📊",
   recurring: "🔄", invoices: "🧾", quotes: "📋", plugins: "🧩", pricing: "⭐", banking: "🏦",
   settings: "⚙️", tiers: "🏢", vat: "💰", budgets: "🎯", spreadsheets: "🧭", history: "🕐",
-  hr: "👥",
+  hr: "👥", personal: "◯",
 };
 
 export function TabBar() {
@@ -25,7 +25,9 @@ export function TabBar() {
   }, []);
 
   function popOut(tab: Tab) {
-    const url = `${window.location.origin}${window.location.pathname}?view=${tab.type}`;
+    const params = new URLSearchParams({ view: tab.type });
+    if (tab.path) params.set("path", tab.path);
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     window.open(url, `comptaos_${tab.type}`, "popup,width=1400,height=900");
   }
 

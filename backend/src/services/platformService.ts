@@ -153,7 +153,8 @@ export function getPlatformState(): PlatformState {
           const sourceAccountId = String(account.id ?? account.iban ?? account.number);
           const dedupeKey = account.iban?.replace(/\s+/g, "").toUpperCase() ?? `${company.id}:${sourceAccountId}`;
           const accountId = stableId("account", dedupeKey);
-          if (!state.accounts.some((item) => item.id === accountId)) {
+          const existingAccount = state.accounts.find((item) => item.id === accountId);
+          if (!existingAccount) {
             state.accounts.push({
               id: accountId, kind: "account", name: account.name?.trim() || "Compte bancaire",
               currency: account.currency || "EUR", maskedIdentifier: maskIdentifier(account.iban ?? account.number),
@@ -161,6 +162,11 @@ export function getPlatformState(): PlatformState {
               balance: typeof account.balance === "number" ? account.balance : undefined, createdAt: new Date().toISOString(),
             });
             changed = true;
+          } else {
+            const current = { name: account.name?.trim() || existingAccount.name, currency: account.currency || existingAccount.currency, maskedIdentifier: maskIdentifier(account.iban ?? account.number) ?? existingAccount.maskedIdentifier, provider: connection.connectorName ?? existingAccount.provider, balance: typeof account.balance === "number" ? account.balance : existingAccount.balance };
+            if (existingAccount.name !== current.name || existingAccount.currency !== current.currency || existingAccount.maskedIdentifier !== current.maskedIdentifier || existingAccount.provider !== current.provider || existingAccount.balance !== current.balance) {
+              Object.assign(existingAccount, current); changed = true;
+            }
           }
           const relationId = stableId("relation", `${entityId}:uses:${accountId}`);
           if (!state.relations.some((relation) => relation.id === relationId)) {
@@ -261,7 +267,12 @@ export function getVisiblePlatformState(actor: { id: string; role: string }): Pl
   const state = getPlatformState();
   if (actorHasGlobalAccess(actor)) return state;
   const visible = new Set(state.grants.filter((grant) => grant.userId === actor.id).map((grant) => grant.scopeId));
-  for (const relation of state.relations) if (visible.has(relation.fromId) && state.entities.some((entity) => entity.id === relation.fromId) && state.accounts.some((account) => account.id === relation.toId)) visible.add(relation.toId);
+  for (const relation of state.relations) {
+    const fromVisibleScope = visible.has(relation.fromId) && [...state.people, ...state.entities].some((scope) => scope.id === relation.fromId);
+    const toVisibleScope = visible.has(relation.toId) && [...state.people, ...state.entities].some((scope) => scope.id === relation.toId);
+    if (fromVisibleScope && state.accounts.some((account) => account.id === relation.toId)) visible.add(relation.toId);
+    if (toVisibleScope && state.accounts.some((account) => account.id === relation.fromId)) visible.add(relation.fromId);
+  }
   return { ...state, people: state.people.filter((item) => visible.has(item.id)), entities: state.entities.filter((item) => visible.has(item.id)), accounts: state.accounts.filter((item) => visible.has(item.id)), relations: state.relations.filter((item) => visible.has(item.fromId) && visible.has(item.toId)), grants: state.grants.filter((grant) => grant.userId === actor.id) };
 }
 

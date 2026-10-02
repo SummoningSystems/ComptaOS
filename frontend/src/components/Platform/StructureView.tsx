@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, fetchPlatformState, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
 import { fetchUsers, type AuthUser } from "../../api/auth";
 import type { PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
+import { useAppStore } from "../../stores/appStore";
 
 type Node = PlatformPerson | PlatformEntity | PlatformAccount;
 
@@ -109,6 +110,7 @@ export function StructureGraph({ nodes, state, selectedId, onSelect }: { nodes: 
 }
 
 export function StructureView({ currentUser }: { currentUser: AuthUser | null }) {
+  const openTab = useAppStore((store) => store.openTab);
   const [state, setState] = useState<PlatformState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -202,7 +204,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
       </main>
 
       <section className="mx-8 mb-8 rounded border border-vscode-border bg-vscode-panel p-5">
-        <div className="flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">{selected ? selected.name : "Relations de la structure"}</h2><p className="mt-1 text-[11px] text-vscode-muted">{selected?.kind === "person" ? "La comptabilité personnelle détaillée sera ajoutée dans la tranche suivante." : "Sélectionne un élément pour isoler ses relations."}</p></div>{selected?.kind === "entity" && <button disabled={busy} onClick={() => void openEntity(selected)} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Ouvrir l’espace comptable →</button>}</div>
+        <div className="flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">{selected ? selected.name : "Relations de la structure"}</h2><p className="mt-1 text-[11px] text-vscode-muted">{selected?.kind === "person" ? "Ses comptes, mouvements, catégories et budgets personnels restent séparés des entreprises." : "Sélectionne un élément pour isoler ses relations."}</p></div><div className="flex gap-2">{selected?.kind === "person" && <button onClick={() => openTab({ id: `personal:${selected.id}`, title: selected.name, type: "personal", path: `person=${encodeURIComponent(selected.id)}` })} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Ouvrir l’espace personnel →</button>}{selected?.kind === "entity" && <button disabled={busy} onClick={() => void openEntity(selected)} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Ouvrir l’espace comptable →</button>}</div></div>
         <div className="mt-4 grid gap-2 md:grid-cols-2">{relations.map((relation) => <div key={relation.id} className="flex items-center gap-2 rounded border border-vscode-border px-3 py-2 text-xs"><span className="min-w-0 flex-1 truncate">{nodeName(relation.fromId)} <span className="text-vscode-accent">— {relationLabels[relation.type]} →</span> {nodeName(relation.toId)}</span>{canAdminister && relation.source === "manual" && <button title="Supprimer le lien" className="text-vscode-muted hover:text-red-400" onClick={() => state && void deletePlatformRelation(relation.id, state.revision).then(setState).catch((e) => setError(e instanceof Error ? e.message : "Suppression impossible"))}>×</button>}</div>)}{relations.length === 0 && <p className="text-xs text-vscode-muted">Aucun lien à afficher.</p>}</div>
       </section>
     </div>

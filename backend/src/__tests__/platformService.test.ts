@@ -38,6 +38,16 @@ describe("person-centric platform registry", () => {
     expect(await fs.readFile(path.join(workspace.root, "banking", "connections.json"), "utf-8")).toBe(before);
   });
 
+  it("actualise le solde référencé sans toucher aux données bancaires source", async () => {
+    const initial = getPlatformState();
+    expect(initial.accounts[0].balance).toBe(1200);
+    const updatedSource = JSON.stringify([{ connectorName: "Banque test", accounts: [{ id: 7, name: "Compte pro", iban: "FR7612345678901234567890123", currency: "EUR", balance: 1450 }] }]);
+    await fs.writeFile(path.join(workspace.root, "banking", "connections.json"), updatedSource, "utf-8");
+    const updated = getPlatformState();
+    expect(updated.accounts[0].balance).toBe(1450);
+    expect(await fs.readFile(path.join(workspace.root, "banking", "connections.json"), "utf-8")).toBe(updatedSource);
+  });
+
   it("gère plusieurs personnes et leurs liens avec une révision optimiste", () => {
     const initial = getPlatformState();
     const withAlice = createPerson({ name: "Alice", expectedRevision: initial.revision });

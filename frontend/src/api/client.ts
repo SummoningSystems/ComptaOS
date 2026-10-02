@@ -19,6 +19,9 @@ import {
   PlatformRelation,
   PlatformRelationType,
   PlatformAccessRole,
+  PersonalBudget,
+  PersonalCategory,
+  PersonalFinanceSnapshot,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -434,6 +437,20 @@ export async function setPlatformAccess(input: { userId: string; scopeId: string
 
 export async function deletePlatformAccess(id: string, expectedRevision: number): Promise<PlatformState> {
   const { data } = await api.delete<PlatformState>(`/platform/access/${encodeURIComponent(id)}`, { params: { expectedRevision } });
+  return data;
+}
+
+export async function fetchPersonalFinance(personId: string, month: string): Promise<PersonalFinanceSnapshot> {
+  const { data } = await api.get<PersonalFinanceSnapshot>(`/platform/people/${encodeURIComponent(personId)}/finance`, { params: { month } });
+  return data;
+}
+
+export async function savePersonalCategory(personId: string, key: string, category: PersonalCategory): Promise<void> {
+  await api.patch(`/platform/people/${encodeURIComponent(personId)}/finance/category`, { key, category });
+}
+
+export async function savePersonalFinanceBudgets(personId: string, budgets: PersonalBudget[]): Promise<PersonalBudget[]> {
+  const { data } = await api.put<PersonalBudget[]>(`/platform/people/${encodeURIComponent(personId)}/finance/budgets`, budgets);
   return data;
 }
 
