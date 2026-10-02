@@ -19,7 +19,7 @@ if [[ ! -d "$REPO/.git" ]]; then
 else
   cd "$REPO"
   [[ -z "$(git status --porcelain)" ]] || { echo "Dépôt préproduction modifié, déploiement refusé." >&2; exit 1; }
-  git fetch origin "$BRANCH"
+  git fetch origin "$BRANCH:refs/remotes/origin/$BRANCH"
   git switch -C "$BRANCH" "origin/$BRANCH"
 fi
 
