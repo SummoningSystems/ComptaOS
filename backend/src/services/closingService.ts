@@ -12,6 +12,7 @@ export interface MonthlyClosing {
   closedBy: string;
   fingerprint: string;
   transactionCount: number;
+  accountingLineCount?: number;
   reopenedAt?: string;
   reopenedBy?: string;
   reopenReason?: string;
@@ -24,8 +25,11 @@ const stableTransactions = (transactions: Transaction[], month: string) => trans
   .sort((a, b) => a.id.localeCompare(b.id))
   .map(({ id, date, label, amount_ht, vat, amount_ttc, category, account, status, reconciled, justified, invoiceRef, vat_splits, attachment, attachments }) => ({ id, date, label, amount_ht, vat, amount_ttc, category, account, status, reconciled, justified, invoiceRef, vat_splits, attachment, attachments }));
 
-export function closingFingerprint(transactions: Transaction[], month: string): string {
-  return crypto.createHash("sha256").update(JSON.stringify(stableTransactions(transactions, month))).digest("hex");
+type ClosingAccountingLine = { entryDate: string; accountNumber: string; debit: number; credit: number; pieceRef?: string; label?: string };
+
+export function closingFingerprint(transactions: Transaction[], month: string, accountingLines: ClosingAccountingLine[] = []): string {
+  const stableLines = accountingLines.filter((line) => line.entryDate.startsWith(month)).sort((a, b) => `${a.entryDate}:${a.pieceRef ?? ""}:${a.accountNumber}`.localeCompare(`${b.entryDate}:${b.pieceRef ?? ""}:${b.accountNumber}`));
+  return crypto.createHash("sha256").update(JSON.stringify({ transactions: stableTransactions(transactions, month), accountingLines: stableLines })).digest("hex");
 }
 
 export async function loadClosings(): Promise<MonthlyClosing[]> {
@@ -47,12 +51,13 @@ export async function assertMonthOpen(date: string): Promise<void> {
   if (closing) { const error = new Error(`Le mois ${month} est clôturé. Réouvre-le avec un motif avant toute modification.`) as Error & { statusCode?: number }; error.statusCode = 409; throw error; }
 }
 
-export async function closeMonth(month: string, transactions: Transaction[], closedBy = "utilisateur"): Promise<MonthlyClosing> {
+export async function closeMonth(month: string, transactions: Transaction[], closedBy = "utilisateur", accountingLines: ClosingAccountingLine[] = []): Promise<MonthlyClosing> {
   if (!validMonth(month)) throw new Error("Mois invalide");
   const items = await loadClosings();
   if (items.some((item) => item.month === month && item.status === "closed")) throw new Error(`Le mois ${month} est déjà clôturé`);
   const transactionCount = transactions.filter((item) => item.date.startsWith(month)).length;
-  const record: MonthlyClosing = { month, status: "closed", closedAt: new Date().toISOString(), closedBy, fingerprint: closingFingerprint(transactions, month), transactionCount };
+  const accountingLineCount = accountingLines.filter((line) => line.entryDate.startsWith(month)).length;
+  const record: MonthlyClosing = { month, status: "closed", closedAt: new Date().toISOString(), closedBy, fingerprint: closingFingerprint(transactions, month, accountingLines), transactionCount, accountingLineCount };
   await saveClosings([record, ...items]); return record;
 }
 

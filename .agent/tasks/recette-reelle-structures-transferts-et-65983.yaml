@@ -1,0 +1,8 @@
+id: recette-reelle-structures-transferts-et-65983
+title: recette-reelle-structures-transferts-et-rollback
+branch: next/person-centric-platform
+status: active
+started_at: 2026-10-02T18:33:03.0294994Z
+base_commit: bf67cbb5b145e3a9024edc96816644dce41f0620
+tests:
+    result: not_run

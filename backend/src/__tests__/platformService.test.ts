@@ -49,6 +49,16 @@ describe("person-centric platform registry", () => {
     expect(await fs.readFile(path.join(workspace.root, "banking", "connections.json"), "utf-8")).toBe(updatedSource);
   });
 
+  it("préremplit la fiche structure depuis le profil comptable existant sans écraser les champs manuels", async () => {
+    await fs.mkdir(path.join(workspace.root, "settings"), { recursive: true });
+    await fs.writeFile(path.join(workspace.root, "settings", "company_profile.json"), JSON.stringify({ legalForm: "sas", capital: "900", vatRegime: "simplified_ca12" }), "utf-8");
+    const inferred = getPlatformState();
+    expect(inferred.entities.find((entity) => entity.id === "entity_default")).toMatchObject({ legalType: "company", capitalAmount: 900, vatRegime: "simplified_ca12" });
+    const manual = updateEntity("entity_default", { legalType: "holding", capitalAmount: 1200, expectedRevision: inferred.revision });
+    expect(getPlatformState().entities.find((entity) => entity.id === "entity_default")).toMatchObject({ legalType: "holding", capitalAmount: 1200 });
+    expect(manual.entities.find((entity) => entity.id === "entity_default")?.vatRegime).toBe("simplified_ca12");
+  });
+
   it("relie les saisies manuelles et les comptes bancaires à leur dossier personnel sans créer une entreprise", async () => {
     const initial = getPlatformState();
     const withPerson = createPerson({ name: "Alice", expectedRevision: initial.revision });

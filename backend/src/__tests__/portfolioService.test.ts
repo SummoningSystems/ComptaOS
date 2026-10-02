@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal"; scopeId?: string; createdAt: string }> }));
 vi.mock("../services/companiesService.js", () => ({ getCompaniesRoot: () => workspace.root, getActiveCompanyPath: () => workspace.root, loadCompanies: () => workspace.companies, resolveCompanyPath: (company: { path: string }) => path.resolve(workspace.root, company.path) }));
 
-import { createPerson, getPlatformState } from "../services/platformService.js";
+import { createHousehold, createPerson, getPlatformState } from "../services/platformService.js";
 import { advancePortfolioTransfer, correctPortfolioTransfer, createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions } from "../services/portfolioService.js";
 import { loadFinanceTransactions, saveTransactionAllocations } from "../services/financeAllocationService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
@@ -54,6 +54,32 @@ describe("portfolio transfers and consolidated forecast", () => {
     expect(transfer.accountingLines.reduce((sum, line) => sum + line.debit - line.credit, 0)).toBe(0);
   });
 
+  it("couvre les circuits personne, foyer, SCI, holding, filiale et compte courant", async () => {
+    workspace.companies.push(
+      { id: "sci", name: "SCI familiale", path: "companies/sci", kind: "business", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "holding", name: "Holding", path: "companies/holding", kind: "business", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "subsidiary", name: "Filiale", path: "companies/subsidiary", kind: "business", createdAt: "2026-01-01T00:00:00.000Z" },
+    );
+    let state = getPlatformState();
+    state = createPerson({ name: "Alice", expectedRevision: state.revision });
+    state = createHousehold({ name: "Foyer Alice", expectedRevision: state.revision });
+    const actor = { id: "local", role: "local" as const };
+    const person = state.people[0].id; const household = state.households[0].id;
+    const cases = [
+      { sourceScopeId: person, destinationScopeId: "entity_default", treatment: "capital_contribution" as const, label: "Personne vers entreprise" },
+      { sourceScopeId: household, destinationScopeId: "entity_sci", treatment: "shareholder_current_account" as const, label: "Foyer vers SCI" },
+      { sourceScopeId: "entity_holding", destinationScopeId: "entity_subsidiary", treatment: "intercompany_loan" as const, label: "Holding vers filiale" },
+      { sourceScopeId: person, destinationScopeId: "entity_default", treatment: "shareholder_current_account" as const, label: "Compte courant associé" },
+    ];
+    for (const [index, item] of cases.entries()) {
+      const transfer = await createPortfolioTransfer(actor, { kind: "planned", amount: 100 + index, fee: 0, date: "2026-10-15", frequency: "once", ...item });
+      expect(transfer.workflowStatus).toBe("proposed");
+      expect(transfer.accountingLines.reduce((sum, line) => sum + line.debit - line.credit, 0)).toBe(0);
+    }
+    const snapshot = await getPortfolioSnapshot(actor, person, 3, [person, household, "entity_default", "entity_sci", "entity_holding", "entity_subsidiary"], "2026-10");
+    expect(snapshot.transfers.map((transfer) => transfer.label)).toEqual(cases.map((item) => item.label));
+  });
+
   it("intègre les engagements et les hypothèses dans trois scénarios", async () => {
     const initial = getPlatformState(); const state = createPerson({ name: "Alice", expectedRevision: initial.revision }); const personId = state.people[0].id; const actor = { id: "local", role: "local" as const };
     createPortfolioCommitment(actor, { scopeId: personId, kind: "investment", label: "Machine", amount: 500, dueDate: "2026-10-15", frequency: "once" });
@@ -71,13 +97,13 @@ describe("portfolio transfers and consolidated forecast", () => {
     await saveTransactionAllocations(actor, "2026-10", "default:workflow-out", [{ scopeId: "entity_default", amount: -300 }]);
     await saveTransactionAllocations(actor, "2026-10", "default:workflow-in", [{ scopeId: personId, amount: 300 }]);
     const created = await createPortfolioTransfer(actor, { kind: "confirmed", treatment: "shareholder_current_account", sourceScopeId: "entity_default", destinationScopeId: personId, amount: 300, date: "2026-10-02", label: "Avance associée", sourceTransactionKey: "default:workflow-out", destinationTransactionKey: "default:workflow-in" });
-    expect(advancePortfolioTransfer(actor, created.id, "review").workflowStatus).toBe("reviewed");
-    expect(advancePortfolioTransfer(actor, created.id, "validate").workflowStatus).toBe("validated");
-    expect(advancePortfolioTransfer(actor, created.id, "post").workflowStatus).toBe("posted");
+    expect((await advancePortfolioTransfer(actor, created.id, "review")).workflowStatus).toBe("reviewed");
+    expect((await advancePortfolioTransfer(actor, created.id, "validate")).workflowStatus).toBe("validated");
+    expect((await advancePortfolioTransfer(actor, created.id, "post")).workflowStatus).toBe("posted");
     const postedSource = JSON.parse(await fs.readFile(path.join(workspace.root, "settings", "portfolio_journal.json"), "utf-8")) as Array<{ transferId: string; reversal?: boolean; reversedAt?: string }>;
     const postedDestination = JSON.parse(await fs.readFile(path.join(workspace.root, "companies", "alice", "settings", "portfolio_journal.json"), "utf-8")) as typeof postedSource;
     expect([...postedSource, ...postedDestination].filter((line) => line.transferId === created.id)).toHaveLength(4);
-    const corrected = correctPortfolioTransfer(actor, created.id, { amount: 280, note: "Montant bancaire corrigé" });
+    const corrected = await correctPortfolioTransfer(actor, created.id, { amount: 280, note: "Montant bancaire corrigé" });
     expect(corrected.workflowStatus).toBe("proposed");
     const sourceJournal = JSON.parse(await fs.readFile(path.join(workspace.root, "settings", "portfolio_journal.json"), "utf-8")) as Array<{ transferId: string; reversal?: boolean; reversedAt?: string }>;
     const destinationJournal = JSON.parse(await fs.readFile(path.join(workspace.root, "companies", "alice", "settings", "portfolio_journal.json"), "utf-8")) as typeof sourceJournal;

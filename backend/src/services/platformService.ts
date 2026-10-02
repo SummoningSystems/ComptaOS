@@ -155,6 +155,29 @@ interface StoredBankConnection {
   accounts?: Array<{ id?: number | string; iban?: string; number?: string; name?: string; currency?: string; balance?: number }>;
 }
 
+interface StoredCompanyProfile {
+  legalForm?: string;
+  capital?: string | number;
+  vatRegime?: PlatformEntity["vatRegime"];
+}
+
+function profileForCompany(companyPath: string): StoredCompanyProfile {
+  const file = join(companyPath, "settings", "company_profile.json");
+  if (!existsSync(file)) return {};
+  try { return JSON.parse(readFileSync(file, "utf-8")) as StoredCompanyProfile; }
+  catch { return {}; }
+}
+
+function legalTypeFromProfile(value?: string): PlatformEntity["legalType"] | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (["ei", "eirl", "micro", "micro-entreprise", "auto-entrepreneur", "entreprise individuelle"].includes(normalized)) return "sole_proprietorship";
+  if (normalized.includes("sci")) return "sci";
+  if (normalized.includes("holding")) return "holding";
+  if (normalized.includes("association")) return "association";
+  return "company";
+}
+
 /** Synchronise uniquement des références. Aucune donnée d'entreprise n'est déplacée ou modifiée. */
 export function getPlatformState(): PlatformState {
   let state = readState();
@@ -163,12 +186,22 @@ export function getPlatformState(): PlatformState {
   for (const company of loadCompanies()) {
     const entityId = `entity_${company.id}`;
     const isBusiness = !company.kind || company.kind === "business";
+    const companyPath = safeCompanyPath(company.path);
+    const storedProfile = companyPath ? profileForCompany(companyPath) : {};
+    const inferredLegalType = company.legalType ?? legalTypeFromProfile(storedProfile.legalForm);
+    const inferredCapital = storedProfile.capital === undefined || storedProfile.capital === "" ? undefined : Number(storedProfile.capital);
     if (isBusiness && !state.entities.some((entity) => entity.id === entityId)) {
-      state.entities.push({ id: entityId, kind: "entity", name: company.name, workspaceId: company.id, legalType: company.legalType, createdAt: company.createdAt });
+      state.entities.push({ id: entityId, kind: "entity", name: company.name, workspaceId: company.id, legalType: inferredLegalType, capitalAmount: Number.isFinite(inferredCapital) ? inferredCapital : undefined, vatRegime: storedProfile.vatRegime, createdAt: company.createdAt });
       changed = true;
     } else if (isBusiness) {
       const entity = state.entities.find((item) => item.id === entityId)!;
-      if (entity.name !== company.name || entity.legalType !== company.legalType) { entity.name = company.name; entity.legalType = company.legalType; changed = true; }
+      const patch = {
+        name: company.name,
+        legalType: entity.legalType ?? inferredLegalType,
+        capitalAmount: entity.capitalAmount ?? (Number.isFinite(inferredCapital) ? inferredCapital : undefined),
+        vatRegime: entity.vatRegime ?? storedProfile.vatRegime,
+      };
+      if (entity.name !== patch.name || entity.legalType !== patch.legalType || entity.capitalAmount !== patch.capitalAmount || entity.vatRegime !== patch.vatRegime) { Object.assign(entity, patch); changed = true; }
     }
 
     if (company.scopeId) {
@@ -182,7 +215,6 @@ export function getPlatformState(): PlatformState {
       }
     }
 
-    const companyPath = safeCompanyPath(company.path);
     if (!companyPath) continue;
     const connectionFile = join(companyPath, "banking", "connections.json");
     if (!existsSync(connectionFile)) continue;

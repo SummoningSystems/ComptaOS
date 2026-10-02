@@ -28,4 +28,11 @@ describe("clôture mensuelle persistante", () => {
     await expect(assertMonthOpen("2026-08-20")).resolves.toBeUndefined();
     expect(await loadClosings()).toEqual([expect.objectContaining({ status: "reopened", reopenReason: "Facture reçue tardivement" })]);
   });
+
+  it("inclut les écritures de transfert dans l'empreinte de clôture", () => {
+    const transactions = [transaction()];
+    const line = { entryDate: "2026-08-15", accountNumber: "455100", debit: 100, credit: 0, pieceRef: "TR-1", label: "Compte courant" };
+    expect(closingFingerprint(transactions, "2026-08", [line])).not.toBe(closingFingerprint(transactions, "2026-08"));
+    expect(closingFingerprint(transactions, "2026-08", [line])).toBe(closingFingerprint(transactions, "2026-08", [line]));
+  });
 });

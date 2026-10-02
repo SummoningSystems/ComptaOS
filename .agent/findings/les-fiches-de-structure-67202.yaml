@@ -1,0 +1,12 @@
+id: les-fiches-de-structure-67202
+statement: Les fiches de structure peuvent reprendre legalType, capitalAmount et vatRegime du company_profile existant sans ecraser les valeurs manuelles.
+status: verified
+confidence: high
+agent: codex
+created_at: 2026-10-02T18:53:22.9848527Z
+sources:
+    - path: backend/src/services/platformService.ts
+      line_start: 164
+      line_end: 205
+      file_hash: 53e691e2bed5106c
+      commit_hash: bf67cbb5b145e3a9024edc96816644dce41f0620

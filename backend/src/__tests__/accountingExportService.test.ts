@@ -40,6 +40,15 @@ describe("dossier expert-comptable", () => {
     expect(validateFec(fec)).toEqual([]);
   });
 
+  it("inclut les écritures de transfert validées dans l'export", () => {
+    const extraLine = { journalCode: "OD", journalLabel: "Opérations diverses", entryNumber: "TR-0001", entryDate: "2026-08-20", accountNumber: "455100", accountLabel: "Compte courant d'associé", pieceRef: "transfer_1", pieceDate: "2026-08-20", label: "Avance associée", debit: 100, credit: 0, transactionId: "transfer_1" };
+    const balancingLine = { ...extraLine, entryNumber: "TR-0002", accountNumber: "512100", accountLabel: "Banque", debit: 0, credit: 100 };
+    const preview = buildAccountingPreview([], defaultAccountingConfig(), "2026", { extraLines: [extraLine, balancingLine] });
+    expect(preview.lines).toEqual([extraLine, balancingLine]);
+    expect(preview.balanced).toBe(true);
+    expect(validateFec(generateFec(preview))).toEqual([]);
+  });
+
   it("utilise le compte de produit de la catégorie pour une recette client", () => {
     const preview = buildAccountingPreview([transaction({ id: "client", label: "Facture client", category: "goods_sales", amount_ht: 100, vat: 20, amount_ttc: 120 })], defaultAccountingConfig(), "2026");
     expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "707000", credit: 100 })]));

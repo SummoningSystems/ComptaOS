@@ -48,7 +48,7 @@ export async function closingRoutes(app: FastifyInstance) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(req.body?.month ?? "")) return reply.status(400).send({ error: "Mois invalide" });
     const state = await checklist(req.body?.month);
     if (!state.ready) return reply.status(409).send({ error: "Tous les contrôles doivent être terminés avant la clôture.", steps: state.steps });
-    try { const record = await closeMonth(state.month, await loadAllTransactions()); await autoCommit(getWorkspaceRoot(), `clôture mensuelle: ${state.month} (${record.fingerprint.slice(0, 12)})`).catch(() => {}); return reply.status(201).send(record); }
+    try { const record = await closeMonth(state.month, await loadAllTransactions(), "utilisateur", loadPortfolioAccountingLines()); await autoCommit(getWorkspaceRoot(), `clôture mensuelle: ${state.month} (${record.fingerprint.slice(0, 12)})`).catch(() => {}); return reply.status(201).send(record); }
     catch (error) { return reply.status(409).send({ error: error instanceof Error ? error.message : "Clôture impossible" }); }
   });
   app.post<{ Body: { month: string; reason: string } }>("/reopen", async (req, reply) => {

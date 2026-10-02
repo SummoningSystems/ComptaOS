@@ -21,6 +21,7 @@ backend/.env
 # ── Workspace comptable (dépôt d'exploitation séparé) ────────────────────────
 # Ce dossier possède son propre .git — il n'appartient pas au repo code.
 workspace/
+.production-backups/
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log

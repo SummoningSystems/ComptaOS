@@ -1,0 +1,12 @@
+id: les-ecritures-de-transfert-67203
+statement: Les ecritures de transfert sont incluses dans l empreinte mensuelle et leur generation correction ou annulation est bloquee si le mois est clos.
+status: verified
+confidence: high
+agent: codex
+created_at: 2026-10-02T18:53:23.406325Z
+sources:
+    - path: backend/src/services/portfolioService.ts
+      line_start: 71
+      line_end: 72
+      file_hash: b7b9dc97da627075
+      commit_hash: bf67cbb5b145e3a9024edc96816644dce41f0620

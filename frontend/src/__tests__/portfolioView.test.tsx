@@ -22,4 +22,20 @@ describe("PortfolioView", () => {
     fireEvent.click(screen.getByRole("button", { name: /trésorerie consolidée/i }));
     expect(screen.getAllByText("Trésorerie consolidée")).toHaveLength(2);
   });
+
+  it("corrige et annule un transfert avec des formulaires accessibles", async () => {
+    const base = await api.portfolio();
+    const transfer = { id: "transfer_1", kind: "confirmed", sourceScopeId: "person_1", destinationScopeId: "entity_1", amount: 100, fee: 2, date: "2026-10-02", label: "Avance", treatment: "shareholder_current_account", accountingLines: [], workflowStatus: "proposed", workflowHistory: [], createdAt: "2026-10-02T10:00:00Z" };
+    api.portfolio.mockResolvedValue({ ...base, transfers: [transfer] });
+    api.correct.mockResolvedValue({ ...transfer, amount: 120 });
+    api.advance.mockResolvedValue({ ...transfer, workflowStatus: "cancelled" });
+    render(<PortfolioView />);
+    await screen.findByText("Avance");
+    fireEvent.click(screen.getByRole("button", { name: "Corriger" }));
+    const correction = screen.getByRole("dialog", { name: "Corriger le transfert" });
+    fireEvent.change(screen.getByLabelText("Motif obligatoire"), { target: { value: "Montant confirmé sur le relevé" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer la correction" }));
+    expect(api.correct).toHaveBeenCalledWith("transfer_1", expect.objectContaining({ note: "Montant confirmé sur le relevé", amount: 100, fee: 2 }));
+    expect(correction).toBeInTheDocument();
+  });
 });
