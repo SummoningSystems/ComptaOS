@@ -36,11 +36,13 @@ import { bankingRoutes } from "./routes/banking.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { authRoutes, COOKIE_NAME } from "./routes/auth.js";
 import { platformRoutes } from "./routes/platform.js";
-import { hasUsers, getJwtSecret } from "./services/authService.js";
+import { hasUsers, getJwtSecret, listUsers } from "./services/authService.js";
 import jwt from "jsonwebtoken";
 import staticPlugin from "@fastify/static";
 import { ensureDefaultCompany, getCompaniesRoot } from "./services/companiesService.js";
 import { initRepo, startGitAutoCommitScheduler } from "./services/gitService.js";
+import { registerWorkspaceAccess } from "./services/workspaceAccess.js";
+import { initializeLegacyAccess } from "./services/platformService.js";
 
 const app = Fastify({ logger: true });
 
@@ -109,6 +111,8 @@ if (AUTH_ENABLED) {
   console.log("[auth] Authentification JWT activée (AUTH_ENABLED=true).");
 }
 
+registerWorkspaceAccess(app);
+
 // Routes
 await app.register(filesRoutes, { prefix: "/api/files" });
 await app.register(transactionsRoutes, { prefix: "/api/transactions" });
@@ -146,6 +150,7 @@ await app.register(authRoutes,       { prefix: "/api/auth" });
 
 // Initialisation : créer l'entreprise par défaut si nécessaire
 ensureDefaultCompany();
+if (hasUsers()) initializeLegacyAccess(listUsers());
 
 // Initialisation du dépôt Git du workspace actif
 try {

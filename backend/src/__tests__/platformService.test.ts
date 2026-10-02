@@ -10,7 +10,7 @@ vi.mock("../services/companiesService.js", () => ({
   loadCompanies: () => workspace.companies,
 }));
 
-import { createPerson, createRelation, getPlatformState } from "../services/platformService.js";
+import { createPerson, createRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, initializeLegacyAccess, setAccessGrant } from "../services/platformService.js";
 
 describe("person-centric platform registry", () => {
   beforeEach(async () => {
@@ -47,5 +47,24 @@ describe("person-centric platform registry", () => {
     expect(linked.people.map((person) => person.name)).toEqual(["Alice", "Bob"]);
     expect(linked.relations.some((relation) => relation.type === "family")).toBe(true);
     expect(() => createPerson({ name: "Conflit", expectedRevision: initial.revision })).toThrow("modifiée ailleurs");
+  });
+
+  it("isole les portefeuilles tout en préservant les accès historiques", () => {
+    const initialized = initializeLegacyAccess([
+      { id: "user_accountant", role: "member", active: true },
+      { id: "user_reader", role: "readonly", active: true },
+    ]);
+    expect(getScopeAccess({ id: "user_accountant", role: "member" }, "entity_default")).toBe("manager");
+    expect(getScopeAccess({ id: "user_reader", role: "readonly" }, "entity_default")).toBe("viewer");
+
+    const personState = createPerson({ name: "Client privé", expectedRevision: initialized.revision });
+    const granted = setAccessGrant({ userId: "user_accountant", scopeId: personState.people[0].id, role: "manager", createdBy: "owner", expectedRevision: personState.revision });
+    const visible = getVisiblePlatformState({ id: "user_accountant", role: "member" });
+    const hidden = getVisiblePlatformState({ id: "unrelated", role: "member" });
+
+    expect(granted.grants.some((grant) => grant.scopeId === personState.people[0].id)).toBe(true);
+    expect(visible.people.map((person) => person.name)).toEqual(["Client privé"]);
+    expect(hidden.people).toEqual([]);
+    expect(hidden.entities).toEqual([]);
   });
 });

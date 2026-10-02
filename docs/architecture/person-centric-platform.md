@@ -87,6 +87,16 @@ La carte « Structure financière » de la branche expérimentale sert de réfé
 - ouverture d'une entreprise dans l'interface complète de `master` ;
 - aucune modification du contenu d'un workspace entreprise.
 
+### Étape 1.5 — Portefeuilles et autorisations
+
+- distinction stricte entre utilisateur connecté et personne modélisée ;
+- attribution explicite d'une personne ou d'une entreprise à plusieurs utilisateurs ;
+- rôles par périmètre : responsable, gestionnaire/comptable et lecture seule ;
+- entreprise active conservée séparément pour chaque utilisateur ;
+- contexte de requête isolé pour empêcher deux utilisateurs de partager le même workspace actif ;
+- caches métier séparés par workspace ;
+- reprise automatique des accès historiques lors de la première migration.
+
 ### Étape 2 — Comptabilité personnelle
 
 - workspace personnel séparé ;

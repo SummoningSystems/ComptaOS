@@ -16,24 +16,37 @@ function txnDir(): string {
 }
 
 // ── Cache mémoire ─────────────────────────────────────────────────────────────
-let _cache: Transaction[] | null = null;
-let _watcher: fsSync.FSWatcher | null = null;
-let _fileByTransactionId = new Map<string, string>();
+interface WorkspaceTransactionCache {
+  transactions: Transaction[] | null;
+  watcher: fsSync.FSWatcher | null;
+  fileByTransactionId: Map<string, string>;
+  loadIssues: TransactionLoadIssue[];
+}
+const workspaceCaches = new Map<string, WorkspaceTransactionCache>();
+
+function currentCache(): WorkspaceTransactionCache {
+  const key = txnDir();
+  let cache = workspaceCaches.get(key);
+  if (!cache) {
+    cache = { transactions: null, watcher: null, fileByTransactionId: new Map(), loadIssues: [] };
+    workspaceCaches.set(key, cache);
+  }
+  return cache;
+}
 
 export interface TransactionLoadIssue {
   file: string;
   message: string;
 }
 
-let _loadIssues: TransactionLoadIssue[] = [];
-
 export function getTransactionLoadIssues(): TransactionLoadIssue[] {
-  return _loadIssues.map((issue) => ({ ...issue }));
+  return currentCache().loadIssues.map((issue) => ({ ...issue }));
 }
 
 function invalidateCache() {
-  _cache = null;
-  _fileByTransactionId = new Map<string, string>();
+  const cache = currentCache();
+  cache.transactions = null;
+  cache.fileByTransactionId = new Map<string, string>();
 }
 
 function round2(n: number): number {
@@ -136,27 +149,26 @@ function normalizeTransaction(txn: Transaction): Transaction {
  * depuis le bon dossier et réinitialiser le watcher sur le bon répertoire.
  */
 export function invalidateTransactionCache(): void {
-  invalidateCache();
-  if (_watcher) {
-    _watcher.close();
-    _watcher = null;
-  }
+  for (const cache of workspaceCaches.values()) cache.watcher?.close();
+  workspaceCaches.clear();
 }
 
 function ensureWatcher() {
-  if (_watcher) return;
+  const cache = currentCache();
+  if (cache.watcher) return;
   const dir = txnDir();
   try {
     fsSync.mkdirSync(dir, { recursive: true });
-    _watcher = fsSync.watch(dir, { persistent: false }, () => invalidateCache());
-    _watcher.on("error", () => { _watcher = null; });
+    cache.watcher = fsSync.watch(dir, { persistent: false }, () => invalidateCache());
+    cache.watcher.on("error", () => { cache.watcher = null; });
   } catch { /* ignore si le dossier n'existe pas encore */ }
 }
 
 /** Charge toutes les transactions depuis les fichiers YAML du dossier transactions/. */
 export async function loadAllTransactions(): Promise<Transaction[]> {
   ensureWatcher();
-  if (_cache) return _cache;
+  const cache = currentCache();
+  if (cache.transactions) return cache.transactions;
 
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
@@ -174,7 +186,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
         throw new Error("structure de transaction invalide");
       }
       transactions.push(normalizeTransaction(parsed));
-      _fileByTransactionId.set(parsed.id, path.join(dir, file));
+      cache.fileByTransactionId.set(parsed.id, path.join(dir, file));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       issues.push({ file, message });
@@ -182,9 +194,9 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
     }
   }
 
-  _loadIssues = issues;
-  _cache = transactions.sort((a, b) => b.date.localeCompare(a.date));
-  return _cache;
+  cache.loadIssues = issues;
+  cache.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
+  return cache.transactions;
 }
 
 /** Sauvegarde une transaction dans un fichier YAML. */
@@ -209,11 +221,12 @@ async function findTransactionFile(id: string): Promise<string> {
     throw new Error("Identifiant de transaction invalide");
   }
 
-  const knownPath = _fileByTransactionId.get(id);
+  const cache = currentCache();
+  const knownPath = cache.fileByTransactionId.get(id);
   if (knownPath) return knownPath;
 
   await loadAllTransactions();
-  const indexedPath = _fileByTransactionId.get(id);
+  const indexedPath = cache.fileByTransactionId.get(id);
   if (indexedPath) return indexedPath;
 
   const error = new Error(`Transaction introuvable: ${id}`) as NodeJS.ErrnoException;

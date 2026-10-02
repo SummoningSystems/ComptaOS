@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPlatformPerson, createPlatformRelation, deletePlatformRelation, fetchPlatformState, setActiveCompanyApi } from "../../api/client";
-import type { PlatformAccount, PlatformEntity, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
+import { createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, fetchPlatformState, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
+import { fetchUsers, type AuthUser } from "../../api/auth";
+import type { PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
 
 type Node = PlatformPerson | PlatformEntity | PlatformAccount;
 
@@ -26,7 +27,7 @@ function NodeCard({ node, selected, onSelect }: { node: Node; selected: boolean;
   );
 }
 
-export function StructureView() {
+export function StructureView({ currentUser }: { currentUser: AuthUser | null }) {
   const [state, setState] = useState<PlatformState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -36,8 +37,14 @@ export function StructureView() {
   const [relationType, setRelationType] = useState<PlatformRelationType>("family");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [accessUserId, setAccessUserId] = useState("");
+  const [accessScopeId, setAccessScopeId] = useState("");
+  const [accessRole, setAccessRole] = useState<PlatformAccessRole>("viewer");
+  const canAdminister = !currentUser || currentUser.role === "owner" || currentUser.role === "admin";
 
   useEffect(() => { fetchPlatformState().then(setState).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible")); }, []);
+  useEffect(() => { if (canAdminister) fetchUsers().then(setUsers).catch(() => setUsers([])); }, [canAdminister]);
   const nodes = useMemo<Node[]>(() => state ? [...state.people, ...state.entities, ...state.accounts] : [], [state]);
   const selected = nodes.find((node) => node.id === selectedId);
   const relations = state?.relations.filter((relation) => !selectedId || relation.fromId === selectedId || relation.toId === selectedId) ?? [];
@@ -63,6 +70,14 @@ export function StructureView() {
     setBusy(true);
     try { await setActiveCompanyApi(entity.workspaceId); window.location.reload(); }
     catch (e) { setError(e instanceof Error ? e.message : "Ouverture impossible"); setBusy(false); }
+  }
+
+  async function saveAccess() {
+    if (!state || !accessUserId || !accessScopeId) return;
+    setBusy(true); setError("");
+    try { setState(await setPlatformAccess({ userId: accessUserId, scopeId: accessScopeId, role: accessRole, expectedRevision: state.revision })); }
+    catch (e) { setError(e instanceof Error ? e.message : "Autorisation impossible"); }
+    finally { setBusy(false); }
   }
 
   if (!state) return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de la structure…</div>;
@@ -91,15 +106,17 @@ export function StructureView() {
         </section>
 
         <aside className="space-y-4">
-          <section className="rounded border border-vscode-border bg-vscode-panel p-4"><h2 className="text-xs font-semibold">Ajouter une personne</h2><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom ou libellé" className="mt-3 w-full rounded border border-vscode-border bg-vscode-bg px-3 py-2 text-xs" /><select value={profile} onChange={(e) => setProfile(e.target.value as typeof profile)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-3 py-2 text-xs"><option value="individual">Vie personnelle</option><option value="professional">Activité professionnelle</option></select><button disabled={busy || !name.trim()} onClick={() => void addPerson()} className="mt-3 w-full rounded bg-vscode-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">+ Ajouter</button></section>
+          {canAdminister && <section className="rounded border border-vscode-border bg-vscode-panel p-4"><h2 className="text-xs font-semibold">Ajouter une personne</h2><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom ou libellé" className="mt-3 w-full rounded border border-vscode-border bg-vscode-bg px-3 py-2 text-xs" /><select value={profile} onChange={(e) => setProfile(e.target.value as typeof profile)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-3 py-2 text-xs"><option value="individual">Vie personnelle</option><option value="professional">Activité professionnelle</option></select><button disabled={busy || !name.trim()} onClick={() => void addPerson()} className="mt-3 w-full rounded bg-vscode-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">+ Ajouter</button></section>}
 
-          <section className="rounded border border-vscode-border bg-vscode-panel p-4"><h2 className="text-xs font-semibold">Créer un lien</h2><p className="mt-1 text-[10px] text-vscode-muted">Famille, comptable, participation, direction ou titulaire d’un compte.</p><select value={fromId} onChange={(e) => setFromId(e.target.value)} className="mt-3 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Élément de départ…</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select><select value={relationType} onChange={(e) => setRelationType(e.target.value as PlatformRelationType)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs">{Object.entries(relationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={toId} onChange={(e) => setToId(e.target.value)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Élément d’arrivée…</option>{nodes.filter((node) => node.id !== fromId).map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select><button disabled={busy || !fromId || !toId} onClick={() => void addRelation()} className="mt-3 w-full rounded border border-vscode-accent px-3 py-2 text-xs text-vscode-accent disabled:opacity-40">Relier</button></section>
+          {canAdminister && <section className="rounded border border-vscode-border bg-vscode-panel p-4"><h2 className="text-xs font-semibold">Créer un lien</h2><p className="mt-1 text-[10px] text-vscode-muted">Famille, comptable, participation, direction ou titulaire d’un compte.</p><select value={fromId} onChange={(e) => setFromId(e.target.value)} className="mt-3 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Élément de départ…</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select><select value={relationType} onChange={(e) => setRelationType(e.target.value as PlatformRelationType)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs">{Object.entries(relationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={toId} onChange={(e) => setToId(e.target.value)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Élément d’arrivée…</option>{nodes.filter((node) => node.id !== fromId).map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select><button disabled={busy || !fromId || !toId} onClick={() => void addRelation()} className="mt-3 w-full rounded border border-vscode-accent px-3 py-2 text-xs text-vscode-accent disabled:opacity-40">Relier</button></section>}
+
+          {canAdminister && <section className="rounded border border-vscode-border bg-vscode-panel p-4"><h2 className="text-xs font-semibold">Droits du portefeuille</h2><p className="mt-1 text-[10px] text-vscode-muted">Attribue séparément chaque personne ou entreprise à un utilisateur.</p><select value={accessUserId} onChange={(e) => setAccessUserId(e.target.value)} className="mt-3 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Utilisateur…</option>{users.filter((user) => user.role !== "owner" && user.role !== "admin").map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}</select><select value={accessScopeId} onChange={(e) => setAccessScopeId(e.target.value)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="">Périmètre…</option>{[...state.people, ...state.entities].map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select><select value={accessRole} onChange={(e) => setAccessRole(e.target.value as PlatformAccessRole)} className="mt-2 w-full rounded border border-vscode-border bg-vscode-bg px-2 py-2 text-xs"><option value="viewer">Lecture seule</option><option value="manager">Gestionnaire / comptable</option><option value="owner">Responsable du périmètre</option></select><button disabled={busy || !accessUserId || !accessScopeId} onClick={() => void saveAccess()} className="mt-3 w-full rounded bg-vscode-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Attribuer l’accès</button><div className="mt-3 space-y-1">{state.grants.map((grant) => <div key={grant.id} className="flex items-center gap-2 rounded border border-vscode-border px-2 py-1 text-[10px]"><span className="min-w-0 flex-1 truncate">{users.find((user) => user.id === grant.userId)?.displayName ?? grant.userId} · {nodeName(grant.scopeId)} · {grant.role === "viewer" ? "lecture" : grant.role === "manager" ? "gestion" : "responsable"}</span><button className="text-vscode-muted hover:text-red-400" onClick={() => void deletePlatformAccess(grant.id, state.revision).then(setState).catch((e) => setError(e instanceof Error ? e.message : "Suppression impossible"))}>×</button></div>)}</div></section>}
         </aside>
       </main>
 
       <section className="mx-8 mb-8 rounded border border-vscode-border bg-vscode-panel p-5">
         <div className="flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">{selected ? selected.name : "Relations de la structure"}</h2><p className="mt-1 text-[11px] text-vscode-muted">{selected?.kind === "person" ? "La comptabilité personnelle détaillée sera ajoutée dans la tranche suivante." : "Sélectionne un élément pour isoler ses relations."}</p></div>{selected?.kind === "entity" && <button disabled={busy} onClick={() => void openEntity(selected)} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white">Ouvrir l’espace comptable →</button>}</div>
-        <div className="mt-4 grid gap-2 md:grid-cols-2">{relations.map((relation) => <div key={relation.id} className="flex items-center gap-2 rounded border border-vscode-border px-3 py-2 text-xs"><span className="min-w-0 flex-1 truncate">{nodeName(relation.fromId)} <span className="text-vscode-accent">— {relationLabels[relation.type]} →</span> {nodeName(relation.toId)}</span>{relation.source === "manual" && <button title="Supprimer le lien" className="text-vscode-muted hover:text-red-400" onClick={() => state && void deletePlatformRelation(relation.id, state.revision).then(setState).catch((e) => setError(e instanceof Error ? e.message : "Suppression impossible"))}>×</button>}</div>)}{relations.length === 0 && <p className="text-xs text-vscode-muted">Aucun lien à afficher.</p>}</div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2">{relations.map((relation) => <div key={relation.id} className="flex items-center gap-2 rounded border border-vscode-border px-3 py-2 text-xs"><span className="min-w-0 flex-1 truncate">{nodeName(relation.fromId)} <span className="text-vscode-accent">— {relationLabels[relation.type]} →</span> {nodeName(relation.toId)}</span>{canAdminister && relation.source === "manual" && <button title="Supprimer le lien" className="text-vscode-muted hover:text-red-400" onClick={() => state && void deletePlatformRelation(relation.id, state.revision).then(setState).catch((e) => setError(e instanceof Error ? e.message : "Suppression impossible"))}>×</button>}</div>)}{relations.length === 0 && <p className="text-xs text-vscode-muted">Aucun lien à afficher.</p>}</div>
       </section>
     </div>
   );

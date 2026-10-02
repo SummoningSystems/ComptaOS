@@ -17,6 +17,7 @@ import {
   CompanyProfile,
   PlatformState,
   PlatformRelationType,
+  PlatformAccessRole,
 } from "../types";
 import { compressAttachment, type CompressionResult } from "../utils/imageCompression";
 
@@ -422,6 +423,16 @@ export async function createPlatformRelation(input: { fromId: string; toId: stri
 
 export async function deletePlatformRelation(id: string, expectedRevision: number): Promise<PlatformState> {
   const { data } = await api.delete<PlatformState>(`/platform/relations/${encodeURIComponent(id)}`, { params: { expectedRevision } });
+  return data;
+}
+
+export async function setPlatformAccess(input: { userId: string; scopeId: string; role: PlatformAccessRole; expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.put<PlatformState>("/platform/access", input);
+  return data;
+}
+
+export async function deletePlatformAccess(id: string, expectedRevision: number): Promise<PlatformState> {
+  const { data } = await api.delete<PlatformState>(`/platform/access/${encodeURIComponent(id)}`, { params: { expectedRevision } });
   return data;
 }
 

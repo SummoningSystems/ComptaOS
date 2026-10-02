@@ -1,6 +1,7 @@
 import { readFileSync, mkdirSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { join, resolve, sep } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
+import { workspaceContext } from "./workspaceContext.js";
 
 const ROOT = resolve(process.env.WORKSPACE_PATH ?? join(process.cwd(), "..", "workspace"));
 const COMPANIES_FILE = join(ROOT, "_companies.json");
@@ -69,11 +70,20 @@ export function invalidateActiveCompanyCache(): void {
   _activeCompanyPath = null;
 }
 
+export function resolveCompanyPath(company: Company): string {
+  const candidate = resolve(ROOT, company.path);
+  const prefix = ROOT.endsWith(sep) ? ROOT : `${ROOT}${sep}`;
+  if (candidate !== ROOT && !candidate.startsWith(prefix)) throw new Error("Chemin d'entreprise hors du workspace.");
+  return candidate;
+}
+
 /**
  * Retourne le chemin absolu vers le dossier de données de l'entreprise active.
  * Si aucune entreprise n'est configurée, initialise l'entreprise par défaut.
  */
 export function getActiveCompanyPath(): string {
+  const scoped = workspaceContext.getStore();
+  if (scoped) return scoped.root;
   if (_activeCompanyPath) return _activeCompanyPath;
 
   ensureDefaultCompany();
@@ -87,7 +97,7 @@ export function getActiveCompanyPath(): string {
   const activeId = getActiveCompanyId();
   const company = (activeId ? companies.find((c) => c.id === activeId) : null) ?? companies[0];
 
-  _activeCompanyPath = resolve(ROOT, company.path);
+  _activeCompanyPath = resolveCompanyPath(company);
   return _activeCompanyPath;
 }
 

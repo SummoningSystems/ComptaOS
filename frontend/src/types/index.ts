@@ -208,7 +208,9 @@ export interface PlatformPerson { id: string; kind: "person"; name: string; prof
 export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; createdAt: string }
 export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
 export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; source: "manual" | "workspace"; createdAt: string }
-export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; updatedAt: string }
+export type PlatformAccessRole = "owner" | "manager" | "viewer";
+export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
+export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
 
 export interface CategoryBudget {
   category: string;

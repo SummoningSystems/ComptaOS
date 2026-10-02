@@ -8,19 +8,28 @@ import {
   ensureDefaultCompany,
 } from "../services/companiesService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
+import { actorHasGlobalAccess, getScopeAccess } from "../services/platformService.js";
+import { actorContext } from "../services/workspaceContext.js";
+import { getSelectedCompany, setSelectedCompany } from "../services/workspaceSelectionService.js";
+
+function visibleCompanies() {
+  const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
+  return loadCompanies().filter((company) => actorHasGlobalAccess(actor) || getScopeAccess(actor, `entity_${company.id}`) !== null);
+}
 
 export async function companiesRoutes(app: FastifyInstance) {
   /** Liste toutes les entreprises */
   app.get("/", async () => {
     ensureDefaultCompany();
-    return loadCompanies();
+    return visibleCompanies();
   });
 
   /** Retourne l'entreprise active */
   app.get("/active", async () => {
     ensureDefaultCompany();
-    const companies = loadCompanies();
-    const activeId = getActiveCompanyId();
+    const companies = visibleCompanies();
+    const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
+    const activeId = getSelectedCompany(actor.id) ?? getActiveCompanyId();
     return companies.find((c) => c.id === activeId) ?? companies[0] ?? null;
   });
 
@@ -28,18 +37,21 @@ export async function companiesRoutes(app: FastifyInstance) {
   app.put("/active", async (req, reply) => {
     const { companyId } = req.body as { companyId: string };
     ensureDefaultCompany();
-    const companies = loadCompanies();
+    const companies = visibleCompanies();
     if (!companies.find((c) => c.id === companyId)) {
       return reply.status(404).send({ error: "Entreprise introuvable" });
     }
-    setActiveCompanyId(companyId);
-    invalidateActiveCompanyCache();
+    const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
+    setSelectedCompany(actor.id, companyId);
+    if (actor.id === "local") { setActiveCompanyId(companyId); invalidateActiveCompanyCache(); }
     invalidateTransactionCache();
     return { ok: true };
   });
 
   /** Crée une nouvelle entreprise */
   app.post("/", async (req, reply) => {
+    const actor = actorContext.getStore();
+    if (actor && !actorHasGlobalAccess(actor)) return reply.status(403).send({ error: "Droits administrateur requis." });
     const { name } = req.body as { name: string };
     if (!name?.trim()) return reply.status(400).send({ error: "Nom requis" });
     const company = createCompany(name.trim());

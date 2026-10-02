@@ -114,7 +114,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
   return (
     <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
-      {type === "structure"    && <StructureView />}
+      {type === "structure"    && <StructureView currentUser={currentUser} />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
@@ -191,12 +191,12 @@ export default function App() {
       .catch(() => {});
     // Ouvrir automatiquement le wizard si aucune entreprise (non annulable)
     fetchCompanies().then((list) => {
-      if (list.length === 0) {
+      if (list.length === 0 && (!currentUser || currentUser.role === "owner" || currentUser.role === "admin")) {
         setWizardCanCancel(false);
         setShowCompanyWizard(true);
       }
     });
-  }, [authState]);
+  }, [authState, currentUser]);
 
   // Raccourci Ctrl+K / Cmd+K → ouvre la recherche globale
   useEffect(() => {

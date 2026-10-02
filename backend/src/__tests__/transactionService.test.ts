@@ -185,4 +185,20 @@ describe("transactionService persistence", () => {
       message: "structure de transaction invalide",
     });
   });
+
+  it("ne partage jamais le cache entre deux workspaces", async () => {
+    const firstRoot = workspace.root;
+    await saveTransaction(transaction({ id: "company_a", label: "Donnée société A" }));
+    expect((await loadAllTransactions())[0].id).toBe("company_a");
+
+    const secondRoot = await fs.mkdtemp(path.join(os.tmpdir(), "comptaos-transactions-b-"));
+    workspace.root = secondRoot;
+    await saveTransaction(transaction({ id: "company_b", label: "Donnée société B" }));
+    expect((await loadAllTransactions()).map((item) => item.id)).toEqual(["company_b"]);
+
+    workspace.root = firstRoot;
+    expect((await loadAllTransactions()).map((item) => item.id)).toEqual(["company_a"]);
+    invalidateTransactionCache();
+    await fs.rm(secondRoot, { recursive: true, force: true });
+  });
 });

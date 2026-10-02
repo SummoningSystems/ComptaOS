@@ -54,6 +54,9 @@ export interface PlatformRelation {
   createdAt: string;
 }
 
+export type PlatformAccessRole = "owner" | "manager" | "viewer";
+export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
+
 export interface PlatformState {
   schemaVersion: 1;
   revision: number;
@@ -61,6 +64,8 @@ export interface PlatformState {
   entities: PlatformEntity[];
   accounts: PlatformAccount[];
   relations: PlatformRelation[];
+  grants: PlatformAccessGrant[];
+  accessInitializedAt?: string;
   updatedAt: string;
 }
 
@@ -68,7 +73,7 @@ function root(): string { return getCompaniesRoot(); }
 function storeFile(): string { return join(root(), "_platform.json"); }
 
 function emptyState(): PlatformState {
-  return { schemaVersion: 1, revision: 0, people: [], entities: [], accounts: [], relations: [], updatedAt: new Date(0).toISOString() };
+  return { schemaVersion: 1, revision: 0, people: [], entities: [], accounts: [], relations: [], grants: [], updatedAt: new Date(0).toISOString() };
 }
 
 function isState(value: unknown): value is PlatformState {
@@ -76,14 +81,15 @@ function isState(value: unknown): value is PlatformState {
   const state = value as Partial<PlatformState>;
   return state.schemaVersion === 1 && Number.isInteger(state.revision)
     && Array.isArray(state.people) && Array.isArray(state.entities)
-    && Array.isArray(state.accounts) && Array.isArray(state.relations);
+    && Array.isArray(state.accounts) && Array.isArray(state.relations)
+    && (state.grants === undefined || Array.isArray(state.grants));
 }
 
 function readState(): PlatformState {
   if (!existsSync(storeFile())) return emptyState();
   try {
     const parsed: unknown = JSON.parse(readFileSync(storeFile(), "utf-8"));
-    return isState(parsed) ? parsed : emptyState();
+    return isState(parsed) ? { ...parsed, grants: parsed.grants ?? [] } : emptyState();
   } catch {
     return emptyState();
   }
@@ -218,5 +224,53 @@ export function deleteRelation(id: string, expectedRevision?: number): PlatformS
   if (!relation) throw Object.assign(new Error("Relation introuvable."), { code: "NOT_FOUND" });
   if (relation.source === "workspace") throw new Error("Une relation issue d'un espace comptable doit être retirée depuis sa source.");
   state.relations = state.relations.filter((item) => item.id !== id);
+  return writeState(state);
+}
+
+export interface AccessUser { id: string; role: "owner" | "admin" | "member" | "readonly"; active: boolean }
+
+/** Préserve les accès historiques une seule fois lors de l'activation du nouveau modèle. */
+export function initializeLegacyAccess(users: AccessUser[]): PlatformState {
+  const state = getPlatformState();
+  if (state.accessInitializedAt) return state;
+  const now = new Date().toISOString();
+  for (const user of users.filter((item) => item.active && item.role !== "owner" && item.role !== "admin")) {
+    for (const entity of state.entities) {
+      state.grants.push({ id: `grant_${randomUUID()}`, userId: user.id, scopeId: entity.id, role: user.role === "readonly" ? "viewer" : "manager", createdAt: now, createdBy: "migration" });
+    }
+  }
+  state.accessInitializedAt = now;
+  return writeState(state);
+}
+
+export function actorHasGlobalAccess(actor: { role: string }): boolean { return actor.role === "owner" || actor.role === "admin" || actor.role === "local"; }
+
+export function getScopeAccess(actor: { id: string; role: string }, scopeId: string): PlatformAccessRole | null {
+  if (actorHasGlobalAccess(actor)) return "owner";
+  return getPlatformState().grants.find((grant) => grant.userId === actor.id && grant.scopeId === scopeId)?.role ?? null;
+}
+
+export function getVisiblePlatformState(actor: { id: string; role: string }): PlatformState {
+  const state = getPlatformState();
+  if (actorHasGlobalAccess(actor)) return state;
+  const visible = new Set(state.grants.filter((grant) => grant.userId === actor.id).map((grant) => grant.scopeId));
+  for (const relation of state.relations) if (visible.has(relation.fromId) && state.entities.some((entity) => entity.id === relation.fromId) && state.accounts.some((account) => account.id === relation.toId)) visible.add(relation.toId);
+  return { ...state, people: state.people.filter((item) => visible.has(item.id)), entities: state.entities.filter((item) => visible.has(item.id)), accounts: state.accounts.filter((item) => visible.has(item.id)), relations: state.relations.filter((item) => visible.has(item.fromId) && visible.has(item.toId)), grants: state.grants.filter((grant) => grant.userId === actor.id) };
+}
+
+export function setAccessGrant(input: { userId: string; scopeId: string; role: PlatformAccessRole; createdBy: string; expectedRevision?: number }): PlatformState {
+  const state = getPlatformState(); assertRevision(state, input.expectedRevision);
+  const nodes = new Set([...state.people, ...state.entities, ...state.accounts].map((node) => node.id));
+  if (!nodes.has(input.scopeId)) throw new Error("Périmètre introuvable.");
+  const existing = state.grants.find((grant) => grant.userId === input.userId && grant.scopeId === input.scopeId);
+  if (existing) existing.role = input.role;
+  else state.grants.push({ id: `grant_${randomUUID()}`, userId: input.userId, scopeId: input.scopeId, role: input.role, createdAt: new Date().toISOString(), createdBy: input.createdBy });
+  return writeState(state);
+}
+
+export function deleteAccessGrant(id: string, expectedRevision?: number): PlatformState {
+  const state = getPlatformState(); assertRevision(state, expectedRevision);
+  if (!state.grants.some((grant) => grant.id === id)) throw Object.assign(new Error("Autorisation introuvable."), { code: "NOT_FOUND" });
+  state.grants = state.grants.filter((grant) => grant.id !== id);
   return writeState(state);
 }
