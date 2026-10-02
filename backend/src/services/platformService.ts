@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { resolve, sep, join } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
-import { getCompaniesRoot, loadCompanies } from "./companiesService.js";
+import { getCompaniesRoot, loadCompanies, updateCompanyMetadata } from "./companiesService.js";
 
 export type PlatformNodeKind = "person" | "household" | "entity" | "account";
 
@@ -20,7 +20,14 @@ export interface PlatformEntity {
   kind: "entity";
   name: string;
   workspaceId: string;
-  legalType?: "company" | "sci" | "holding";
+  legalType?: "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
+  capitalAmount?: number;
+  taxRegime?: "is" | "ir" | "micro" | "non_profit" | "other";
+  vatRegime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise";
+  startDate?: string;
+  endDate?: string;
+  fiscalYearStart?: string;
+  fiscalYearEnd?: string;
   createdAt: string;
 }
 
@@ -60,6 +67,13 @@ export interface PlatformRelation {
   type: PlatformRelationType;
   label?: string;
   ownershipPercent?: number;
+  shareCount?: number;
+  ultimateBeneficiaryId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  financialLinkType?: "none" | "shareholder_current_account" | "intercompany_loan";
+  financialAmount?: number;
+  interestRate?: number;
   source: "manual" | "workspace";
   createdAt: string;
 }
@@ -69,6 +83,8 @@ export interface CreateRelationResult {
   relation: PlatformRelation;
   created: boolean;
 }
+
+export interface StructureIssue { id: string; scopeId: string; severity: "warning" | "blocking"; code: string; message: string }
 
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
@@ -248,23 +264,85 @@ export function updatePerson(id: string, input: { name?: string; profile?: Platf
   return writeState(state);
 }
 
+export function updateEntity(id: string, input: Partial<Omit<PlatformEntity, "id" | "kind" | "workspaceId" | "createdAt">> & { expectedRevision?: number }): PlatformState {
+  const state = getPlatformState(); assertRevision(state, input.expectedRevision); const entity = state.entities.find((item) => item.id === id);
+  if (!entity) throw Object.assign(new Error("Structure introuvable."), { code: "NOT_FOUND" });
+  if (input.legalType && !["company", "sci", "holding", "association", "sole_proprietorship", "other"].includes(input.legalType)) throw new Error("Forme juridique invalide.");
+  if (input.taxRegime && !["is", "ir", "micro", "non_profit", "other"].includes(input.taxRegime)) throw new Error("Régime fiscal invalide.");
+  if (input.vatRegime && !["monthly_ca3", "quarterly_ca3", "simplified_ca12", "franchise"].includes(input.vatRegime)) throw new Error("Régime de TVA invalide.");
+  if (input.capitalAmount !== undefined && (!Number.isFinite(input.capitalAmount) || input.capitalAmount < 0)) throw new Error("Capital invalide.");
+  for (const value of [input.startDate, input.endDate]) if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Date invalide.");
+  for (const value of [input.fiscalYearStart, input.fiscalYearEnd]) if (value && !/^\d{2}-\d{2}$/.test(value)) throw new Error("Date d’exercice invalide (MM-JJ attendu).");
+  const nextStart = input.startDate === undefined ? entity.startDate : input.startDate || undefined;
+  const nextEnd = input.endDate === undefined ? entity.endDate : input.endDate || undefined;
+  if (nextStart && nextEnd && nextEnd < nextStart) throw new Error("La date de fin précède la date de début.");
+  if (input.name !== undefined) { if (!input.name.trim()) throw new Error("Le nom est requis."); entity.name = input.name.trim(); }
+  Object.assign(entity, {
+    legalType: input.legalType ?? entity.legalType,
+    capitalAmount: input.capitalAmount ?? entity.capitalAmount,
+    taxRegime: input.taxRegime ?? entity.taxRegime,
+    vatRegime: input.vatRegime ?? entity.vatRegime,
+    startDate: input.startDate === undefined ? entity.startDate : input.startDate || undefined,
+    endDate: input.endDate === undefined ? entity.endDate : input.endDate || undefined,
+    fiscalYearStart: input.fiscalYearStart === undefined ? entity.fiscalYearStart : input.fiscalYearStart || undefined,
+    fiscalYearEnd: input.fiscalYearEnd === undefined ? entity.fiscalYearEnd : input.fiscalYearEnd || undefined,
+  });
+  updateCompanyMetadata(entity.workspaceId, { name: entity.name, legalType: entity.legalType }); return writeState(state);
+}
+
 const RELATION_TYPES = new Set<PlatformRelationType>(["family", "spouse", "parent", "child", "member", "accountant", "advisor", "owner", "director", "employee", "beneficiary", "shareholder", "subsidiary", "management", "holder", "uses", "other"]);
 
-export function createRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number }): CreateRelationResult {
+export type RelationInput = { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; shareCount?: number; ultimateBeneficiaryId?: string; effectiveFrom?: string; effectiveTo?: string; financialLinkType?: PlatformRelation["financialLinkType"]; financialAmount?: number; interestRate?: number; expectedRevision?: number };
+function validateRelationInput(state: PlatformState, input: RelationInput): void {
+  if (input.ownershipPercent !== undefined && (!Number.isFinite(input.ownershipPercent) || input.ownershipPercent < 0 || input.ownershipPercent > 100)) throw new Error("Le pourcentage doit être compris entre 0 et 100.");
+  if (input.shareCount !== undefined && (!Number.isInteger(input.shareCount) || input.shareCount < 0)) throw new Error("Le nombre de parts doit être un entier positif.");
+  if (input.financialAmount !== undefined && (!Number.isFinite(input.financialAmount) || input.financialAmount < 0)) throw new Error("Le montant financier est invalide.");
+  if (input.interestRate !== undefined && (!Number.isFinite(input.interestRate) || input.interestRate < 0 || input.interestRate > 100)) throw new Error("Le taux d’intérêt est invalide.");
+  for (const value of [input.effectiveFrom, input.effectiveTo]) if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Date d’effet invalide.");
+  if (input.effectiveFrom && input.effectiveTo && input.effectiveTo < input.effectiveFrom) throw new Error("La fin du lien précède son début.");
+  if (input.ultimateBeneficiaryId && !state.people.some((person) => person.id === input.ultimateBeneficiaryId)) throw new Error("Le bénéficiaire effectif doit être une personne connue.");
+}
+export function createRelation(input: RelationInput): CreateRelationResult {
   const state = getPlatformState();
   assertRevision(state, input.expectedRevision);
   const nodes = new Set([...state.people, ...state.households, ...state.entities, ...state.accounts].map((node) => node.id));
   if (!nodes.has(input.fromId) || !nodes.has(input.toId)) throw new Error("Les deux éléments de la relation doivent exister.");
   if (input.fromId === input.toId) throw new Error("Un élément ne peut pas être relié à lui-même.");
   if (!RELATION_TYPES.has(input.type)) throw new Error("Type de relation invalide.");
-  if (input.ownershipPercent !== undefined && (input.ownershipPercent < 0 || input.ownershipPercent > 100)) throw new Error("Le pourcentage doit être compris entre 0 et 100.");
+  validateRelationInput(state, input);
   const duplicate = state.relations.find((relation) => relation.fromId === input.fromId && relation.toId === input.toId && relation.type === input.type);
   if (duplicate) return { state, relation: duplicate, created: false };
 
-  const relation: PlatformRelation = { id: `relation_${randomUUID()}`, fromId: input.fromId, toId: input.toId, type: input.type, label: input.label?.trim() || undefined, ownershipPercent: input.ownershipPercent, source: "manual", createdAt: new Date().toISOString() };
+  const relation: PlatformRelation = { id: `relation_${randomUUID()}`, fromId: input.fromId, toId: input.toId, type: input.type, label: input.label?.trim() || undefined, ownershipPercent: input.ownershipPercent, shareCount: input.shareCount, ultimateBeneficiaryId: input.ultimateBeneficiaryId, effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo, financialLinkType: input.financialLinkType ?? "none", financialAmount: input.financialAmount, interestRate: input.interestRate, source: "manual", createdAt: new Date().toISOString() };
   state.relations.push(relation);
   return { state: writeState(state), relation, created: true };
 }
+
+export function updateRelation(id: string, input: Partial<RelationInput>): PlatformState {
+  const state = getPlatformState(); assertRevision(state, input.expectedRevision); const relation = state.relations.find((item) => item.id === id);
+  if (!relation) throw Object.assign(new Error("Relation introuvable."), { code: "NOT_FOUND" });
+  if (relation.source === "workspace") throw new Error("Une relation automatique ne peut pas être modifiée ici.");
+  const merged = { ...relation, ...input } as RelationInput; validateRelationInput(state, merged);
+  Object.assign(relation, { label: input.label === undefined ? relation.label : input.label.trim() || undefined, ownershipPercent: input.ownershipPercent ?? relation.ownershipPercent, shareCount: input.shareCount ?? relation.shareCount, ultimateBeneficiaryId: input.ultimateBeneficiaryId ?? relation.ultimateBeneficiaryId, effectiveFrom: input.effectiveFrom ?? relation.effectiveFrom, effectiveTo: input.effectiveTo ?? relation.effectiveTo, financialLinkType: input.financialLinkType ?? relation.financialLinkType, financialAmount: input.financialAmount ?? relation.financialAmount, interestRate: input.interestRate ?? relation.interestRate });
+  return writeState(state);
+}
+
+export function getStructureIssues(state = getPlatformState()): StructureIssue[] {
+  const issues: StructureIssue[] = [];
+  for (const entity of state.entities) {
+    if (!entity.legalType) issues.push({ id: `${entity.id}:legal-type`, scopeId: entity.id, severity: "blocking", code: "MISSING_LEGAL_TYPE", message: `${entity.name} n’a pas de forme juridique.` });
+    if (!entity.taxRegime) issues.push({ id: `${entity.id}:tax`, scopeId: entity.id, severity: "warning", code: "MISSING_TAX_REGIME", message: `${entity.name} n’a pas de régime fiscal.` });
+    if (!entity.vatRegime) issues.push({ id: `${entity.id}:vat`, scopeId: entity.id, severity: "warning", code: "MISSING_VAT_REGIME", message: `${entity.name} n’a pas de régime de TVA.` });
+    if (!entity.startDate || !entity.fiscalYearStart || !entity.fiscalYearEnd) issues.push({ id: `${entity.id}:dates`, scopeId: entity.id, severity: "warning", code: "MISSING_DATES", message: `${entity.name} a des dates ou un exercice comptable incomplets.` });
+    const ownership = state.relations.filter((relation) => relation.toId === entity.id && ["owner", "shareholder", "subsidiary"].includes(relation.type));
+    if (!ownership.length) issues.push({ id: `${entity.id}:owner`, scopeId: entity.id, severity: "blocking", code: "MISSING_OWNER", message: `${entity.name} n’est rattachée à aucun associé, foyer ou structure.` });
+    else if (ownership.some((relation) => relation.ownershipPercent === undefined)) issues.push({ id: `${entity.id}:percent`, scopeId: entity.id, severity: "warning", code: "MISSING_OWNERSHIP", message: `Au moins une participation de ${entity.name} n’a pas de pourcentage.` });
+    else { const total = roundPercentage(ownership.reduce((sum, relation) => sum + (relation.ownershipPercent ?? 0), 0)); if (total !== 100) issues.push({ id: `${entity.id}:total`, scopeId: entity.id, severity: "warning", code: "OWNERSHIP_TOTAL", message: `Les participations de ${entity.name} totalisent ${total} % au lieu de 100 %.` }); }
+    if (entity.legalType === "sci" && !ownership.some((relation) => state.households.some((household) => household.id === relation.fromId) || state.people.some((person) => person.id === relation.fromId))) issues.push({ id: `${entity.id}:sci-owner`, scopeId: entity.id, severity: "warning", code: "SCI_WITHOUT_NATURAL_OWNER", message: `La SCI ${entity.name} n’est reliée à aucun foyer ou associé personne physique.` });
+  }
+  return issues;
+}
+function roundPercentage(value: number): number { return Math.round(value * 100) / 100; }
 
 export function deleteRelation(id: string, expectedRevision?: number): PlatformState {
   const state = getPlatformState();

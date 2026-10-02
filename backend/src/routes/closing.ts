@@ -8,6 +8,7 @@ import { activeClosing, closeMonth, loadClosings, reopenMonth } from "../service
 import { autoCommit } from "../services/gitService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { needsTransactionEvidence } from "../services/transactionEvidenceService.js";
+import { loadPortfolioAccountingLines } from "../services/portfolioJournalService.js";
 
 type Step = { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number; action?: "banking" | "transactions" | "vat" | "reconcile" | "export"; filter?: "unjustified" | "misc" | "pending" };
 
@@ -22,7 +23,7 @@ async function checklist(month: string) {
   const unvalidated = active.filter((transaction) => transaction.status !== "validated");
   const lastBankSync = connections.flatMap((connection) => connection.accounts).map((account) => account.lastSyncAt).filter((date): date is string => !!date).sort().at(-1);
   const bankFresh = lastBankSync ? Date.now() - Date.parse(lastBankSync) < 7 * 86_400_000 : false;
-  const preview = buildAccountingPreview(transactions, loadAccountingConfig(), month.slice(0, 4));
+  const preview = buildAccountingPreview(transactions, loadAccountingConfig(), month.slice(0, 4), { extraLines: loadPortfolioAccountingLines().filter((line) => line.entryDate.startsWith(month)) });
   const blockers = preview.anomalies.filter((anomaly) => anomaly.severity === "blocking" && (!anomaly.transactionId || active.some((transaction) => transaction.id === anomaly.transactionId)));
   const steps: Step[] = [
     { id: "bank", label: "Banque synchronisée", status: bankFresh ? "done" : "warning", detail: lastBankSync ? `Dernière synchronisation : ${lastBankSync}` : "Aucune synchronisation bancaire trouvée", action: "banking" },

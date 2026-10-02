@@ -12,7 +12,7 @@ export interface Company {
   /** Compatibilité avec les registres créés par l'ancienne branche expérimentale. */
   kind?: "business" | "personal" | "household" | "ecosystem";
   scopeId?: string;
-  legalType?: "company" | "sci" | "holding";
+  legalType?: "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
   ecosystemId?: string;
   memberIds?: string[];
   name: string;
@@ -52,6 +52,14 @@ function saveCompanies(companies: Company[]): void {
     } catch { /* le prochain enregistrement répare le registre */ }
   }
   atomicWriteFileSync(COMPANIES_FILE, JSON.stringify([...companies, ...metadataEntries], null, 2));
+}
+
+export function updateCompanyMetadata(id: string, patch: Pick<Company, "name" | "legalType">): Company {
+  const companies = loadCompanies(); const company = companies.find((item) => item.id === id);
+  if (!company) throw new Error("Structure comptable introuvable.");
+  if (patch.name?.trim()) company.name = patch.name.trim();
+  if (patch.legalType) company.legalType = patch.legalType;
+  saveCompanies(companies); return company;
 }
 
 export function getActiveCompanyId(): string | null {

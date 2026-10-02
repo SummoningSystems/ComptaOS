@@ -1,0 +1,10 @@
+id: complete-structure-and-transfer-workflow-50372
+title: complete-structure-and-transfer-workflow
+branch: next/person-centric-platform
+status: finished
+started_at: 2026-10-02T14:12:52.1771862Z
+finished_at: 2026-10-02T14:42:49.2288468Z
+base_commit: 54e62593b220c1d85a3256a597d7e840d4b01113
+final_commit: 54e62593b220c1d85a3256a597d7e840d4b01113
+tests:
+    result: not_run

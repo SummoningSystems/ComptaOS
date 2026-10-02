@@ -3,14 +3,15 @@ import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal" | "household"; scopeId?: string; createdAt: string }> }));
+const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal" | "household"; scopeId?: string; legalType?: string; createdAt: string }> }));
 
 vi.mock("../services/companiesService.js", () => ({
   getCompaniesRoot: () => workspace.root,
   loadCompanies: () => workspace.companies,
+  updateCompanyMetadata: (id: string, patch: { name?: string; legalType?: string }) => { const company = workspace.companies.find((item) => item.id === id); if (!company) throw new Error("Structure comptable introuvable."); Object.assign(company, patch); return company; },
 }));
 
-import { createPerson, createRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, initializeLegacyAccess, setAccessGrant } from "../services/platformService.js";
+import { createHousehold, createPerson, createRelation, getPlatformState, getScopeAccess, getStructureIssues, getVisiblePlatformState, initializeLegacyAccess, setAccessGrant, updateEntity, updateRelation } from "../services/platformService.js";
 
 describe("person-centric platform registry", () => {
   beforeEach(async () => {
@@ -97,5 +98,23 @@ describe("person-centric platform registry", () => {
     expect(visible.people.map((person) => person.name)).toEqual(["Client privé"]);
     expect(hidden.people).toEqual([]);
     expect(hidden.entities).toEqual([]);
+  });
+
+  it("enregistre la fiche juridique et signale une structure incomplète", () => {
+    const initial = getPlatformState();
+    expect(getStructureIssues(initial).some((issue) => issue.code === "MISSING_LEGAL_TYPE")).toBe(true);
+    const complete = updateEntity("entity_default", { legalType: "sci", capitalAmount: 10_000, taxRegime: "ir", vatRegime: "simplified_ca12", startDate: "2026-01-01", fiscalYearStart: "01-01", fiscalYearEnd: "12-31", expectedRevision: initial.revision });
+    expect(complete.entities.find((entity) => entity.id === "entity_default")).toMatchObject({ legalType: "sci", capitalAmount: 10_000, fiscalYearEnd: "12-31" });
+    expect(getStructureIssues(complete).some((issue) => issue.code === "SCI_WITHOUT_NATURAL_OWNER")).toBe(true);
+  });
+
+  it("documente une participation et contrôle que le capital totalise 100 %", () => {
+    let state = getPlatformState(); state = createPerson({ name: "Alice", expectedRevision: state.revision }); const personId = state.people[0].id;
+    state = createHousehold({ name: "Foyer Alice", expectedRevision: state.revision });
+    const created = createRelation({ fromId: personId, toId: "entity_default", type: "owner", ownershipPercent: 80, shareCount: 800, ultimateBeneficiaryId: personId, effectiveFrom: "2026-01-01", financialLinkType: "shareholder_current_account", financialAmount: 5_000, expectedRevision: state.revision });
+    expect(getStructureIssues(created.state).some((issue) => issue.code === "OWNERSHIP_TOTAL" && issue.message.includes("80 %"))).toBe(true);
+    const updated = updateRelation(created.relation.id, { ownershipPercent: 100, expectedRevision: created.state.revision });
+    expect(updated.relations.find((relation) => relation.id === created.relation.id)).toMatchObject({ ownershipPercent: 100, shareCount: 800, financialAmount: 5_000 });
+    expect(getStructureIssues(updated).some((issue) => issue.scopeId === "entity_default" && issue.code === "OWNERSHIP_TOTAL")).toBe(false);
   });
 });

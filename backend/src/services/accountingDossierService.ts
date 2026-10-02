@@ -12,7 +12,7 @@ export interface AccountingDossier {
   scopeKind: "person" | "household" | "entity";
   mode: AccountingDossierMode;
   workspaceId?: string;
-  legalType?: "company" | "sci" | "holding";
+  legalType?: "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
   created: boolean;
   createdAt?: string;
   features: string[];

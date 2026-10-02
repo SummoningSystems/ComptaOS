@@ -7,11 +7,12 @@ import { getWorkspaceRoot } from "../services/fileSystem.js";
 import { loadAccountingConfig, loadCompanyProfile, saveAccountingConfig, AccountingConfig, defaultAccountingConfig } from "../services/settingsService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { activeClosing } from "../services/closingService.js";
+import { loadPortfolioAccountingLines } from "../services/portfolioJournalService.js";
 
 async function context(year: string) {
   const config = loadAccountingConfig();
   const transactions = await loadAllTransactions();
-  const preview = buildAccountingPreview(transactions, config, year);
+  const preview = buildAccountingPreview(transactions, config, year, { extraLines: loadPortfolioAccountingLines() });
   return { config, preview, transactions };
 }
 
@@ -73,7 +74,7 @@ export async function accountingRoutes(app: FastifyInstance) {
     const month = request.query.month ?? new Date().toISOString().slice(0, 7);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return reply.status(400).send({ error: "Mois invalide" });
     const transactions = (await loadAllTransactions()).filter((item) => item.date.startsWith(month));
-    const config = loadAccountingConfig(); const preview = buildAccountingPreview(transactions, config, month.slice(0, 4));
+    const config = loadAccountingConfig(); const preview = buildAccountingPreview(transactions, config, month.slice(0, 4), { extraLines: loadPortfolioAccountingLines().filter((line) => line.entryDate.startsWith(month)) });
     const blocking = blockers(preview); if (blocking.length) return reply.status(409).send({ error: "Dossier mensuel bloqué par des anomalies comptables.", anomalies: blocking });
     const closing = await activeClosing(month); const profile = loadCompanyProfile(); const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on("error", (error: Error) => reply.raw.destroy(error));

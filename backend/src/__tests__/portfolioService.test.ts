@@ -8,7 +8,7 @@ const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: str
 vi.mock("../services/companiesService.js", () => ({ getCompaniesRoot: () => workspace.root, getActiveCompanyPath: () => workspace.root, loadCompanies: () => workspace.companies, resolveCompanyPath: (company: { path: string }) => path.resolve(workspace.root, company.path) }));
 
 import { createPerson, getPlatformState } from "../services/platformService.js";
-import { createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions } from "../services/portfolioService.js";
+import { advancePortfolioTransfer, correctPortfolioTransfer, createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions } from "../services/portfolioService.js";
 import { loadFinanceTransactions, saveTransactionAllocations } from "../services/financeAllocationService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
 
@@ -50,7 +50,8 @@ describe("portfolio transfers and consolidated forecast", () => {
     await fs.writeFile(path.join(workspace.root, "transactions", "in.yaml"), yaml.stringify({ ...base, id: "in", date: "2026-10-01", label: "Prêt reçu", amount_ttc: 100, account: "perso" })); invalidateTransactionCache();
     await saveTransactionAllocations(actor, "2026-10", "default:in", [{ scopeId: personId, amount: 100 }]);
     const transfer = await createPortfolioTransfer(actor, { kind: "confirmed", treatment: "intercompany_loan", sourceScopeId: "entity_default", destinationScopeId: personId, amount: 100, fee: 2, date: "2026-10-01", label: "Prêt", sourceTransactionKey: "default:out", destinationTransactionKey: "default:in" });
-    expect(transfer.accountingLines.map((line) => line.accountCode)).toEqual(["267000", "168000", "627000"]);
+    expect(transfer.accountingLines.map((line) => line.accountCode)).toEqual(["267000", "512000", "512000", "168000", "627000"]);
+    expect(transfer.accountingLines.reduce((sum, line) => sum + line.debit - line.credit, 0)).toBe(0);
   });
 
   it("intègre les engagements et les hypothèses dans trois scénarios", async () => {
@@ -59,5 +60,29 @@ describe("portfolio transfers and consolidated forecast", () => {
     savePortfolioAssumptions(actor, { prudent: { revenueMultiplier: 0, expenseMultiplier: 1.2, safetyBuffer: 100 }, probable: { revenueMultiplier: 1, expenseMultiplier: 1, safetyBuffer: 0 }, optimistic: { revenueMultiplier: 1.2, expenseMultiplier: .9, safetyBuffer: 0 } });
     const snapshot = await getPortfolioSnapshot(actor, personId, 3, [personId], "2026-10");
     expect(snapshot.forecasts.prudent[0].expenses).toBe(600); expect(snapshot.timeline.some((item) => item.label === "Machine")).toBe(true); expect(snapshot.assumptions.prudent.safetyBuffer).toBe(100);
+  });
+
+  it("contrôle, valide, comptabilise puis contre-passe une correction", async () => {
+    const initial = getPlatformState(); const state = createPerson({ name: "Alice", expectedRevision: initial.revision }); const personId = state.people[0].id; const actor = { id: "local", role: "local" as const };
+    workspace.companies.push({ id: "alice", name: "Alice", path: "companies/alice", kind: "personal", scopeId: personId, createdAt: "2026-10-02T00:00:00.000Z" });
+    const base = { date: "2026-10-02", amount_ht: 0, vat: 0, currency: "EUR", category: "misc", status: "validated" } as const;
+    await fs.writeFile(path.join(workspace.root, "transactions", "workflow-out.yaml"), yaml.stringify({ ...base, id: "workflow-out", label: "Avance vers Alice", amount_ttc: -300, account: "pro" }));
+    await fs.writeFile(path.join(workspace.root, "transactions", "workflow-in.yaml"), yaml.stringify({ ...base, id: "workflow-in", label: "Avance reçue", amount_ttc: 300, account: "perso" })); invalidateTransactionCache();
+    await saveTransactionAllocations(actor, "2026-10", "default:workflow-out", [{ scopeId: "entity_default", amount: -300 }]);
+    await saveTransactionAllocations(actor, "2026-10", "default:workflow-in", [{ scopeId: personId, amount: 300 }]);
+    const created = await createPortfolioTransfer(actor, { kind: "confirmed", treatment: "shareholder_current_account", sourceScopeId: "entity_default", destinationScopeId: personId, amount: 300, date: "2026-10-02", label: "Avance associée", sourceTransactionKey: "default:workflow-out", destinationTransactionKey: "default:workflow-in" });
+    expect(advancePortfolioTransfer(actor, created.id, "review").workflowStatus).toBe("reviewed");
+    expect(advancePortfolioTransfer(actor, created.id, "validate").workflowStatus).toBe("validated");
+    expect(advancePortfolioTransfer(actor, created.id, "post").workflowStatus).toBe("posted");
+    const postedSource = JSON.parse(await fs.readFile(path.join(workspace.root, "settings", "portfolio_journal.json"), "utf-8")) as Array<{ transferId: string; reversal?: boolean; reversedAt?: string }>;
+    const postedDestination = JSON.parse(await fs.readFile(path.join(workspace.root, "companies", "alice", "settings", "portfolio_journal.json"), "utf-8")) as typeof postedSource;
+    expect([...postedSource, ...postedDestination].filter((line) => line.transferId === created.id)).toHaveLength(4);
+    const corrected = correctPortfolioTransfer(actor, created.id, { amount: 280, note: "Montant bancaire corrigé" });
+    expect(corrected.workflowStatus).toBe("proposed");
+    const sourceJournal = JSON.parse(await fs.readFile(path.join(workspace.root, "settings", "portfolio_journal.json"), "utf-8")) as Array<{ transferId: string; reversal?: boolean; reversedAt?: string }>;
+    const destinationJournal = JSON.parse(await fs.readFile(path.join(workspace.root, "companies", "alice", "settings", "portfolio_journal.json"), "utf-8")) as typeof sourceJournal;
+    const journal = [...sourceJournal, ...destinationJournal];
+    expect(journal.filter((line) => line.transferId === created.id && line.reversal)).toHaveLength(4);
+    expect(journal.filter((line) => line.transferId === created.id && line.reversedAt)).toHaveLength(4);
   });
 });

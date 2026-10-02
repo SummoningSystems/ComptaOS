@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { actorHasGlobalAccess, createHousehold, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getVisiblePlatformState, setAccessGrant, updatePerson, type PlatformAccessRole, type PlatformRelationType } from "../services/platformService.js";
+import { actorHasGlobalAccess, createHousehold, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getStructureIssues, getVisiblePlatformState, setAccessGrant, updateEntity, updatePerson, updateRelation, type PlatformAccessRole, type PlatformEntity, type RelationInput } from "../services/platformService.js";
 import { actorContext } from "../services/workspaceContext.js";
 import { getUserById } from "../services/authService.js";
 import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
@@ -7,7 +7,7 @@ import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocatio
 import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
 import { getPlatformLayout, savePlatformLayout, type PlatformLayout } from "../services/platformLayoutService.js";
 import { ensureAccountingDossier, getAccountingDossiers } from "../services/accountingDossierService.js";
-import { createPortfolioCommitment, createPortfolioTransfer, deletePortfolioCommitment, deletePortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions, type PortfolioAssumptions, type PortfolioCommitment, type PortfolioTransferInput } from "../services/portfolioService.js";
+import { advancePortfolioTransfer, correctPortfolioTransfer, createPortfolioCommitment, createPortfolioTransfer, deletePortfolioCommitment, deletePortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions, type PortfolioAssumptions, type PortfolioCommitment, type PortfolioTransfer, type PortfolioTransferInput } from "../services/portfolioService.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   const typed = error as Error & { code?: string };
@@ -38,6 +38,7 @@ export async function platformRoutes(app: FastifyInstance) {
   };
 
   app.get("/", async () => getVisiblePlatformState(actor()));
+  app.get("/completeness", async () => getStructureIssues(getVisiblePlatformState(actor())));
 
   app.get("/layout", async () => getPlatformLayout(actor()));
 
@@ -91,12 +92,24 @@ export async function platformRoutes(app: FastifyInstance) {
     } catch (error) { return sendError(reply, error); }
   });
 
+  app.patch("/entities/:id", async (req, reply) => {
+    if (!requireAdmin(reply)) return;
+    try { const { id } = req.params as { id: string }; return updateEntity(id, req.body as Partial<PlatformEntity> & { expectedRevision?: number }); }
+    catch (error) { return sendError(reply, error); }
+  });
+
   app.post("/relations", async (req, reply) => {
     if (!requireAdmin(reply)) return;
     try {
-      const result = createRelation(req.body as { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision?: number });
+      const result = createRelation(req.body as RelationInput);
       return reply.status(result.created ? 201 : 200).send(result);
     } catch (error) { return sendError(reply, error); }
+  });
+
+  app.patch("/relations/:id", async (req, reply) => {
+    if (!requireAdmin(reply)) return;
+    try { const { id } = req.params as { id: string }; return updateRelation(id, req.body as Partial<RelationInput>); }
+    catch (error) { return sendError(reply, error); }
   });
 
   app.delete("/relations/:id", async (req, reply) => {
@@ -178,6 +191,16 @@ export async function platformRoutes(app: FastifyInstance) {
 
   app.delete("/portfolio/transfers/:id", async (req, reply) => {
     try { const { id } = req.params as { id: string }; deletePortfolioTransfer(actor(), id); return { deleted: true }; }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.post("/portfolio/transfers/:id/workflow", async (req, reply) => {
+    try { const { id } = req.params as { id: string }; const input = req.body as { action: "review" | "validate" | "post" | "cancel"; note?: string }; return advancePortfolioTransfer(actor(), id, input.action, input.note); }
+    catch (error) { return sendError(reply, error); }
+  });
+
+  app.patch("/portfolio/transfers/:id", async (req, reply) => {
+    try { const { id } = req.params as { id: string }; return correctPortfolioTransfer(actor(), id, req.body as Partial<Pick<PortfolioTransfer, "amount" | "fee" | "date" | "label" | "treatment">> & { note: string }); }
     catch (error) { return sendError(reply, error); }
   });
 

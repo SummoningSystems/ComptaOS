@@ -198,7 +198,7 @@ export interface AiConfigStatus {
 export interface Company {
   id: string;
   kind?: "business" | "household" | "ecosystem";
-  legalType?: "company" | "sci" | "holding";
+  legalType?: "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
   name: string;
   path: string;
   createdAt: string;
@@ -207,14 +207,17 @@ export interface Company {
 export type PlatformRelationType = "family" | "spouse" | "parent" | "child" | "member" | "accountant" | "advisor" | "owner" | "director" | "employee" | "beneficiary" | "shareholder" | "subsidiary" | "management" | "holder" | "uses" | "other";
 export interface PlatformPerson { id: string; kind: "person"; name: string; profile: "individual" | "professional"; notes?: string; createdAt: string }
 export interface PlatformHousehold { id: string; kind: "household"; name: string; notes?: string; createdAt: string }
-export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; legalType?: "company" | "sci" | "holding"; createdAt: string }
+export type PlatformLegalType = "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
+export type PlatformTaxRegime = "is" | "ir" | "micro" | "non_profit" | "other";
+export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; legalType?: PlatformLegalType; capitalAmount?: number; taxRegime?: PlatformTaxRegime; vatRegime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise"; startDate?: string; endDate?: string; fiscalYearStart?: string; fiscalYearEnd?: string; createdAt: string }
 export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
-export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; source: "manual" | "workspace"; createdAt: string }
+export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; shareCount?: number; ultimateBeneficiaryId?: string; effectiveFrom?: string; effectiveTo?: string; financialLinkType?: "none" | "shareholder_current_account" | "intercompany_loan"; financialAmount?: number; interestRate?: number; source: "manual" | "workspace"; createdAt: string }
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }
 export interface PlatformState { schemaVersion: 1; revision: number; people: PlatformPerson[]; households: PlatformHousehold[]; entities: PlatformEntity[]; accounts: PlatformAccount[]; relations: PlatformRelation[]; grants: PlatformAccessGrant[]; accessInitializedAt?: string; updatedAt: string }
+export interface StructureIssue { id: string; scopeId: string; severity: "warning" | "blocking"; code: string; message: string }
 export type PlatformLayout = Record<string, { x: number; y: number }>;
-export interface AccountingDossier { scopeId: string; name: string; scopeKind: "person" | "household" | "entity"; mode: "personal" | "household" | "full"; workspaceId?: string; legalType?: "company" | "sci" | "holding"; created: boolean; createdAt?: string; features: string[] }
+export interface AccountingDossier { scopeId: string; name: string; scopeKind: "person" | "household" | "entity"; mode: "personal" | "household" | "full"; workspaceId?: string; legalType?: PlatformLegalType; created: boolean; createdAt?: string; features: string[] }
 
 export type AccountUsage = "personal" | "business" | "shared" | "mixed";
 export interface FinanceAllocation { scopeId: string; amount: number }
@@ -241,7 +244,9 @@ export type TransferTreatment = "internal_transfer" | "capital_contribution" | "
 export type ForecastScenario = "prudent" | "probable" | "optimistic";
 export type CommitmentKind = "supplier_invoice" | "tax" | "loan_payment" | "investment" | "other";
 export interface AccountingLine { scopeId: string; accountCode: string; label: string; debit: number; credit: number }
-export interface PortfolioTransfer { id: string; kind: "confirmed" | "planned"; sourceScopeId: string; destinationScopeId: string; amount: number; fee?: number; date: string; label: string; treatment: TransferTreatment; sourceTransactionKey?: string; destinationTransactionKey?: string; frequency?: "once" | "monthly"; endDate?: string; accountingLines: AccountingLine[]; createdAt: string }
+export type TransferWorkflowStatus = "proposed" | "reviewed" | "validated" | "posted" | "cancelled";
+export interface TransferWorkflowEvent { at: string; actorId: string; action: "created" | "reviewed" | "validated" | "posted" | "cancelled" | "corrected"; note?: string }
+export interface PortfolioTransfer { id: string; kind: "confirmed" | "planned"; sourceScopeId: string; destinationScopeId: string; amount: number; fee?: number; date: string; label: string; treatment: TransferTreatment; sourceTransactionKey?: string; destinationTransactionKey?: string; frequency?: "once" | "monthly"; endDate?: string; accountingLines: AccountingLine[]; workflowStatus: TransferWorkflowStatus; workflowHistory: TransferWorkflowEvent[]; createdAt: string }
 export interface PortfolioCommitment { id: string; scopeId: string; kind: CommitmentKind; label: string; amount: number; dueDate: string; frequency: "once" | "monthly" | "quarterly" | "annual"; endDate?: string; createdAt: string }
 export interface ScenarioAssumption { revenueMultiplier: number; expenseMultiplier: number; safetyBuffer: number }
 export type PortfolioAssumptions = Record<ForecastScenario, ScenarioAssumption>;
@@ -249,7 +254,8 @@ export interface ForecastItem { scopeId: string; kind: string; label: string; am
 export interface ConsolidatedForecastMonth { month: string; openingBalance: number; income: number; expenses: number; transfersIn: number; transfersOut: number; closingBalance: number; items: ForecastItem[] }
 export interface PortfolioPosition { scopeId: string; name: string; balance: number; vatReserve: number; commitments90Days: number; available: number }
 export interface OwnershipPosition { scopeId: string; name: string; ownershipPercent: number; minorityPercent: number; balance: number; groupShare: number; minorityShare: number }
-export interface PortfolioSnapshot { rootScopeId: string; scopes: FinanceScope[]; suggestedScopeIds: string[]; selectedScopeIds: string[]; balance: number; averageIncome: number; averageExpenses: number; transfers: PortfolioTransfer[]; commitments: PortfolioCommitment[]; assumptions: PortfolioAssumptions; transferCandidates: AllocatedTransaction[]; forecasts: Record<ForecastScenario, ConsolidatedForecastMonth[]>; forecast: ConsolidatedForecastMonth[]; positions: PortfolioPosition[]; timeline: ForecastItem[]; ownership: OwnershipPosition[]; consolidation: { grossBalance: number; groupShareBalance: number; minorityShareBalance: number; eliminatedTransfers: number; eliminatedAmount: number; reciprocalAccounts: Array<{ from: string; to: string; treatment: TransferTreatment; amount: number }> } }
+export interface PortfolioExplanation { id: string; label: string; total: number; lines: Array<{ scopeId?: string; label: string; kind: string; amount: number }> }
+export interface PortfolioSnapshot { rootScopeId: string; scopes: FinanceScope[]; suggestedScopeIds: string[]; selectedScopeIds: string[]; balance: number; averageIncome: number; averageExpenses: number; transfers: PortfolioTransfer[]; commitments: PortfolioCommitment[]; assumptions: PortfolioAssumptions; transferCandidates: AllocatedTransaction[]; forecasts: Record<ForecastScenario, ConsolidatedForecastMonth[]>; forecast: ConsolidatedForecastMonth[]; positions: PortfolioPosition[]; timeline: ForecastItem[]; ownership: OwnershipPosition[]; consolidation: { grossBalance: number; groupShareBalance: number; minorityShareBalance: number; eliminatedTransfers: number; eliminatedAmount: number; reciprocalAccounts: Array<{ from: string; to: string; treatment: TransferTreatment; amount: number }> }; explanations: PortfolioExplanation[] }
 
 export interface CategoryBudget {
   category: string;

@@ -410,7 +410,7 @@ export async function setActiveCompanyApi(companyId: string): Promise<void> {
   await api.put("/companies/active", { companyId });
 }
 
-export async function createCompanyApi(name: string, legalType?: "company" | "sci" | "holding"): Promise<Company> {
+export async function createCompanyApi(name: string, legalType?: import("../types").PlatformLegalType): Promise<Company> {
   const { data } = await api.post<Company>("/companies", { name, legalType });
   return data;
 }
@@ -473,12 +473,20 @@ export async function fetchPortfolio(rootScopeId: string, scopeIds: string[], ho
   return data;
 }
 
-export async function createPortfolioTransfer(input: Omit<import("../types").PortfolioTransfer, "id" | "createdAt" | "accountingLines">): Promise<import("../types").PortfolioTransfer> {
+export async function createPortfolioTransfer(input: Omit<import("../types").PortfolioTransfer, "id" | "createdAt" | "accountingLines" | "workflowStatus" | "workflowHistory">): Promise<import("../types").PortfolioTransfer> {
   const { data } = await api.post<import("../types").PortfolioTransfer>("/platform/portfolio/transfers", input);
   return data;
 }
 
 export async function deletePortfolioTransfer(id: string): Promise<void> { await api.delete(`/platform/portfolio/transfers/${encodeURIComponent(id)}`); }
+
+export async function advancePortfolioTransfer(id: string, action: "review" | "validate" | "post" | "cancel", note?: string): Promise<import("../types").PortfolioTransfer> {
+  const { data } = await api.post<import("../types").PortfolioTransfer>(`/platform/portfolio/transfers/${encodeURIComponent(id)}/workflow`, { action, note }); return data;
+}
+
+export async function correctPortfolioTransfer(id: string, input: Partial<Pick<import("../types").PortfolioTransfer, "amount" | "fee" | "date" | "label" | "treatment">> & { note: string }): Promise<import("../types").PortfolioTransfer> {
+  const { data } = await api.patch<import("../types").PortfolioTransfer>(`/platform/portfolio/transfers/${encodeURIComponent(id)}`, input); return data;
+}
 
 export async function savePortfolioAssumptions(input: import("../types").PortfolioAssumptions): Promise<import("../types").PortfolioAssumptions> {
   const { data } = await api.put<import("../types").PortfolioAssumptions>("/platform/portfolio/assumptions", input); return data;
@@ -500,9 +508,21 @@ export async function saveHouseholdFinanceBudgets(householdId: string, budgets: 
   return data;
 }
 
-export async function createPlatformRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; expectedRevision: number }): Promise<{ state: PlatformState; relation: PlatformRelation; created: boolean }> {
+export async function createPlatformRelation(input: { fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; shareCount?: number; ultimateBeneficiaryId?: string; effectiveFrom?: string; effectiveTo?: string; financialLinkType?: PlatformRelation["financialLinkType"]; financialAmount?: number; interestRate?: number; expectedRevision: number }): Promise<{ state: PlatformState; relation: PlatformRelation; created: boolean }> {
   const { data } = await api.post<{ state: PlatformState; relation: PlatformRelation; created: boolean }>("/platform/relations", input);
   return data;
+}
+
+export async function updatePlatformEntity(id: string, input: Partial<import("../types").PlatformEntity> & { expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.patch<PlatformState>(`/platform/entities/${encodeURIComponent(id)}`, input); return data;
+}
+
+export async function updatePlatformRelation(id: string, input: Partial<PlatformRelation> & { expectedRevision: number }): Promise<PlatformState> {
+  const { data } = await api.patch<PlatformState>(`/platform/relations/${encodeURIComponent(id)}`, input); return data;
+}
+
+export async function fetchStructureIssues(): Promise<import("../types").StructureIssue[]> {
+  const { data } = await api.get<import("../types").StructureIssue[]>("/platform/completeness"); return data;
 }
 
 export async function deletePlatformRelation(id: string, expectedRevision: number): Promise<PlatformState> {

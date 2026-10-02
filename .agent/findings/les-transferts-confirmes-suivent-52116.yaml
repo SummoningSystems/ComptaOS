@@ -1,0 +1,11 @@
+id: les-transferts-confirmes-suivent-52116
+statement: Les transferts confirmes suivent un circuit propose, controle, valide puis comptabilise avec correction et contrepassation tracees.
+status: verified
+confidence: high
+created_at: 2026-10-02T14:41:56.3746649Z
+sources:
+    - path: backend/src/services/portfolioService.ts
+      line_start: 39
+      line_end: 70
+      file_hash: ae16f338071e3b55
+      commit_hash: 54e62593b220c1d85a3256a597d7e840d4b01113
