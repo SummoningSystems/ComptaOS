@@ -146,12 +146,24 @@ export function getPlatformState(): PlatformState {
 
   for (const company of loadCompanies()) {
     const entityId = `entity_${company.id}`;
-    if (!state.entities.some((entity) => entity.id === entityId)) {
+    const isBusiness = !company.kind || company.kind === "business";
+    if (isBusiness && !state.entities.some((entity) => entity.id === entityId)) {
       state.entities.push({ id: entityId, kind: "entity", name: company.name, workspaceId: company.id, legalType: company.legalType, createdAt: company.createdAt });
       changed = true;
-    } else {
+    } else if (isBusiness) {
       const entity = state.entities.find((item) => item.id === entityId)!;
       if (entity.name !== company.name || entity.legalType !== company.legalType) { entity.name = company.name; entity.legalType = company.legalType; changed = true; }
+    }
+
+    if (company.scopeId) {
+      const manualAccountId = stableId("account", `${company.id}:main`);
+      if (!state.accounts.some((account) => account.id === manualAccountId)) {
+        state.accounts.push({ id: manualAccountId, kind: "account", name: "Saisie manuelle", currency: "EUR", provider: "ComptaOS", sourceWorkspaceId: company.id, sourceAccountId: "main", createdAt: company.createdAt }); changed = true;
+      }
+      const manualRelationId = stableId("relation", `${company.scopeId}:uses:${manualAccountId}`);
+      if (!state.relations.some((relation) => relation.id === manualRelationId)) {
+        state.relations.push({ id: manualRelationId, fromId: company.scopeId, toId: manualAccountId, type: "uses", source: "workspace", createdAt: company.createdAt }); changed = true;
+      }
     }
 
     const companyPath = safeCompanyPath(company.path);
@@ -182,9 +194,10 @@ export function getPlatformState(): PlatformState {
               Object.assign(existingAccount, current); changed = true;
             }
           }
-          const relationId = stableId("relation", `${entityId}:uses:${accountId}`);
+          const ownerScopeId = company.scopeId ?? entityId;
+          const relationId = stableId("relation", `${ownerScopeId}:uses:${accountId}`);
           if (!state.relations.some((relation) => relation.id === relationId)) {
-            state.relations.push({ id: relationId, fromId: entityId, toId: accountId, type: "uses", source: "workspace", createdAt: new Date().toISOString() });
+            state.relations.push({ id: relationId, fromId: ownerScopeId, toId: accountId, type: "uses", source: "workspace", createdAt: new Date().toISOString() });
             changed = true;
           }
         }

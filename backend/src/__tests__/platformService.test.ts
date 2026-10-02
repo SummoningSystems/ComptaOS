@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; createdAt: string }> }));
+const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal" | "household"; scopeId?: string; createdAt: string }> }));
 
 vi.mock("../services/companiesService.js", () => ({
   getCompaniesRoot: () => workspace.root,
@@ -46,6 +46,22 @@ describe("person-centric platform registry", () => {
     const updated = getPlatformState();
     expect(updated.accounts[0].balance).toBe(1450);
     expect(await fs.readFile(path.join(workspace.root, "banking", "connections.json"), "utf-8")).toBe(updatedSource);
+  });
+
+  it("relie les saisies manuelles et les comptes bancaires à leur dossier personnel sans créer une entreprise", async () => {
+    const initial = getPlatformState();
+    const withPerson = createPerson({ name: "Alice", expectedRevision: initial.revision });
+    const personId = withPerson.people[0].id;
+    const scopedPath = path.join(workspace.root, "companies", "scope-alice");
+    await fs.mkdir(path.join(scopedPath, "banking"), { recursive: true });
+    await fs.writeFile(path.join(scopedPath, "banking", "connections.json"), JSON.stringify([{ connectorName: "Banque perso", accounts: [{ id: "perso-1", name: "Compte courant", balance: 420 }] }]), "utf-8");
+    workspace.companies.push({ id: "scope-alice", kind: "personal", scopeId: personId, name: "Alice", path: "companies/scope-alice", createdAt: "2026-10-02T00:00:00.000Z" });
+
+    const state = getPlatformState();
+    expect(state.entities.map((entity) => entity.workspaceId)).toEqual(["default", "holding"]);
+    const scopedAccounts = state.accounts.filter((account) => account.sourceWorkspaceId === "scope-alice");
+    expect(scopedAccounts.map((account) => account.sourceAccountId).sort()).toEqual(["main", "perso-1"]);
+    expect(scopedAccounts.every((account) => state.relations.some((relation) => relation.fromId === personId && relation.toId === account.id && relation.type === "uses"))).toBe(true);
   });
 
   it("gère plusieurs personnes et leurs liens avec une révision optimiste", () => {

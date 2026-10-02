@@ -34,6 +34,7 @@ export function CompanySelector({ onCreateNew }: Props) {
       setOpen(false);
       return;
     }
+    sessionStorage.setItem("comptaos:last-business-workspace", id);
     await setActiveCompanyApi(id);
     window.location.reload();
   }

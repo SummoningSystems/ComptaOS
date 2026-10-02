@@ -1,5 +1,5 @@
 import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
-import { api, fetchCompanies } from "./api/client";
+import { api, fetchCompanies, setActiveCompanyApi } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
 import { TabBar } from "./components/Layout/TabBar";
 import { StatusBar } from "./components/Layout/StatusBar";
@@ -172,6 +172,7 @@ export default function App() {
   const [showAlertDrop, setShowAlertDrop] = useState(false);
   const [alertMessages, setAlertMessages] = useState<{ level: string; message: string }[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [workspaceReadyTabId, setWorkspaceReadyTabId] = useState<string | null>(null);
   const [showCompanyWizard, setShowCompanyWizard] = useState(false);
   const [wizardCanCancel, setWizardCanCancel] = useState(false);
   const [showMobileCapture, setShowMobileCapture] = useState(() => {
@@ -222,6 +223,17 @@ export default function App() {
   }, []);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
+
+  useEffect(() => {
+    if (authState !== "app" || !activeTab) { setWorkspaceReadyTabId(null); return; }
+    let cancelled = false;
+    setWorkspaceReadyTabId(null);
+    const dossierWorkspace = new URLSearchParams(activeTab.path ?? "").get("workspace");
+    const targetWorkspace = dossierWorkspace ?? sessionStorage.getItem("comptaos:last-business-workspace");
+    const prepare = targetWorkspace ? setActiveCompanyApi(targetWorkspace) : Promise.resolve();
+    void prepare.catch(() => {}).finally(() => { if (!cancelled) setWorkspaceReadyTabId(activeTab.id); });
+    return () => { cancelled = true; };
+  }, [authState, activeTab?.id, activeTab?.path]);
 
   // ── Fonctions ─────────────────────────────────────────────────────────────
   async function checkAuth() {
@@ -313,7 +325,7 @@ export default function App() {
       <div className="flex items-center gap-3 px-4 h-10 bg-vscode-panel border-b border-vscode-border shrink-0 select-none">
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
-          {activeTab?.type === "personal" ? <span className="rounded border border-blue-700 bg-blue-950/30 px-2 py-0.5 text-xs text-blue-300">Comptabilité personnelle</span> : activeTab?.type === "household" ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Comptabilité du foyer</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}
+          {activeTab?.type === "personal" || activeTab?.id.startsWith("dossier:personal:") ? <span className="rounded border border-blue-700 bg-blue-950/30 px-2 py-0.5 text-xs text-blue-300">Comptabilité personnelle</span> : activeTab?.type === "household" || activeTab?.id.startsWith("dossier:household:") ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Comptabilité du foyer</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}
           <button onClick={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} className="rounded border border-vscode-border px-2 py-0.5 text-xs text-vscode-muted transition-colors hover:border-vscode-accent hover:text-vscode-text" title="Personnes, entreprises, comptes et relations">Structure</button>
         </div>
         <div className="flex-1" />
@@ -407,9 +419,9 @@ export default function App() {
 
           <div className="flex-1 min-h-0">
             <ViewErrorBoundary key={activeTab?.id ?? "empty"}>
-              {activeTab
+              {activeTab && workspaceReadyTabId === activeTab.id
                 ? <ViewContent type={activeTab.type} tabId={activeTab.id} path={(activeTab as { path?: string }).path} currentUser={currentUser} />
-                : (
+                : activeTab ? <div className="flex h-full items-center justify-center text-xs text-vscode-muted">Ouverture de l’espace de données…</div> : (
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-vscode-muted select-none">
                     <span className="text-4xl">📊</span>
                     <span className="text-sm">Bienvenue dans ComptaOS</span>

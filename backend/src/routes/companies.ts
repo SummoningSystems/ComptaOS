@@ -14,20 +14,20 @@ import { getSelectedCompany, setSelectedCompany } from "../services/workspaceSel
 
 function visibleCompanies() {
   const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
-  return loadCompanies().filter((company) => actorHasGlobalAccess(actor) || getScopeAccess(actor, `entity_${company.id}`) !== null);
+  return loadCompanies().filter((company) => actorHasGlobalAccess(actor) || getScopeAccess(actor, company.scopeId ?? `entity_${company.id}`) !== null);
 }
 
 export async function companiesRoutes(app: FastifyInstance) {
   /** Liste toutes les entreprises */
   app.get("/", async () => {
     ensureDefaultCompany();
-    return visibleCompanies();
+    return visibleCompanies().filter((company) => !company.scopeId);
   });
 
   /** Retourne l'entreprise active */
   app.get("/active", async () => {
     ensureDefaultCompany();
-    const companies = visibleCompanies();
+    const companies = visibleCompanies().filter((company) => !company.scopeId);
     const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
     const activeId = getSelectedCompany(actor.id) ?? getActiveCompanyId();
     return companies.find((c) => c.id === activeId) ?? companies[0] ?? null;

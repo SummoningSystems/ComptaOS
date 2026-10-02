@@ -22,11 +22,11 @@ export function registerWorkspaceAccess(app: FastifyInstance): void {
     }
 
     ensureDefaultCompany();
-    const visible = loadCompanies().filter((company) => actorHasGlobalAccess(actor) || getScopeAccess(actor, `entity_${company.id}`) !== null);
+    const visible = loadCompanies().filter((company) => actorHasGlobalAccess(actor) || getScopeAccess(actor, company.scopeId ?? `entity_${company.id}`) !== null);
     const selectedId = getSelectedCompany(actor.id) ?? getActiveCompanyId();
     const company = visible.find((item) => item.id === selectedId) ?? visible[0];
     if (!company) { void reply.status(403).send({ error: "Aucun espace comptable ne vous a été attribué." }); return; }
-    const accessRole = getScopeAccess(actor, `entity_${company.id}`) ?? "viewer";
+    const accessRole = getScopeAccess(actor, company.scopeId ?? `entity_${company.id}`) ?? (actorHasGlobalAccess(actor) ? "owner" : "viewer");
     if ((actor.role === "readonly" || accessRole === "viewer") && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
       void reply.status(403).send({ error: "Cet espace est accessible en lecture seule." }); return;
     }

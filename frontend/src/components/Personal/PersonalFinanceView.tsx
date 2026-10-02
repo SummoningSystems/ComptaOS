@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchPersonalFinance, savePersonalCategory, savePersonalFinanceBudgets } from "../../api/client";
-import type { PersonalBudget, PersonalCategory, PersonalFinanceSnapshot } from "../../types";
+import { ensureAccountingDossier, fetchActiveCompany, fetchPersonalFinance, savePersonalCategory, savePersonalFinanceBudgets, setActiveCompanyApi } from "../../api/client";
+import { useAppStore } from "../../stores/appStore";
+import type { PersonalBudget, PersonalCategory, PersonalFinanceSnapshot, TabType } from "../../types";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 
 const money = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
 export function PersonalFinanceView({ personId }: { personId: string }) {
+  const openTab = useAppStore((store) => store.openTab);
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<PersonalFinanceSnapshot | null>(null);
   const [budgets, setBudgets] = useState<PersonalBudget[]>([]);
@@ -48,6 +50,20 @@ export function PersonalFinanceView({ personId }: { personId: string }) {
     finally { setSaving(false); }
   }
 
+  async function openDossierModule(type: TabType, title: string) {
+    setError("");
+    try {
+      const dossier = await ensureAccountingDossier(personId);
+      if (!dossier.workspaceId) throw new Error("Espace de données indisponible.");
+      const businessWorkspace = await fetchActiveCompany();
+      if (businessWorkspace) sessionStorage.setItem("comptaos:last-business-workspace", businessWorkspace.id);
+      await setActiveCompanyApi(dossier.workspaceId);
+      openTab({ id: `dossier:personal:${personId}:${type}`, title, type, path: `workspace=${encodeURIComponent(dossier.workspaceId)}` });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Ouverture du dossier impossible.");
+    }
+  }
+
   if (loading) return <div className="flex h-full items-center justify-center text-sm text-vscode-muted">Chargement de l’espace personnel…</div>;
   if (!data) return <div className="m-6 rounded border border-red-700 bg-red-950/30 p-4 text-sm text-red-300">{error || "Espace personnel introuvable."}</div>;
 
@@ -58,7 +74,7 @@ export function PersonalFinanceView({ personId }: { personId: string }) {
   return <div className="h-full overflow-auto bg-vscode-bg">
     <header className="border-b border-vscode-border px-7 py-5">
       <div className="text-[10px] uppercase tracking-[0.2em] text-vscode-muted">Comptabilité personnelle</div>
-      <div className="mt-2 flex flex-wrap items-end gap-4"><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-semibold">{data.person.name}</h1><p className="mt-1 text-xs text-vscode-muted">Vue personnelle séparée des catégories et écritures comptables des entreprises.</p></div><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="rounded border border-vscode-border bg-vscode-panel px-3 py-2 text-xs" /></div>
+      <div className="mt-2 flex flex-wrap items-end gap-4"><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-semibold">{data.person.name}</h1><p className="mt-1 text-xs text-vscode-muted">Vue personnelle séparée des catégories et écritures comptables des entreprises.</p></div><div className="flex flex-wrap items-center gap-2"><button onClick={() => void openDossierModule("banking", "Banque personnelle")} className="rounded border border-blue-700 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950/30">Connecter une banque</button><button onClick={() => void openDossierModule("transactions", "Transactions personnelles")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Saisir / justifier</button><button onClick={() => void openDossierModule("recurring", "Frais récurrents personnels")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Récurrents</button><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="rounded border border-vscode-border bg-vscode-panel px-3 py-2 text-xs" /></div></div>
     </header>
     <nav className="flex gap-1 border-b border-vscode-border px-7 py-2">
       {([['overview', 'Vue d’ensemble'], ['transactions', `Mouvements (${data.transactions.length})`], ['budgets', 'Budgets']] as const).map(([id, label]) => <button key={id} onClick={() => setSection(id)} className={`rounded px-3 py-1.5 text-xs ${section === id ? "bg-vscode-accent text-white" : "text-vscode-muted hover:bg-vscode-panel hover:text-vscode-text"}`}>{label}</button>)}

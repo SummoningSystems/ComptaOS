@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { createCompanyApi, createPlatformHousehold, createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, ensureAccountingDossier, fetchAccountingDossiers, fetchPlatformLayout, fetchPlatformState, savePlatformLayout, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
+import { createCompanyApi, createPlatformHousehold, createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, ensureAccountingDossier, fetchAccountingDossiers, fetchActiveCompany, fetchPlatformLayout, fetchPlatformState, savePlatformLayout, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
 import { fetchUsers, type AuthUser } from "../../api/auth";
 import type { AccountingDossier, PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformHousehold, PlatformLayout, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
 import { useAppStore } from "../../stores/appStore";
@@ -196,10 +196,12 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
   async function createOrOpenDossier(dossier: AccountingDossier) {
     setBusy(true); setError("");
     try {
-      const ready = dossier.created ? dossier : await ensureAccountingDossier(dossier.scopeId);
+      const ready = await ensureAccountingDossier(dossier.scopeId);
       if (!dossier.created) setDossiers((current) => current.map((item) => item.scopeId === ready.scopeId ? ready : item));
-      if (ready.scopeKind === "person") openTab({ id: `personal:${ready.scopeId}`, title: ready.name, type: "personal", path: `person=${encodeURIComponent(ready.scopeId)}` });
-      else if (ready.scopeKind === "household") openTab({ id: `household:${ready.scopeId}`, title: ready.name, type: "household", path: `household=${encodeURIComponent(ready.scopeId)}` });
+      if (ready.workspaceId && ready.scopeKind !== "entity") { const businessWorkspace = await fetchActiveCompany(); if (businessWorkspace) sessionStorage.setItem("comptaos:last-business-workspace", businessWorkspace.id); await setActiveCompanyApi(ready.workspaceId); }
+      const workspaceParam = ready.workspaceId ? `&workspace=${encodeURIComponent(ready.workspaceId)}` : "";
+      if (ready.scopeKind === "person") openTab({ id: `personal:${ready.scopeId}`, title: ready.name, type: "personal", path: `person=${encodeURIComponent(ready.scopeId)}${workspaceParam}` });
+      else if (ready.scopeKind === "household") openTab({ id: `household:${ready.scopeId}`, title: ready.name, type: "household", path: `household=${encodeURIComponent(ready.scopeId)}${workspaceParam}` });
       else { const entity = state?.entities.find((item) => item.id === ready.scopeId); if (entity) await openEntity(entity); }
     } catch (e) { setError(e instanceof Error ? e.message : "Ouverture du dossier impossible"); setBusy(false); }
     finally { if (dossier.scopeKind !== "entity") setBusy(false); }
@@ -224,7 +226,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
 
   async function openEntity(entity: PlatformEntity) {
     setBusy(true);
-    try { await setActiveCompanyApi(entity.workspaceId); window.location.reload(); }
+    try { sessionStorage.setItem("comptaos:last-business-workspace", entity.workspaceId); await setActiveCompanyApi(entity.workspaceId); window.location.reload(); }
     catch (e) { setError(e instanceof Error ? e.message : "Ouverture impossible"); setBusy(false); }
   }
 

@@ -10,7 +10,8 @@ const ACTIVE_FILE = join(ROOT, "_active.json");
 export interface Company {
   id: string;
   /** Compatibilité avec les registres créés par l'ancienne branche expérimentale. */
-  kind?: "business" | "household" | "ecosystem";
+  kind?: "business" | "personal" | "household" | "ecosystem";
+  scopeId?: string;
   legalType?: "company" | "sci" | "holding";
   ecosystemId?: string;
   memberIds?: string[];
@@ -32,7 +33,7 @@ export function loadCompanies(): Company[] {
   try {
     const entries = JSON.parse(readFileSync(COMPANIES_FILE, "utf-8")) as Company[];
     return Array.isArray(entries)
-      ? entries.filter((entry) => entry?.kind !== "ecosystem" && entry?.kind !== "household")
+      ? entries.filter((entry) => entry?.kind !== "ecosystem" && (entry?.kind !== "household" || Boolean(entry.scopeId)))
       : [];
   } catch {
     return [];
@@ -46,7 +47,7 @@ function saveCompanies(companies: Company[]): void {
     try {
       const entries = JSON.parse(readFileSync(COMPANIES_FILE, "utf-8")) as Company[];
       metadataEntries = Array.isArray(entries)
-        ? entries.filter((entry) => entry?.kind === "ecosystem" || entry?.kind === "household")
+        ? entries.filter((entry) => entry?.kind === "ecosystem" || (entry?.kind === "household" && !entry.scopeId))
         : [];
     } catch { /* le prochain enregistrement répare le registre */ }
   }
@@ -146,4 +147,15 @@ export function createCompany(name: string, legalType: Company["legalType"] = "c
   saveCompanies(companies);
 
   return company;
+}
+
+export function ensureScopedWorkspace(scopeId: string, name: string, kind: "personal" | "household"): Company {
+  ensureDefaultCompany();
+  const existing = loadCompanies().find((company) => company.scopeId === scopeId);
+  if (existing) return existing;
+  const safeId = scopeId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 90);
+  const id = `scope_${safeId}`; const companyRelPath = `companies/${id}`; const absPath = join(ROOT, companyRelPath);
+  mkdirSync(join(absPath, "transactions"), { recursive: true }); mkdirSync(join(absPath, "settings"), { recursive: true }); mkdirSync(join(absPath, "attachments"), { recursive: true }); mkdirSync(join(absPath, "banking"), { recursive: true });
+  const company: Company = { id, kind, scopeId, name, path: companyRelPath, createdAt: new Date().toISOString() };
+  const companies = loadCompanies(); companies.push(company); saveCompanies(companies); return company;
 }

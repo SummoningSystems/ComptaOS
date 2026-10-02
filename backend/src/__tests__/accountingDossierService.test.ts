@@ -3,8 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; legalType?: "company" | "sci" | "holding"; createdAt: string }> }));
-vi.mock("../services/companiesService.js", () => ({ getCompaniesRoot: () => workspace.root, loadCompanies: () => workspace.companies }));
+const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal" | "household"; scopeId?: string; legalType?: "company" | "sci" | "holding"; createdAt: string }> }));
+vi.mock("../services/companiesService.js", () => ({
+  getCompaniesRoot: () => workspace.root,
+  loadCompanies: () => workspace.companies,
+  ensureScopedWorkspace: (scopeId: string, name: string, kind: "personal" | "household") => {
+    const existing = workspace.companies.find((company) => company.scopeId === scopeId);
+    if (existing) return existing;
+    const company = { id: `scope_${scopeId}`, name, path: `companies/scope_${scopeId}`, kind, scopeId, createdAt: "2026-10-02T00:00:00.000Z" } as const;
+    workspace.companies.push(company);
+    return company;
+  },
+}));
 
 import { ensureAccountingDossier, getAccountingDossiers } from "../services/accountingDossierService.js";
 import { createHousehold, createPerson, getPlatformState, setAccessGrant } from "../services/platformService.js";
@@ -18,8 +28,8 @@ describe("universal accounting dossiers", () => {
     const actor = { id: "local", role: "local" as const }; const before = getAccountingDossiers(actor);
     expect(before.find((item) => item.scopeId === withPerson.people[0].id)).toMatchObject({ mode: "personal", created: false });
     expect(before.find((item) => item.scopeId === "entity_holding")).toMatchObject({ mode: "full", legalType: "holding", created: true });
-    expect(ensureAccountingDossier(withPerson.people[0].id, actor)).toMatchObject({ created: true, mode: "personal" });
-    expect(ensureAccountingDossier(withHousehold.households[0].id, actor)).toMatchObject({ created: true, mode: "household" });
+    expect(ensureAccountingDossier(withPerson.people[0].id, actor)).toMatchObject({ created: true, mode: "personal", workspaceId: `scope_${withPerson.people[0].id}` });
+    expect(ensureAccountingDossier(withHousehold.households[0].id, actor)).toMatchObject({ created: true, mode: "household", workspaceId: `scope_${withHousehold.households[0].id}` });
   });
 
   it("respecte les droits de gestion du périmètre", () => {
