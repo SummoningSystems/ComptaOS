@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { createPlatformPerson, createPlatformRelation, deletePlatformAccess, deletePlatformRelation, fetchPlatformState, setActiveCompanyApi, setPlatformAccess } from "../../api/client";
 import { fetchUsers, type AuthUser } from "../../api/auth";
 import type { PlatformAccessRole, PlatformAccount, PlatformEntity, PlatformPerson, PlatformRelationType, PlatformState } from "../../types";
@@ -13,17 +13,98 @@ const relationLabels: Record<PlatformRelationType, string> = {
   holder: "Titulaire", uses: "Utilise", other: "Autre lien",
 };
 
-function NodeCard({ node, selected, onSelect }: { node: Node; selected: boolean; onSelect: () => void }) {
+function NodeCard({ node, selected, dimmed, onSelect }: { node: Node; selected: boolean; dimmed?: boolean; onSelect: () => void }) {
   const meta = node.kind === "person"
     ? (node.profile === "professional" ? "Personne · activité professionnelle" : "Personne")
     : node.kind === "entity" ? "Entreprise" : `${node.provider ?? "Compte bancaire"}${node.maskedIdentifier ? ` · ${node.maskedIdentifier}` : ""}`;
   return (
-    <button onClick={onSelect} className={`w-full rounded border p-4 text-left transition-colors ${selected ? "border-vscode-accent bg-blue-950/30" : "border-vscode-border bg-vscode-panel hover:border-vscode-accent/60"}`}>
+    <button onClick={onSelect} className={`w-full rounded border p-4 text-left shadow-sm transition-all ${dimmed ? "opacity-35" : "opacity-100"} ${selected ? "border-vscode-accent bg-blue-950/30 ring-1 ring-vscode-accent" : "border-vscode-border bg-vscode-panel hover:border-vscode-accent/60 hover:bg-vscode-highlight"}`}>
       <div className="flex items-start gap-3">
         <span className={`mt-0.5 h-4 w-4 shrink-0 ${node.kind === "person" ? "rounded-full border-2 border-blue-500" : node.kind === "entity" ? "rotate-45 border-2 border-cyan-500" : "border-2 border-sky-500"}`} />
         <div className="min-w-0"><div className="truncate text-sm font-semibold text-vscode-text">{node.name}</div><div className="mt-1 text-[11px] text-vscode-muted">{meta}</div></div>
       </div>
     </button>
+  );
+}
+
+const graphColumns = [
+  { kind: "person", label: "PERSONNES" },
+  { kind: "entity", label: "ENTREPRISES ET STRUCTURES" },
+  { kind: "account", label: "COMPTES BANCAIRES" },
+] as const;
+
+function relationAppearance(type: PlatformRelationType): { color: string; dash?: string } {
+  if (["family", "spouse", "parent", "child", "beneficiary"].includes(type)) return { color: "#c084fc" };
+  if (["owner", "shareholder", "subsidiary"].includes(type)) return { color: "#22d3ee" };
+  if (["holder", "uses"].includes(type)) return { color: "#38bdf8", dash: type === "uses" ? "3 5" : undefined };
+  if (["accountant", "advisor", "director", "employee", "management"].includes(type)) return { color: "#f59e0b", dash: "7 5" };
+  return { color: "#94a3b8", dash: "4 4" };
+}
+
+export function StructureGraph({ nodes, state, selectedId, onSelect }: { nodes: Node[]; state: PlatformState; selectedId: string | null; onSelect: (id: string | null) => void }) {
+  const markerId = useId().replace(/:/g, "");
+  const cardWidth = 280;
+  const columnGap = 76;
+  const rowGap = 112;
+  const left = 28;
+  const top = 54;
+  const positions = new Map<string, { x: number; y: number }>();
+  graphColumns.forEach((column, columnIndex) => {
+    nodes.filter((node) => node.kind === column.kind).forEach((node, rowIndex) => {
+      positions.set(node.id, { x: left + columnIndex * (cardWidth + columnGap), y: top + rowIndex * rowGap });
+    });
+  });
+  const maxRows = Math.max(1, ...graphColumns.map((column) => nodes.filter((node) => node.kind === column.kind).length));
+  const width = left * 2 + cardWidth * 3 + columnGap * 2;
+  const height = Math.max(330, top + maxRows * rowGap + 30);
+  const linked = new Set<string>(selectedId ? [selectedId] : []);
+  if (selectedId) state.relations.filter((relation) => relation.fromId === selectedId || relation.toId === selectedId).forEach((relation) => { linked.add(relation.fromId); linked.add(relation.toId); });
+
+  return (
+    <div>
+      <div className="overflow-auto rounded border border-vscode-border bg-[radial-gradient(circle,_var(--vscode-border)_0.7px,_transparent_0.8px)] bg-[length:18px_18px]">
+        <div className="relative" style={{ width, height }}>
+          <svg className="pointer-events-none absolute inset-0" width={width} height={height} aria-label="Carte des liens entre les personnes, entreprises et comptes">
+            <defs>
+              {Object.entries({ personal: "#c084fc", ownership: "#22d3ee", account: "#38bdf8", professional: "#f59e0b", other: "#94a3b8" }).map(([key, color]) => <marker key={key} id={`${markerId}-${key}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill={color} /></marker>)}
+            </defs>
+            {state.relations.map((relation, relationIndex) => {
+              const from = positions.get(relation.fromId); const to = positions.get(relation.toId);
+              if (!from || !to) return null;
+              const appearance = relationAppearance(relation.type);
+              const active = !selectedId || relation.fromId === selectedId || relation.toId === selectedId;
+              const forward = from.x <= to.x;
+              const sameColumn = Math.abs(from.x - to.x) < 10;
+              const reversePair = state.relations.some((candidate) => candidate.id !== relation.id && candidate.fromId === relation.toId && candidate.toId === relation.fromId);
+              let path: string; let labelX: number; let labelY: number;
+              if (sameColumn) {
+                const side = from.x + cardWidth + 34 + (relationIndex % 2) * 18;
+                path = `M ${from.x + cardWidth} ${from.y + 36} C ${side} ${from.y + 36}, ${side} ${to.y + 36}, ${to.x + cardWidth} ${to.y + 36}`;
+                labelX = side + 3; labelY = (from.y + to.y) / 2 + 30;
+              } else {
+                const startX = from.x + (forward ? cardWidth : 0); const endX = to.x + (forward ? 0 : cardWidth);
+                const curve = reversePair ? (relation.fromId < relation.toId ? -24 : 24) : 0;
+                path = `M ${startX} ${from.y + 36} C ${startX + (forward ? 58 : -58)} ${from.y + 36 + curve}, ${endX + (forward ? -58 : 58)} ${to.y + 36 + curve}, ${endX} ${to.y + 36}`;
+                labelX = (startX + endX) / 2; labelY = (from.y + to.y) / 2 + 31 + curve;
+              }
+              const markerKey = ["family", "spouse", "parent", "child", "beneficiary"].includes(relation.type) ? "personal" : ["owner", "shareholder", "subsidiary"].includes(relation.type) ? "ownership" : ["holder", "uses"].includes(relation.type) ? "account" : ["accountant", "advisor", "director", "employee", "management"].includes(relation.type) ? "professional" : "other";
+              return <g key={relation.id} opacity={active ? 1 : 0.18}>
+                <path d={path} fill="none" stroke={appearance.color} strokeWidth={active && selectedId ? 2.6 : 1.7} strokeDasharray={appearance.dash} markerEnd={`url(#${markerId}-${markerKey})`}><title>{`${relationLabels[relation.type]} : ${nodes.find((node) => node.id === relation.fromId)?.name} → ${nodes.find((node) => node.id === relation.toId)?.name}`}</title></path>
+                {active && <text x={labelX} y={labelY} textAnchor="middle" fill={appearance.color} stroke="var(--vscode-bg)" strokeWidth="5" paintOrder="stroke" className="text-[10px] font-semibold">{relationLabels[relation.type]}</text>}
+              </g>;
+            })}
+          </svg>
+          {graphColumns.map((column, index) => <div key={column.kind} className="absolute top-5 text-[10px] tracking-[0.16em] text-vscode-muted" style={{ left: left + index * (cardWidth + columnGap) }}>{column.label}</div>)}
+          {nodes.map((node) => {
+            const position = positions.get(node.id)!;
+            return <div key={node.id} className="absolute" style={{ left: position.x, top: position.y, width: cardWidth }}><NodeCard node={node} selected={node.id === selectedId} dimmed={Boolean(selectedId && !linked.has(node.id))} onSelect={() => onSelect(node.id === selectedId ? null : node.id)} /></div>;
+          })}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[10px] text-vscode-muted">
+        <span className="text-purple-400">━ Liens personnels</span><span className="text-cyan-400">━ Propriété / participation</span><span className="text-sky-400">┄ Comptes et usages</span><span className="text-amber-400">┄ Liens professionnels</span><span>Les flèches indiquent le sens du lien.</span>
+      </div>
+    </div>
   );
 }
 
@@ -107,12 +188,8 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
       {error && <div className="mx-8 mt-4 rounded border border-red-700 bg-red-950/30 px-4 py-2 text-xs text-red-300">{error}</div>}
 
       <main className="grid gap-6 p-8 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="rounded border border-vscode-border bg-black/10 p-6">
-          <div className="grid gap-8 md:grid-cols-3">
-            <div><h2 className="mb-4 text-[10px] uppercase tracking-[0.18em] text-vscode-muted">Personnes</h2><div className="space-y-3">{state.people.map((node) => <NodeCard key={node.id} node={node} selected={node.id === selectedId} onSelect={() => setSelectedId(node.id)} />)}{state.people.length === 0 && <p className="text-xs text-vscode-muted">Ajoute la première personne du portefeuille ou de la famille.</p>}</div></div>
-            <div><h2 className="mb-4 text-[10px] uppercase tracking-[0.18em] text-vscode-muted">Entreprises et structures</h2><div className="space-y-3">{state.entities.map((node) => <NodeCard key={node.id} node={node} selected={node.id === selectedId} onSelect={() => setSelectedId(node.id)} />)}</div></div>
-            <div><h2 className="mb-4 text-[10px] uppercase tracking-[0.18em] text-vscode-muted">Comptes bancaires</h2><div className="space-y-3">{state.accounts.map((node) => <NodeCard key={node.id} node={node} selected={node.id === selectedId} onSelect={() => setSelectedId(node.id)} />)}{state.accounts.length === 0 && <p className="text-xs text-vscode-muted">Les comptes PSD2 apparaîtront ici automatiquement.</p>}</div></div>
-          </div>
+        <section className="min-w-0 rounded border border-vscode-border bg-black/10 p-5">
+          <StructureGraph nodes={nodes} state={state} selectedId={selectedId} onSelect={setSelectedId} />
         </section>
 
         <aside className="space-y-4">
