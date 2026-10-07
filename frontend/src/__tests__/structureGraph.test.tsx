@@ -32,4 +32,15 @@ describe("StructureGraph", () => {
     fireEvent.click(screen.getByText("Alice"));
     expect(onSelect).toHaveBeenCalledWith("person_1");
   });
+
+  it("garde la molette dans le graphe pendant le zoom", () => {
+    render(<StructureGraph nodes={[person, entity, account]} state={state} selectedId={null} onSelect={vi.fn()} />);
+
+    const canvas = screen.getByLabelText("Carte des liens entre les personnes, entreprises et comptes").parentElement?.parentElement;
+    expect(canvas).toBeTruthy();
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 120, clientY: 80, deltaY: -100 });
+    canvas!.dispatchEvent(wheel);
+
+    expect(wheel.defaultPrevented).toBe(true);
+  });
 });

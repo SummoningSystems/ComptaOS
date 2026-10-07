@@ -325,7 +325,7 @@ export default function App() {
         />
       )}
       {/* Title bar */}
-      <div className="flex items-center gap-1 overflow-hidden px-2 h-10 bg-vscode-panel border-b border-vscode-border shrink-0 select-none sm:gap-3 sm:px-4">
+      <div className="relative z-[100] flex h-10 shrink-0 select-none items-center gap-1 overflow-visible border-b border-vscode-border bg-vscode-panel px-2 sm:gap-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-1 shrink-0 sm:gap-3">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
           <div className="hidden sm:block">{activeTab?.type === "personal" || activeTab?.id.startsWith("dossier:personal:") ? <span className="rounded border border-blue-700 bg-blue-950/30 px-2 py-0.5 text-xs text-blue-300">Comptabilité personnelle</span> : activeTab?.type === "household" || activeTab?.id.startsWith("dossier:household:") ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Comptabilité du foyer</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}</div>
@@ -414,7 +414,7 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div className="flex flex-1 min-h-0">
+      <div className="relative z-0 flex flex-1 min-h-0">
         <Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />
 
         <div className="flex flex-col flex-1 min-w-0">

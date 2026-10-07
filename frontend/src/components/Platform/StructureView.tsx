@@ -49,33 +49,24 @@ const EMPTY_LAYOUT: PlatformLayout = {};
 const EMPTY_DOSSIERS: AccountingDossier[] = [];
 
 function organicLayout(nodes: Node[], state: PlatformState): PlatformLayout {
-  const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
   const positions: PlatformLayout = {};
-  nodes.forEach((node, index) => {
-    const angle = (index / Math.max(1, nodes.length)) * Math.PI * 2 - Math.PI / 2;
-    const radius = 230 + (index % 3) * 85;
-    positions[node.id] = { x: center.x + Math.cos(angle) * radius - CARD_WIDTH / 2, y: center.y + Math.sin(angle) * radius - CARD_HEIGHT / 2 };
+  const degree = new Map(nodes.map((node) => [node.id, 0]));
+  state.relations.forEach((relation) => {
+    degree.set(relation.fromId, (degree.get(relation.fromId) ?? 0) + 1);
+    degree.set(relation.toId, (degree.get(relation.toId) ?? 0) + 1);
   });
-  for (let iteration = 0; iteration < 180; iteration += 1) {
-    const forces = new Map(nodes.map((node) => [node.id, { x: 0, y: 0 }]));
-    for (let a = 0; a < nodes.length; a += 1) for (let b = a + 1; b < nodes.length; b += 1) {
-      const pa = positions[nodes[a].id]; const pb = positions[nodes[b].id];
-      const dx = pa.x - pb.x || .1; const dy = pa.y - pb.y || .1; const distance2 = Math.max(1200, dx * dx + dy * dy); const strength = 52000 / distance2;
-      forces.get(nodes[a].id)!.x += dx * strength; forces.get(nodes[a].id)!.y += dy * strength;
-      forces.get(nodes[b].id)!.x -= dx * strength; forces.get(nodes[b].id)!.y -= dy * strength;
-    }
-    for (const relation of state.relations) {
-      const from = positions[relation.fromId]; const to = positions[relation.toId]; if (!from || !to) continue;
-      const dx = to.x - from.x; const dy = to.y - from.y; const distance = Math.max(1, Math.hypot(dx, dy)); const pull = (distance - 310) * .012;
-      forces.get(relation.fromId)!.x += dx / distance * pull; forces.get(relation.fromId)!.y += dy / distance * pull;
-      forces.get(relation.toId)!.x -= dx / distance * pull; forces.get(relation.toId)!.y -= dy / distance * pull;
-    }
-    for (const node of nodes) {
-      const position = positions[node.id]; const force = forces.get(node.id)!;
-      position.x = Math.max(30, Math.min(CANVAS_WIDTH - CARD_WIDTH - 30, position.x + force.x * .12 + (center.x - position.x) * .0015));
-      position.y = Math.max(30, Math.min(CANVAS_HEIGHT - CARD_HEIGHT - 30, position.y + force.y * .12 + (center.y - position.y) * .0015));
-    }
-  }
+  const columns = (["person", "household", "entity", "account"] as Node["kind"][])
+    .map((kind) => nodes.filter((node) => node.kind === kind).sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || a.name.localeCompare(b.name, "fr")))
+    .filter((column) => column.length > 0);
+  const columnGap = 310;
+  const rowGap = 122;
+  const totalWidth = CARD_WIDTH + Math.max(0, columns.length - 1) * columnGap;
+  const startX = (CANVAS_WIDTH - totalWidth) / 2;
+  columns.forEach((column, columnIndex) => {
+    const columnHeight = CARD_HEIGHT + Math.max(0, column.length - 1) * rowGap;
+    const startY = (CANVAS_HEIGHT - columnHeight) / 2;
+    column.forEach((node, rowIndex) => { positions[node.id] = { x: startX + columnIndex * columnGap, y: startY + rowIndex * rowGap }; });
+  });
   return positions;
 }
 
@@ -86,8 +77,27 @@ export function StructureGraph({ nodes, state, dossiers = EMPTY_DOSSIERS, select
   const generated = useMemo(() => organicLayout(nodes, state), [nodes, state.relations]);
   const [positions, setPositions] = useState<PlatformLayout>(() => Object.fromEntries(nodes.map((node) => [node.id, initialPositions[node.id] ?? generated[node.id]])));
   const [view, setView] = useState({ x: -430, y: -245, zoom: .82 });
+  const viewRef = useRef(view);
   const drag = useRef<{ mode: "node" | "canvas"; id?: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   useEffect(() => { setPositions((current) => Object.fromEntries(nodes.map((node) => [node.id, current[node.id] ?? initialPositions[node.id] ?? generated[node.id]]))); }, [nodes, initialPositions, generated]);
+  useEffect(() => { viewRef.current = view; }, [view]);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const current = viewRef.current;
+      const rect = viewport.getBoundingClientRect();
+      const factor = event.deltaY < 0 ? 1.1 : .9;
+      const zoom = Math.max(.25, Math.min(1.8, current.zoom * factor));
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      setView({ zoom, x: mouseX - (mouseX - current.x) * zoom / current.zoom, y: mouseY - (mouseY - current.y) * zoom / current.zoom });
+    };
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheel);
+  }, []);
   const linked = new Set<string>(selectedId ? [selectedId] : []);
   if (selectedId) state.relations.filter((relation) => relation.fromId === selectedId || relation.toId === selectedId).forEach((relation) => { linked.add(relation.fromId); linked.add(relation.toId); });
 
@@ -109,7 +119,7 @@ export function StructureGraph({ nodes, state, dossiers = EMPTY_DOSSIERS, select
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2"><button onClick={() => setView((current) => ({ ...current, zoom: Math.min(1.8, current.zoom * 1.18) }))} className="rounded border border-vscode-border px-3 py-1 text-xs">＋</button><button onClick={() => setView((current) => ({ ...current, zoom: Math.max(.25, current.zoom / 1.18) }))} className="rounded border border-vscode-border px-3 py-1 text-xs">−</button><button onClick={() => fit()} className="rounded border border-vscode-border px-3 py-1 text-xs">Recentrer</button><button onClick={reorganize} className="rounded border border-vscode-accent px-3 py-1 text-xs text-vscode-accent">Réorganiser automatiquement</button><span className="ml-auto text-[10px] text-vscode-muted">Glisser le fond pour naviguer · molette pour zoomer · glisser les cartes pour les ranger</span></div>
-      <div ref={viewportRef} style={{ contain: "layout paint size", overflow: "hidden" }} className="relative h-[620px] cursor-grab touch-none overflow-hidden rounded border border-vscode-border bg-[radial-gradient(circle,_var(--vscode-border)_0.7px,_transparent_0.8px)] bg-[length:18px_18px] active:cursor-grabbing" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { mode: "canvas", startX: event.clientX, startY: event.clientY, originX: view.x, originY: view.y }; }} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={(event) => { event.preventDefault(); const rect = viewportRef.current!.getBoundingClientRect(); const factor = event.deltaY < 0 ? 1.1 : .9; const zoom = Math.max(.25, Math.min(1.8, view.zoom * factor)); const mouseX = event.clientX - rect.left; const mouseY = event.clientY - rect.top; setView({ zoom, x: mouseX - (mouseX - view.x) * zoom / view.zoom, y: mouseY - (mouseY - view.y) * zoom / view.zoom }); }}>
+      <div ref={viewportRef} style={{ contain: "layout paint size", overflow: "hidden", overscrollBehavior: "contain" }} className="relative h-[620px] cursor-grab touch-none overflow-hidden rounded border border-vscode-border bg-[radial-gradient(circle,_var(--vscode-border)_0.7px,_transparent_0.8px)] bg-[length:18px_18px] active:cursor-grabbing" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { mode: "canvas", startX: event.clientX, startY: event.clientY, originX: view.x, originY: view.y }; }} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
         <div className="absolute left-0 top-0 origin-top-left" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT, transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
           <svg className="pointer-events-none absolute inset-0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} aria-label="Carte des liens entre les personnes, entreprises et comptes">
             <defs>
@@ -144,6 +154,7 @@ export function StructureGraph({ nodes, state, dossiers = EMPTY_DOSSIERS, select
 
 export function StructureView({ currentUser }: { currentUser: AuthUser | null }) {
   const openTab = useAppStore((store) => store.openTab);
+  const detailsRef = useRef<HTMLElement>(null);
   const [state, setState] = useState<PlatformState | null>(null);
   const [layout, setLayout] = useState<PlatformLayout>({});
   const [dossiers, setDossiers] = useState<AccountingDossier[]>([]);
@@ -185,6 +196,11 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
   const relations = state?.relations.filter((relation) => !selectedId || relation.fromId === selectedId || relation.toId === selectedId) ?? [];
   const nodeName = (id: string) => nodes.find((node) => node.id === id)?.name ?? "Élément inconnu";
   const persistLayout = (positions: PlatformLayout) => { setLayout(positions); void savePlatformLayout(positions).catch((e) => setError(e instanceof Error ? e.message : "Enregistrement de la disposition impossible")); };
+
+  function openIssue(issue: StructureIssue) {
+    setSelectedId(issue.scopeId);
+    window.setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
 
   async function addPerson() {
     if (!state || !name.trim()) return;
@@ -287,7 +303,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
       </div>
 
       {error && <div className="mx-4 mt-4 rounded border border-red-700 bg-red-950/30 px-4 py-2 text-xs text-red-300 sm:mx-8">{error}</div>}
-      {issues.length > 0 && <section className="mx-4 mt-4 rounded border border-amber-700 bg-amber-950/20 p-4 sm:mx-8"><h2 className="text-sm font-semibold text-amber-300">Assistant · Structure incomplète</h2><p className="text-[10px] text-vscode-muted">{issues.length} point(s) à compléter avant une consolidation fiable.</p><div className="mt-3 grid gap-2 md:grid-cols-2">{issues.map((issue) => <button key={issue.id} onClick={() => setSelectedId(issue.scopeId)} className={`rounded border p-2 text-left text-xs ${issue.severity === "blocking" ? "border-red-800 text-red-300" : "border-amber-800 text-amber-200"}`}>{issue.message}</button>)}</div></section>}
+      {issues.length > 0 && <section className="mx-4 mt-4 rounded border border-amber-700 bg-amber-950/20 p-4 sm:mx-8"><h2 className="text-sm font-semibold text-amber-300">Assistant · Structure incomplète</h2><p className="mt-1 text-[10px] text-vscode-muted">{issues.length} point(s) à compléter avant une consolidation fiable. La forme, le capital et la TVA déjà présents dans le profil entreprise sont repris automatiquement. Les informations nouvelles, comme le régime fiscal, les dates d’activité et l’exercice, doivent être complétées dans la fiche ci-dessous.</p><div className="mt-3 grid gap-2 md:grid-cols-2">{issues.map((issue) => <button key={issue.id} onClick={() => openIssue(issue)} className={`group flex items-center gap-3 rounded border p-2 text-left text-xs ${issue.severity === "blocking" ? "border-red-800 text-red-300" : "border-amber-800 text-amber-200"}`}><span className="min-w-0 flex-1">{issue.message}</span><span className="shrink-0 text-[10px] text-vscode-accent group-hover:underline">Corriger ↓</span></button>)}</div></section>}
 
       <main className="grid gap-4 p-4 sm:gap-6 sm:p-8 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded border border-vscode-border bg-black/10 p-5">
@@ -307,7 +323,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
         </aside>
       </main>
 
-      <section className="mx-4 mb-4 rounded border border-vscode-border bg-vscode-panel p-4 sm:mx-8 sm:mb-8 sm:p-5">
+      <section ref={detailsRef} className="mx-4 mb-4 scroll-mt-4 rounded border border-vscode-border bg-vscode-panel p-4 sm:mx-8 sm:mb-8 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">{selected ? selected.name : "Relations de la structure"}</h2><p className="mt-1 text-[11px] text-vscode-muted">{selectedDossier ? selectedDossier.mode === "full" ? `Dossier comptable complet · ${selectedDossier.legalType === "sci" ? "SCI" : selectedDossier.legalType === "holding" ? "holding" : "entreprise"}.` : selectedDossier.created ? "Dossier comptable actif, alimenté par les transactions qui lui sont affectées." : "Ce périmètre existe dans la structure mais son dossier comptable n’a pas encore été activé." : "Sélectionne une personne, un foyer ou une structure pour ouvrir sa comptabilité."}</p>{selectedDossier && <div className="mt-2 flex flex-wrap gap-1">{selectedDossier.features.map((feature) => <span key={feature} className="rounded border border-vscode-border bg-black/15 px-2 py-0.5 text-[9px] text-vscode-muted">{feature}</span>)}</div>}</div><div>{selectedDossier && <button disabled={busy} onClick={() => void createOrOpenDossier(selectedDossier)} className={`rounded px-4 py-2 text-xs font-semibold text-white ${selectedDossier.scopeKind === "household" ? "bg-purple-700" : selectedDossier.scopeKind === "entity" ? "bg-cyan-700" : "bg-vscode-accent"}`}>{selectedDossier.created ? "Ouvrir la comptabilité →" : "Créer la comptabilité →"}</button>}</div></div>
         {selected?.kind === "entity" && <section className="mt-5 rounded border border-cyan-900 bg-cyan-950/10 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">Fiche complète de la structure</h3><p className="text-[10px] text-vscode-muted">Ces informations alimentent les contrôles fiscaux, la consolidation et les exercices.</p></div>{canAdminister && <button disabled={busy} onClick={() => void saveEntityProfile()} className="rounded bg-cyan-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Enregistrer la fiche</button>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><label className="text-[10px]">Nom<input disabled={!canAdminister} value={entityDraft.name ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, name: e.target.value })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label><label className="text-[10px]">Forme juridique<select disabled={!canAdminister} value={entityDraft.legalType ?? "company"} onChange={(e) => setEntityDraft({ ...entityDraft, legalType: e.target.value as PlatformLegalType })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs">{Object.entries(legalTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-[10px]">Capital<input disabled={!canAdminister} type="number" min="0" step="0.01" value={entityDraft.capitalAmount ?? 0} onChange={(e) => setEntityDraft({ ...entityDraft, capitalAmount: Number(e.target.value) })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label><label className="text-[10px]">Régime fiscal<select disabled={!canAdminister} value={entityDraft.taxRegime ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, taxRegime: e.target.value as PlatformEntity["taxRegime"] })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"><option value="">À renseigner…</option>{Object.entries(taxRegimeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-[10px]">Régime de TVA<select disabled={!canAdminister} value={entityDraft.vatRegime ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, vatRegime: e.target.value as PlatformEntity["vatRegime"] })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"><option value="">À renseigner…</option>{Object.entries(vatRegimeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-[10px]">Début d’activité<input disabled={!canAdminister} type="date" value={entityDraft.startDate ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, startDate: e.target.value })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label><label className="text-[10px]">Fin d’activité<input disabled={!canAdminister} type="date" value={entityDraft.endDate ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, endDate: e.target.value })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label><label className="text-[10px]">Exercice comptable<input disabled={!canAdminister} value={`${entityDraft.fiscalYearStart ?? ""}${entityDraft.fiscalYearEnd ? ` → ${entityDraft.fiscalYearEnd}` : ""}`} readOnly className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs text-vscode-muted"/></label><label className="text-[10px]">Début exercice (MM-JJ)<input disabled={!canAdminister} placeholder="01-01" value={entityDraft.fiscalYearStart ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, fiscalYearStart: e.target.value })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label><label className="text-[10px]">Fin exercice (MM-JJ)<input disabled={!canAdminister} placeholder="12-31" value={entityDraft.fiscalYearEnd ?? ""} onChange={(e) => setEntityDraft({ ...entityDraft, fiscalYearEnd: e.target.value })} className="mt-1 w-full rounded border border-vscode-border bg-vscode-bg p-2 text-xs"/></label></div></section>}
         <div className="mt-4 grid gap-2 md:grid-cols-2">{relations.map((relation) => <article key={relation.id} className="rounded border border-vscode-border px-3 py-2 text-xs"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate">{nodeName(relation.fromId)} <span className="text-vscode-accent">— {relationLabels[relation.type]} →</span> {nodeName(relation.toId)}</span>{canAdminister && relation.source === "manual" && <><button title="Compléter ou modifier le lien" className="rounded border border-vscode-border px-2 py-1 text-[10px] hover:border-vscode-accent" onClick={() => setRelationDraft({ ...relation, financialLinkType: relation.financialLinkType ?? "none" })}>Modifier</button><button title="Supprimer le lien" className="text-vscode-muted hover:text-red-400" onClick={() => state && void deletePlatformRelation(relation.id, state.revision).then(setState).catch((e) => setError(e instanceof Error ? e.message : "Suppression impossible"))}>×</button></>}</div><div className="mt-2 flex flex-wrap gap-1 text-[9px] text-vscode-muted">{relation.ownershipPercent !== undefined && <span className="rounded bg-vscode-bg px-2 py-1">Détention {relation.ownershipPercent} %</span>}{relation.shareCount !== undefined && <span className="rounded bg-vscode-bg px-2 py-1">{relation.shareCount} part(s)</span>}{relation.ultimateBeneficiaryId && <span className="rounded bg-vscode-bg px-2 py-1">Bénéficiaire : {nodeName(relation.ultimateBeneficiaryId)}</span>}{relation.effectiveFrom && <span className="rounded bg-vscode-bg px-2 py-1">Depuis le {relation.effectiveFrom}</span>}{relation.financialLinkType && relation.financialLinkType !== "none" && <span className="rounded bg-vscode-bg px-2 py-1">{financialLinkLabels[relation.financialLinkType]} · {(relation.financialAmount ?? 0).toLocaleString("fr-FR")} €{relation.interestRate ? ` · ${relation.interestRate} %` : ""}</span>}</div></article>)}{relations.length === 0 && <p className="text-xs text-vscode-muted">Aucun lien à afficher.</p>}</div>

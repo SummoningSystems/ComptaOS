@@ -52,7 +52,7 @@ export function CompanySelector({ onCreateNew }: Props) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-vscode-panel border border-vscode-border rounded shadow-xl z-50 py-1">
+        <div className="absolute left-0 top-full z-[120] mt-1 w-64 rounded border border-vscode-border bg-vscode-panel py-1 shadow-2xl">
           <div className="px-3 py-1 text-[10px] text-vscode-muted uppercase tracking-wider">Entreprises</div>
           {companies.map((c) => (
             <button
