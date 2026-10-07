@@ -28,6 +28,7 @@ export interface PlatformEntity {
   endDate?: string;
   fiscalYearStart?: string;
   fiscalYearEnd?: string;
+  fiscalPeriods?: Array<{ id: string; startDate: string; endDate: string; label?: string }>;
   createdAt: string;
 }
 
@@ -305,6 +306,17 @@ export function updateEntity(id: string, input: Partial<Omit<PlatformEntity, "id
   if (input.capitalAmount !== undefined && (!Number.isFinite(input.capitalAmount) || input.capitalAmount < 0)) throw new Error("Capital invalide.");
   for (const value of [input.startDate, input.endDate]) if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Date invalide.");
   for (const value of [input.fiscalYearStart, input.fiscalYearEnd]) if (value && !/^\d{2}-\d{2}$/.test(value)) throw new Error("Date d’exercice invalide (MM-JJ attendu).");
+  if (input.fiscalPeriods !== undefined) {
+    const ids = new Set<string>();
+    const ordered = [...input.fiscalPeriods].sort((a, b) => a.startDate.localeCompare(b.startDate));
+    for (const period of ordered) {
+      if (!period.id?.trim() || ids.has(period.id)) throw new Error("Chaque exercice comptable doit avoir un identifiant unique.");
+      ids.add(period.id);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(period.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(period.endDate)) throw new Error("Les dates de l’exercice comptable sont incomplètes.");
+      if (period.endDate < period.startDate) throw new Error("La fin d’un exercice comptable précède son début.");
+    }
+    for (let index = 1; index < ordered.length; index += 1) if (ordered[index].startDate <= ordered[index - 1].endDate) throw new Error("Deux exercices comptables se chevauchent.");
+  }
   const nextStart = input.startDate === undefined ? entity.startDate : input.startDate || undefined;
   const nextEnd = input.endDate === undefined ? entity.endDate : input.endDate || undefined;
   if (nextStart && nextEnd && nextEnd < nextStart) throw new Error("La date de fin précède la date de début.");
@@ -318,6 +330,7 @@ export function updateEntity(id: string, input: Partial<Omit<PlatformEntity, "id
     endDate: input.endDate === undefined ? entity.endDate : input.endDate || undefined,
     fiscalYearStart: input.fiscalYearStart === undefined ? entity.fiscalYearStart : input.fiscalYearStart || undefined,
     fiscalYearEnd: input.fiscalYearEnd === undefined ? entity.fiscalYearEnd : input.fiscalYearEnd || undefined,
+    fiscalPeriods: input.fiscalPeriods === undefined ? entity.fiscalPeriods : input.fiscalPeriods.map((period) => ({ ...period, label: period.label?.trim() || undefined })),
   });
   updateCompanyMetadata(entity.workspaceId, { name: entity.name, legalType: entity.legalType }); return writeState(state);
 }
@@ -365,7 +378,8 @@ export function getStructureIssues(state = getPlatformState()): StructureIssue[]
     if (!entity.legalType) issues.push({ id: `${entity.id}:legal-type`, scopeId: entity.id, severity: "blocking", code: "MISSING_LEGAL_TYPE", message: `${entity.name} n’a pas de forme juridique.` });
     if (!entity.taxRegime) issues.push({ id: `${entity.id}:tax`, scopeId: entity.id, severity: "warning", code: "MISSING_TAX_REGIME", message: `${entity.name} n’a pas de régime fiscal.` });
     if (!entity.vatRegime) issues.push({ id: `${entity.id}:vat`, scopeId: entity.id, severity: "warning", code: "MISSING_VAT_REGIME", message: `${entity.name} n’a pas de régime de TVA.` });
-    if (!entity.startDate || !entity.fiscalYearStart || !entity.fiscalYearEnd) issues.push({ id: `${entity.id}:dates`, scopeId: entity.id, severity: "warning", code: "MISSING_DATES", message: `${entity.name} a des dates ou un exercice comptable incomplets.` });
+    if (!entity.startDate) issues.push({ id: `${entity.id}:activity-start`, scopeId: entity.id, severity: "warning", code: "MISSING_ACTIVITY_START", message: `${entity.name} n’a pas de date de début d’activité.` });
+    if (!entity.fiscalYearStart || !entity.fiscalYearEnd) issues.push({ id: `${entity.id}:fiscal-cycle`, scopeId: entity.id, severity: "warning", code: "MISSING_FISCAL_CYCLE", message: `${entity.name} n’a pas de cycle annuel de référence complet.` });
     const ownership = state.relations.filter((relation) => relation.toId === entity.id && ["owner", "shareholder", "subsidiary"].includes(relation.type));
     if (!ownership.length) issues.push({ id: `${entity.id}:owner`, scopeId: entity.id, severity: "blocking", code: "MISSING_OWNER", message: `${entity.name} n’est rattachée à aucun associé, foyer ou structure.` });
     else if (ownership.some((relation) => relation.ownershipPercent === undefined)) issues.push({ id: `${entity.id}:percent`, scopeId: entity.id, severity: "warning", code: "MISSING_OWNERSHIP", message: `Au moins une participation de ${entity.name} n’a pas de pourcentage.` });

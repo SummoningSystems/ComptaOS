@@ -118,6 +118,32 @@ describe("person-centric platform registry", () => {
     expect(getStructureIssues(complete).some((issue) => issue.code === "SCI_WITHOUT_NATURAL_OWNER")).toBe(true);
   });
 
+  it("conserve un exercice transitoire de quinze mois avant le retour au cycle annuel", () => {
+    const initial = getPlatformState();
+    const updated = updateEntity("entity_default", {
+      fiscalYearStart: "01-01",
+      fiscalYearEnd: "12-31",
+      fiscalPeriods: [
+        { id: "fy-2026", startDate: "2025-10-01", endDate: "2026-09-30", label: "Exercice clos" },
+        { id: "fy-transition", startDate: "2026-10-01", endDate: "2027-12-31", label: "Exercice transitoire 15 mois" },
+      ],
+      expectedRevision: initial.revision,
+    });
+    expect(updated.entities.find((entity) => entity.id === "entity_default")?.fiscalPeriods).toHaveLength(2);
+    expect(updated.entities.find((entity) => entity.id === "entity_default")?.fiscalYearStart).toBe("01-01");
+  });
+
+  it("refuse le chevauchement de deux exercices comptables datés", () => {
+    const initial = getPlatformState();
+    expect(() => updateEntity("entity_default", {
+      fiscalPeriods: [
+        { id: "fy-1", startDate: "2026-01-01", endDate: "2026-12-31" },
+        { id: "fy-2", startDate: "2026-12-01", endDate: "2027-12-31" },
+      ],
+      expectedRevision: initial.revision,
+    })).toThrow("se chevauchent");
+  });
+
   it("documente une participation et contrôle que le capital totalise 100 %", () => {
     let state = getPlatformState(); state = createPerson({ name: "Alice", expectedRevision: state.revision }); const personId = state.people[0].id;
     state = createHousehold({ name: "Foyer Alice", expectedRevision: state.revision });

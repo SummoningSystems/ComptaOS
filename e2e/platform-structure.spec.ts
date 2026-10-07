@@ -27,6 +27,12 @@ test.describe.serial("Structure patrimoniale et juridique", () => {
     await profile.getByLabel("Fin exercice (MM-JJ)").fill("12-31");
     await profile.getByRole("button", { name: "Enregistrer la fiche" }).click();
 
+    await page.getByRole("button", { name: "Ajouter un exercice" }).click();
+    await page.getByLabel("Début exercice daté 1").fill("2026-10-01");
+    await page.getByLabel("Fin exercice daté 1").fill("2027-12-31");
+    await expect(page.getByText("15 mois · 457 jours", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Enregistrer les exercices" }).click();
+
     const createPerson = page.getByRole("heading", { name: "Ajouter une personne" }).locator("..");
     await createPerson.getByPlaceholder("Nom ou libellé").fill(personName);
     await createPerson.getByRole("button", { name: /ajouter$/i }).click();
