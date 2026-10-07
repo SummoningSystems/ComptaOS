@@ -43,4 +43,18 @@ describe("StructureGraph", () => {
 
     expect(wheel.defaultPrevented).toBe(true);
   });
+
+  it("ne plante pas si le déplacement se termine avant l'application de la mise à jour", () => {
+    render(<StructureGraph nodes={[person, entity, account]} state={state} selectedId={null} onSelect={vi.fn()} />);
+
+    const canvas = screen.getByLabelText("Carte des liens entre les personnes, entreprises et comptes").parentElement?.parentElement;
+    expect(canvas).toBeTruthy();
+    canvas!.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(canvas!, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(canvas!, { pointerId: 1, clientX: 180, clientY: 150 });
+    fireEvent.pointerUp(canvas!, { pointerId: 1, clientX: 180, clientY: 150 });
+    fireEvent.pointerMove(canvas!, { pointerId: 1, clientX: 220, clientY: 170 });
+
+    expect(screen.getByLabelText("Carte des liens entre les personnes, entreprises et comptes")).toBeInTheDocument();
+  });
 });

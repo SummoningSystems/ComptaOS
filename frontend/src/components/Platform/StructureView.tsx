@@ -109,10 +109,21 @@ export function StructureGraph({ nodes, state, dossiers = EMPTY_DOSSIERS, select
   }
   function reorganize() { const next = organicLayout(nodes, state); setPositions(next); onPositionsChange?.(next); window.setTimeout(() => fit(next), 0); }
   function pointerMove(event: React.PointerEvent) {
-    if (!drag.current) return;
-    if (Math.abs(event.clientX - drag.current.startX) + Math.abs(event.clientY - drag.current.startY) > 4) suppressClick.current = drag.current.mode === "node";
-    if (drag.current.mode === "canvas") setView((current) => ({ ...current, x: drag.current!.originX + event.clientX - drag.current!.startX, y: drag.current!.originY + event.clientY - drag.current!.startY }));
-    else setPositions((current) => ({ ...current, [drag.current!.id!]: { x: drag.current!.originX + (event.clientX - drag.current!.startX) / view.zoom, y: drag.current!.originY + (event.clientY - drag.current!.startY) / view.zoom } }));
+    // React peut exécuter les fonctions de mise à jour après pointerUp. On garde
+    // donc un instantané du déplacement au lieu de relire drag.current, qui a
+    // déjà pu être remis à null lors d'un mouvement rapide.
+    const activeDrag = drag.current;
+    if (!activeDrag) return;
+    const deltaX = event.clientX - activeDrag.startX;
+    const deltaY = event.clientY - activeDrag.startY;
+    if (Math.abs(deltaX) + Math.abs(deltaY) > 4) suppressClick.current = activeDrag.mode === "node";
+    if (activeDrag.mode === "canvas") {
+      setView((current) => ({ ...current, x: activeDrag.originX + deltaX, y: activeDrag.originY + deltaY }));
+      return;
+    }
+    if (!activeDrag.id) return;
+    const zoom = viewRef.current.zoom;
+    setPositions((current) => ({ ...current, [activeDrag.id!]: { x: activeDrag.originX + deltaX / zoom, y: activeDrag.originY + deltaY / zoom } }));
   }
   function pointerUp() { if (drag.current?.mode === "node") onPositionsChange?.(positions); drag.current = null; }
 
