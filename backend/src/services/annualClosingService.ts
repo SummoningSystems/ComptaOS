@@ -3,6 +3,10 @@ import { basename, join } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
+import { inventoryAccountingLines, listInventoryEntries } from "./annualInventoryService.js";
+import { buildAccountingPreview, type AccountingLine } from "./accountingExportService.js";
+import { loadAccountingConfig } from "./settingsService.js";
+import { loadPortfolioAccountingLines } from "./portfolioJournalService.js";
 import type { Transaction } from "../types/index.js";
 
 export type ProfitTaxRegime = "simplified" | "normal" | "unknown";
@@ -89,6 +93,14 @@ function endOfMonth(dateValue: string) { const [year, month] = dateValue.split("
 
 export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: Transaction[]) {
   const record = getAnnualClosingRecord(period);
+  const inventoryEntries = listInventoryEntries(period.id);
+  const inventoryDrafts = inventoryEntries.filter((entry) => entry.status === "draft");
+  const inventoryPosted = inventoryEntries.filter((entry) => entry.status !== "draft");
+  const inventoryDebit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.debit, 0));
+  const inventoryCredit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.credit, 0));
+  const openingLines: AccountingLine[] = record.openingBalance.map((line, index) => ({ journalCode: "AN", journalLabel: "À nouveaux", entryNumber: `${period.id}-AN-000001`, entryDate: period.startDate, accountNumber: line.accountNumber, accountLabel: line.accountLabel, pieceRef: "BALANCE-OUVERTURE", pieceDate: period.startDate, label: `À nouveau - ${line.accountLabel}`, debit: line.debit, credit: line.credit, transactionId: `opening:${index + 1}` }));
+  const accounting = buildAccountingPreview(transactions, loadAccountingConfig(), { startDate: period.startDate, endDate: period.endDate, label: period.id }, { extraLines: [...openingLines, ...loadPortfolioAccountingLines(), ...inventoryAccountingLines(period.id)] });
+  const accountingBlockers = accounting.anomalies.filter((item) => item.severity === "blocking");
   const active = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date >= period.startDate && transaction.date <= period.endDate);
   const pending = active.filter((transaction) => transaction.status !== "validated");
   const unreconciled = active.filter((transaction) => transaction.reconciled !== true);
@@ -103,12 +115,14 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
     { id: "evidence", label: "Pièces justificatives", status: missingFiles.length ? "blocked" : missingEvidence.length ? "warning" : "done", detail: missingFiles.length ? `${missingFiles.length} fichier(s) référencé(s) introuvable(s)` : missingEvidence.length ? `${missingEvidence.length} dépense(s) à documenter ou expliquer` : "Les dépenses ont une pièce ou une référence", count: missingFiles.length || missingEvidence.length },
     { id: "opening", label: "Balance d’ouverture", status: record.openingBalance.length && openingDebit === openingCredit ? "done" : "blocked", detail: record.openingBalance.length ? `${record.openingBalance.length} compte(s), total ${openingDebit.toFixed(2)} €` : "Importe la balance définitive de l’exercice précédent" },
     { id: "tax-regime", label: "Régime de la liasse", status: record.profitTaxRegime === "unknown" ? "blocked" : "done", detail: record.profitTaxRegime === "simplified" ? "Réel simplifié : 2065 + 2033-A à 2033-G" : record.profitTaxRegime === "normal" ? "Réel normal : 2065 + 2050 à 2059-G" : "À confirmer : réel simplifié ou réel normal" },
+    { id: "inventory-journal", label: "Journal d’inventaire", status: inventoryDrafts.length ? "blocked" : inventoryPosted.length ? "done" : "warning", detail: inventoryDrafts.length ? `${inventoryDrafts.length} écriture(s) en brouillon à contrôler ou supprimer` : inventoryPosted.length ? `${inventoryPosted.length} écriture(s) comptabilisée(s), total ${inventoryDebit.toFixed(2)} €` : "Aucune écriture saisie : confirme le cut-off même si aucun ajustement n’est nécessaire", count: inventoryDrafts.length || undefined },
+    { id: "accounting-ledger", label: "Journal comptable de l’exercice", status: accounting.balanced ? accountingBlockers.length ? "warning" : "done" : "blocked", detail: accounting.balanced ? accountingBlockers.length ? `Journal équilibré, mais ${accountingBlockers.length} anomalie(s) restent à corriger` : `${accounting.lines.length} ligne(s), débit = crédit = ${accounting.totalDebit.toFixed(2)} €` : `Journal déséquilibré : débit ${accounting.totalDebit.toFixed(2)} €, crédit ${accounting.totalCredit.toFixed(2)} €`, count: accountingBlockers.length || undefined },
     ...Object.entries({ bankBalance: "Solde bancaire au dernier jour", customersAndSuppliers: "Créances et dettes clients/fournisseurs", fixedAssets: "Immobilisations et amortissements", vat: "TVA et acomptes", accruals: "Écritures d’inventaire et cut-off", equityLoansAndShareholders: "Capital, emprunts et comptes courants" }).map(([id, label]) => ({ id, label, status: record.review[id as keyof AnnualReview] ? "done" as const : "blocked" as const, detail: record.review[id as keyof AnnualReview] ? "Contrôle confirmé" : "Contrôle à effectuer et documenter" })),
     { id: "statutory-output", label: "Comptes annuels et liasse", status: "blocked", detail: "La génération restera verrouillée jusqu’à l’intégration des écritures d’inventaire et au calcul fiscal." },
   ];
   const blocking = steps.filter((step) => step.status === "blocked").length;
   return {
-    period, record, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
+    period, record, inventoryEntries, inventorySummary: { total: inventoryEntries.length, draft: inventoryDrafts.length, posted: inventoryPosted.length, cancelled: inventoryEntries.filter((entry) => entry.status === "cancelled").length, debit: inventoryDebit, credit: inventoryCredit, balanced: inventoryDebit === inventoryCredit }, accountingSummary: { eligibleTransactions: accounting.eligibleCount, excludedTransactions: accounting.excludedCount, lines: accounting.lines.length, debit: accounting.totalDebit, credit: accounting.totalCredit, balanced: accounting.balanced, anomalies: accounting.anomalies }, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
     openingBalanceSummary: { lines: record.openingBalance.length, debit: openingDebit, credit: openingCredit, balanced: openingDebit === openingCredit },
     deadlines: { resultDeclaration: endOfMonth(addMonths(period.endDate, 3)), corporateTaxBalance: `${addMonths(period.endDate, 4).slice(0, 8)}15` },
     steps, completed: steps.filter((step) => step.status === "done").length, total: steps.length, dataReady: blocking === 1 && steps.at(-1)?.id === "statutory-output", filingReady: false,

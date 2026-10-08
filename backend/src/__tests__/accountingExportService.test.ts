@@ -32,6 +32,17 @@ describe("dossier expert-comptable", () => {
     expect(preview.anomalies).toContainEqual(expect.objectContaining({ code: "EXCLUDED_TRANSACTIONS", severity: "warning" }));
   });
 
+  it("respecte les bornes d’un exercice décalé au lieu de l’année civile", () => {
+    const preview = buildAccountingPreview([
+      transaction({ id: "before", date: "2025-09-30" }),
+      transaction({ id: "start", date: "2025-10-01" }),
+      transaction({ id: "end", date: "2026-09-30" }),
+      transaction({ id: "after", date: "2026-10-01" }),
+    ], defaultAccountingConfig(), { startDate: "2025-10-01", endDate: "2026-09-30", label: "fy_2026" });
+    expect(preview.eligibleCount).toBe(2);
+    expect(new Set(preview.lines.map((line) => line.transactionId))).toEqual(new Set(["start", "end"]));
+  });
+
   it("génère un FEC de 18 colonnes accepté par le validateur interne", () => {
     const preview = buildAccountingPreview([transaction()], defaultAccountingConfig(), "2026");
     const fec = generateFec(preview);

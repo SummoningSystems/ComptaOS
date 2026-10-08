@@ -25,6 +25,7 @@ export interface AccountingPreviewOptions {
   extraLines?: AccountingLine[];
   extraAnomalies?: AccountingAnomaly[];
 }
+export interface AccountingPeriod { startDate: string; endDate: string; label: string }
 
 const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const validAccount = (account: AccountingAccount) => /^\d{3,}$/.test(account.number.trim()) && account.label.trim().length > 0;
@@ -41,8 +42,10 @@ function vatParts(transaction: Transaction, expectedVat: number): Array<{ rate?:
   return parts.filter((part) => part.amount !== 0);
 }
 
-export function buildAccountingPreview(transactions: Transaction[], config: AccountingConfig, year: string, options: AccountingPreviewOptions = {}): AccountingPreview {
-  const inYear = transactions.filter((transaction) => transaction.date.startsWith(year) && transaction.status !== "rejected");
+export function buildAccountingPreview(transactions: Transaction[], config: AccountingConfig, period: string | AccountingPeriod, options: AccountingPreviewOptions = {}): AccountingPreview {
+  const year = typeof period === "string" ? period : period.label;
+  const inPeriod = (date: string) => typeof period === "string" ? date.startsWith(period) : date >= period.startDate && date <= period.endDate;
+  const inYear = transactions.filter((transaction) => inPeriod(transaction.date) && transaction.status !== "rejected");
   const eligible = inYear.filter((transaction) => transaction.status === "validated" && transaction.reconciled === true);
   const anomalies: AccountingAnomaly[] = [];
   anomalies.push(...(options.extraAnomalies ?? []));
@@ -94,7 +97,7 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     const debit = round(entryLines.reduce((sum, item) => sum + item.debit, 0)); const credit = round(entryLines.reduce((sum, item) => sum + item.credit, 0));
     if (debit !== credit) anomalies.push({ severity: "blocking", code: "UNBALANCED_ENTRY", message: `Écriture déséquilibrée : débit ${debit.toFixed(2)} €, crédit ${credit.toFixed(2)} €.`, transactionId: transaction.id });
   });
-  lines.push(...(options.extraLines ?? []).filter((item) => item.entryDate.startsWith(year)));
+  lines.push(...(options.extraLines ?? []).filter((item) => inPeriod(item.entryDate)));
   const balanceMap = new Map<string, AccountBalance>();
   for (const item of lines) { const current = balanceMap.get(item.accountNumber) ?? { accountNumber: item.accountNumber, accountLabel: item.accountLabel, debit: 0, credit: 0, balance: 0 }; current.debit = round(current.debit + item.debit); current.credit = round(current.credit + item.credit); current.balance = round(current.debit - current.credit); balanceMap.set(item.accountNumber, current); }
   const totalDebit = round(lines.reduce((sum, item) => sum + item.debit, 0)); const totalCredit = round(lines.reduce((sum, item) => sum + item.credit, 0));
