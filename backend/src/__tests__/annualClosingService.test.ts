@@ -8,6 +8,7 @@ const workspace = vi.hoisted(() => ({ root: "" }));
 vi.mock("../services/fileSystem.js", () => ({ getWorkspaceRoot: () => workspace.root }));
 import { buildAnnualClosingSnapshot, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, validateOpeningBalance, type FiscalPeriod } from "../services/annualClosingService.js";
 import { createFiscalAdjustment, saveFiscalReview, validateFiscalAdjustment } from "../services/annualFiscalService.js";
+import { createInventoryEntry, validateInventoryEntry } from "../services/annualInventoryService.js";
 
 const period: FiscalPeriod = { id: "fy_2026", startDate: "2025-10-01", endDate: "2026-09-30", label: "2e exercice" };
 const transaction = (overrides: Partial<Transaction> = {}): Transaction => ({ id: "txn_1", date: "2026-08-12", label: "Logiciel", amount_ht: -10, vat: -2, amount_ttc: -12, currency: "EUR", category: "software", account: "512", status: "validated", reconciled: true, justified: true, ...overrides });
@@ -47,5 +48,16 @@ describe("clôture annuelle par période datée", () => {
     expect(snapshot.fiscalReview.confirmed).toBe(true);
     expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "fiscal-result", status: "done" }));
     expect(snapshot.filingReady).toBe(false);
+  });
+
+  it("bloque un IS comptabilisé au 695 mais non réintégré fiscalement", () => {
+    const entry = createInventoryEntry(period, { date: period.endDate, kind: "corporate_tax", label: "IS à payer", lines: [
+      { id: "1", accountNumber: "695000", accountLabel: "Impôt sur les bénéfices", debit: 100, credit: 0 },
+      { id: "2", accountNumber: "444000", accountLabel: "État - IS", debit: 0, credit: 100 },
+    ] }); validateInventoryEntry(period.id, entry.id);
+    const snapshot = buildAnnualClosingSnapshot(period, [transaction({ id: "income", category: "service_revenue", amount_ht: 1000, vat: 200, amount_ttc: 1200 })]);
+    expect(snapshot.fiscalSummary.issues[0]).toContain("n’est pas réintégré");
+    expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "fiscal-adjustments", status: "blocked" }));
+    expect(snapshot.taxCalculation.ready).toBe(false);
   });
 });

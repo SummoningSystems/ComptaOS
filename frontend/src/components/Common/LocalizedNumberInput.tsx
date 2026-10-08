@@ -2,18 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { clampNumber, parseLocalizedNumber } from "../../utils/localizedNumber";
 
 type Props = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange" | "min" | "max"> & {
-  value: number;
+  value: number | null;
   onValueChange: (value: number) => void;
   min?: number;
   max?: number;
 };
 
 export function LocalizedNumberInput({ value, onValueChange, min, max, onBlur, onFocus, onKeyDown, ...props }: Props) {
-  const [text, setText] = useState(String(value));
+  const [text, setText] = useState(value === null ? "" : String(value));
   const focused = useRef(false);
   const lastEmitted = useRef(value);
 
-  useEffect(() => { if (!focused.current) { setText(String(value)); lastEmitted.current = value; } }, [value]);
+  useEffect(() => { if (!focused.current) { setText(value === null ? "" : String(value)); lastEmitted.current = value; } }, [value]);
 
   function emit(value: number) {
     if (value === lastEmitted.current) return;
@@ -23,7 +23,7 @@ export function LocalizedNumberInput({ value, onValueChange, min, max, onBlur, o
 
   function commit() {
     const parsed = parseLocalizedNumber(text);
-    if (parsed === undefined) { setText(String(value)); return; }
+    if (parsed === undefined) { setText(value === null ? "" : String(value)); return; }
     const next = clampNumber(parsed, min, max);
     setText(String(next));
     emit(next);

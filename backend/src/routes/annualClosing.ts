@@ -6,6 +6,7 @@ import { workspaceContext } from "../services/workspaceContext.js";
 import { buildAnnualClosingSnapshot, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, type AnnualReview, type FiscalPeriod, type OpeningBalanceLine, type ProfitTaxRegime } from "../services/annualClosingService.js";
 import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, updateInventoryEntry, validateInventoryEntry, type InventoryEntryInput } from "../services/annualInventoryService.js";
 import { cancelFiscalAdjustment, createFiscalAdjustment, deleteFiscalDraft, saveFiscalReview, updateFiscalAdjustment, validateFiscalAdjustment, type FiscalAdjustmentInput } from "../services/annualFiscalService.js";
+import { saveAnnualTaxConfig, type AnnualTaxConfigInput } from "../services/annualTaxService.js";
 
 function periods(): FiscalPeriod[] {
   const companyId = workspaceContext.getStore()?.companyId ?? getActiveCompanyId(); const entity = getPlatformState().entities.find((item) => item.workspaceId === companyId);
@@ -78,6 +79,10 @@ export async function annualClosingRoutes(app: FastifyInstance) {
   });
   app.put<{ Params: { periodId: string }; Body: { confirmed: boolean; note?: string } }>("/:periodId/fiscal-review", async (request, reply) => {
     try { const { period } = selected(request.params.periodId); saveFiscalReview(period.id, request.body?.confirmed === true, request.body?.note ?? ""); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.put<{ Params: { periodId: string }; Body: AnnualTaxConfigInput }>("/:periodId/corporate-tax", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); const transactions = await loadAllTransactions(); const before = buildAnnualClosingSnapshot(period, transactions); saveAnnualTaxConfig(period, before.fiscalSummary.fiscalResult, before.taxCalculation.automaticTurnover, request.body); return buildAnnualClosingSnapshot(period, transactions); }
     catch (caught) { return error(reply, caught); }
   });
 }
