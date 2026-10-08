@@ -4,17 +4,20 @@ import { useAppStore } from "../../stores/appStore";
 import type { PersonalBudget, PersonalCategory, PersonalFinanceSnapshot, TabType } from "../../types";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 import { PersonalTransactionsView } from "./PersonalTransactionsView";
+import { PersonalTiersView } from "./PersonalTiersView";
 
 const money = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-export function PersonalFinanceView({ personId, initialSection = "overview" }: { personId: string; initialSection?: "overview" | "transactions" | "budgets" }) {
+type PersonalSection = "overview" | "transactions" | "tiers" | "budgets";
+
+export function PersonalFinanceView({ personId, initialSection = "overview" }: { personId: string; initialSection?: PersonalSection }) {
   const openTab = useAppStore((store) => store.openTab);
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<PersonalFinanceSnapshot | null>(null);
   const [historyData, setHistoryData] = useState<PersonalFinanceSnapshot | null>(null);
   const [budgets, setBudgets] = useState<PersonalBudget[]>([]);
-  const [section, setSection] = useState<"overview" | "transactions" | "budgets">(initialSection);
+  const [section, setSection] = useState<PersonalSection>(initialSection);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyRequested, setHistoryRequested] = useState(false);
@@ -29,7 +32,7 @@ export function PersonalFinanceView({ personId, initialSection = "overview" }: {
 
   useEffect(() => { setHistoryData(null); setHistoryRequested(false); }, [personId]);
   useEffect(() => {
-    if (section !== "transactions" || historyRequested) return;
+    if ((section !== "transactions" && section !== "tiers") || historyRequested) return;
     setHistoryRequested(true); setHistoryLoading(true); setError("");
     fetchPersonalFinance(personId).then(setHistoryData).catch((reason) => setError(reason instanceof Error ? reason.message : "Chargement de l’historique impossible.")).finally(() => setHistoryLoading(false));
   }, [section, historyRequested, personId]);
@@ -95,10 +98,10 @@ export function PersonalFinanceView({ personId, initialSection = "overview" }: {
   return <div className="flex h-full flex-col overflow-hidden bg-vscode-bg [&>main]:min-h-0 [&>main]:flex-1 [&>main]:overflow-auto">
     <header className="border-b border-vscode-border px-7 py-5">
       <div className="text-[10px] uppercase tracking-[0.2em] text-vscode-muted">Comptabilité personnelle</div>
-      <div className="mt-2 flex flex-wrap items-end gap-4"><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-semibold">{data.person.name}</h1><p className="mt-1 max-w-3xl text-xs text-vscode-muted">Un véritable espace de gestion personnelle : comptes, revenus, dépenses, catégories, budgets et charges fixes. Il reste volontairement sans facturation, TVA, RH ni écritures fiscales d’entreprise.</p></div><div className="flex flex-wrap items-center gap-2"><button onClick={() => void openDossierModule("banking", "Banque personnelle")} className="rounded border border-blue-700 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950/30">Connecter une banque</button><button onClick={() => setSection("transactions")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Voir les mouvements</button><button onClick={() => setSection("budgets")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Gérer les budgets</button><button onClick={() => void openDossierModule("recurring", "Charges fixes personnelles")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Charges fixes</button><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="rounded border border-vscode-border bg-vscode-panel px-3 py-2 text-xs" /></div></div>
+      <div className="mt-2 flex flex-wrap items-end gap-4"><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-semibold">{data.person.name}</h1><p className="mt-1 max-w-3xl text-xs text-vscode-muted">Un véritable espace de gestion personnelle : comptes, revenus, dépenses, catégories, budgets et charges fixes. Il reste volontairement sans facturation, TVA, RH ni écritures fiscales d’entreprise.</p></div><div className="flex flex-wrap items-center gap-2"><button onClick={() => void openDossierModule("banking", "Banque personnelle")} className="rounded border border-blue-700 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950/30">Connecter une banque</button><button onClick={() => setSection("transactions")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Voir les mouvements</button><button onClick={() => setSection("tiers")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Voir les tiers</button><button onClick={() => setSection("budgets")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Gérer les budgets</button><button onClick={() => void openDossierModule("recurring", "Charges fixes personnelles")} className="rounded border border-vscode-border px-3 py-2 text-xs hover:border-blue-600">Charges fixes</button><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="rounded border border-vscode-border bg-vscode-panel px-3 py-2 text-xs" /></div></div>
     </header>
     <nav className="flex gap-1 border-b border-vscode-border px-7 py-2">
-      {([['overview', 'Vue d’ensemble'], ['transactions', `Mouvements (${historyData?.transactions.length ?? data.transactions.length})`], ['budgets', 'Budgets']] as const).map(([id, label]) => <button key={id} onClick={() => setSection(id)} className={`rounded px-3 py-1.5 text-xs ${section === id ? "bg-vscode-accent text-white" : "text-vscode-muted hover:bg-vscode-panel hover:text-vscode-text"}`}>{label}</button>)}
+      {([['overview', 'Vue d’ensemble'], ['transactions', `Mouvements (${historyData?.transactions.length ?? data.transactions.length})`], ['tiers', 'Tiers'], ['budgets', 'Budgets']] as const).map(([id, label]) => <button key={id} onClick={() => setSection(id)} className={`rounded px-3 py-1.5 text-xs ${section === id ? "bg-vscode-accent text-white" : "text-vscode-muted hover:bg-vscode-panel hover:text-vscode-text"}`}>{label}</button>)}
     </nav>
     {(error || notice) && <div aria-live="polite" className={`mx-7 mt-4 rounded border px-4 py-2 text-xs ${error ? "border-red-700 bg-red-950/30 text-red-300" : "border-green-700 bg-green-950/30 text-green-300"}`}>{error || notice}</div>}
     {data.accounts.length === 0 && <div className="mx-7 mt-5 rounded border border-amber-700 bg-amber-950/25 p-4 text-xs text-amber-200"><strong>Aucun compte personnel relié.</strong><p className="mt-1 text-amber-100/70">Utilise « Connecter une banque » pour ajouter le véritable compte de cette personne. Si un compte existant est réellement partagé, tu peux aussi le relier depuis Structure financière. Les transactions restent dans leur dossier source et ne sont jamais copiées.</p></div>}
@@ -115,6 +118,8 @@ export function PersonalFinanceView({ personId, initialSection = "overview" }: {
     </main>}
 
     {section === "transactions" && <PersonalTransactionsView snapshot={historyData ?? data} loading={historyLoading} onCategoryChange={changeCategory} onBatchCategoryChange={changeCategories} />}
+
+    {section === "tiers" && <PersonalTiersView snapshot={historyData ?? data} loading={historyLoading} />}
 
     {section === "budgets" && <main className="space-y-5 p-7"><div className="flex flex-wrap items-center gap-3"><div className="mr-auto"><h2 className="text-sm font-semibold">Budgets mensuels personnels</h2><p className="mt-1 text-[11px] text-vscode-muted">Ces budgets n’affectent pas les budgets ni les comptes comptables des entreprises.</p></div><button onClick={() => void saveBudgets()} disabled={saving} className="rounded bg-vscode-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{saving ? "Enregistrement…" : "Enregistrer les budgets"}</button></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded border border-vscode-border bg-vscode-panel p-3"><div className="text-[10px] text-vscode-muted">BUDGET TOTAL</div><strong className="font-mono">{money.format(totalBudget)}</strong></div><div className="rounded border border-vscode-border bg-vscode-panel p-3"><div className="text-[10px] text-vscode-muted">DÉPENSÉ</div><strong className="font-mono">{money.format(totalSpent)}</strong></div><div className="rounded border border-vscode-border bg-vscode-panel p-3"><div className="text-[10px] text-vscode-muted">DISPONIBLE</div><strong className={`font-mono ${totalBudget > 0 && totalSpent > totalBudget ? "text-red-300" : "text-green-300"}`}>{money.format(totalBudget - totalSpent)}</strong></div></div><div className="grid gap-3 lg:grid-cols-2">{expenseCategories.map((category) => { const budget = budgets.find((item) => item.category === category.id)?.monthlyLimit ?? 0; const spent = spending[category.id] ?? 0; const ratio = budget > 0 ? Math.min(100, spent / budget * 100) : 0; return <div key={category.id} className="rounded border border-vscode-border bg-vscode-panel p-3"><div className="flex items-center gap-3"><span className="min-w-0 flex-1 text-xs font-medium">{category.label}</span><span className="text-[10px] text-vscode-muted">{money.format(spent)} /</span><LocalizedNumberInput value={budget} onValueChange={(value) => setBudget(category.id, value)} min={0} className="w-24 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-right text-xs" aria-label={`Budget ${category.label}`} /></div>{budget > 0 && <div className="mt-2 h-1.5 overflow-hidden rounded bg-vscode-border"><div className={`h-full ${spent > budget ? "bg-red-500" : ratio > 80 ? "bg-amber-500" : "bg-vscode-accent"}`} style={{ width: `${ratio}%` }}/></div>}</div>; })}</div></main>}
   </div>;

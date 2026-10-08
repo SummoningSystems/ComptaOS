@@ -26,5 +26,8 @@ describe("PersonalFinanceView", () => {
     expect(screen.getByText("Courses")).toBeInTheDocument();
     fireEvent.change(screen.getByDisplayValue("Courses alimentaires"), { target: { value: "personal_misc" } });
     await waitFor(() => expect(api.category).toHaveBeenCalledWith("person_1", "default:t1", "personal_misc"));
+    fireEvent.click(screen.getByRole("button", { name: "Tiers" }));
+    expect(await screen.findByText("Tiers personnels")).toBeInTheDocument();
+    expect(screen.getByText("Courses")).toBeInTheDocument();
   });
 });
