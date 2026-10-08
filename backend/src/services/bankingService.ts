@@ -256,7 +256,7 @@ async function getTempCode(domain: string, userToken: string): Promise<string> {
 
 /** Retourne l'URL du webview Powens pour connecter une nouvelle banque */
 export async function getConnectWebviewUrl(
-  redirectUri: string,
+  redirectUri: string | undefined,
   config: BankingConfig
 ): Promise<{ url: string }> {
   const { token, config: updated } = await ensureUserToken(config);
@@ -264,10 +264,11 @@ export async function getConnectWebviewUrl(
   return { url: buildConnectWebviewUrl(updated.domain, updated.clientId, redirectUri, code) };
 }
 
-export function buildConnectWebviewUrl(domain: string, clientId: string, redirectUri: string, code: string): string {
+export function buildConnectWebviewUrl(domain: string, clientId: string, redirectUri: string | undefined, code: string): string {
   const fullDomain = domain.endsWith(".biapi.pro") ? domain : `${domain}.biapi.pro`;
-  const params = new URLSearchParams({ domain: fullDomain, client_id: clientId, redirect_uri: redirectUri, code });
-  return `https://webview.powens.com/fr/connect?${params.toString()}`;
+  const params = new URLSearchParams({ domain: fullDomain, client_id: clientId, code });
+  if (redirectUri) params.set("redirect_uri", redirectUri);
+  return `https://webview.powens.com/fr/${redirectUri ? "connect" : "manage"}?${params.toString()}`;
 }
 
 /** Rafraîchit les connexions depuis l'API Powens et met à jour le stockage local */

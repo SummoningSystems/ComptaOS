@@ -12,4 +12,12 @@ describe("Powens Webview URL", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(redirect);
     expect(url.searchParams.get("code")).toBe("temporary code");
   });
+
+  it("utilise le gestionnaire Powens sans URL de retour sur un environnement non autorisé", () => {
+    const url = new URL(buildConnectWebviewUrl("summoning", "123", undefined, "temporary"));
+    expect(url.pathname).toBe("/fr/manage");
+    expect(url.searchParams.get("redirect_uri")).toBeNull();
+    expect(url.searchParams.get("domain")).toBe("summoning.biapi.pro");
+    expect(url.searchParams.get("code")).toBe("temporary");
+  });
 });

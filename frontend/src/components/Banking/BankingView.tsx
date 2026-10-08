@@ -106,7 +106,6 @@ export function BankingView({ dossierName }: { dossierName?: string }) {
     setConnectMsg(null);
     setConnectTone("info");
     setConnectLoading(true);
-    const redirect = new URL(import.meta.env.BASE_URL, window.location.origin);
     const popup = window.open("about:blank", "powens_webview", "popup,width=600,height=700");
     if (!popup) {
       setConnectMsg("La fenêtre Powens a été bloquée par le navigateur. Autorise les fenêtres contextuelles puis réessaie.");
@@ -116,7 +115,7 @@ export function BankingView({ dossierName }: { dossierName?: string }) {
     }
     powensPopup.current = popup;
     try {
-      const { data } = await api.post<{ url: string }>("/banking/connect", { redirectUrl: redirect.toString() });
+      const { data } = await api.post<{ url: string }>("/banking/connect", {});
       setStep("waiting_webview");
       popup.location.href = data.url;
       awaitingPowens.current = true;

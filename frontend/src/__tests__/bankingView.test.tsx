@@ -18,7 +18,7 @@ describe("BankingView", () => {
     render(<BankingView dossierName="Benoit Jurado" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "+ Connecter une banque" }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/banking/connect", { redirectUrl: `${window.location.origin}/` }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/banking/connect", {}));
     expect(popup.location.href).toBe("https://webview.powens.test/connect");
 
     window.dispatchEvent(new MessageEvent("message", { origin: window.location.origin, data: { type: "comptaos:powens-callback" } }));

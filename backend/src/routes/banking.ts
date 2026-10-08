@@ -52,10 +52,6 @@ export async function bankingRoutes(app: FastifyInstance) {
     if (!config) return reply.status(400).send({ error: "Powens non configurÃ©" });
 
     const { redirectUrl } = req.body as { redirectUrl?: string };
-    if (!redirectUrl) {
-      return reply.status(400).send({ error: "redirectUrl requis" });
-    }
-
     try {
       const result = await getConnectWebviewUrl(redirectUrl, config);
       return result;
