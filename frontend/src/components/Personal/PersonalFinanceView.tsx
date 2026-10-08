@@ -80,7 +80,7 @@ export function PersonalFinanceView({ personId }: { personId: string }) {
       {([['overview', 'Vue d’ensemble'], ['transactions', `Mouvements (${data.transactions.length})`], ['budgets', 'Budgets']] as const).map(([id, label]) => <button key={id} onClick={() => setSection(id)} className={`rounded px-3 py-1.5 text-xs ${section === id ? "bg-vscode-accent text-white" : "text-vscode-muted hover:bg-vscode-panel hover:text-vscode-text"}`}>{label}</button>)}
     </nav>
     {(error || notice) && <div aria-live="polite" className={`mx-7 mt-4 rounded border px-4 py-2 text-xs ${error ? "border-red-700 bg-red-950/30 text-red-300" : "border-green-700 bg-green-950/30 text-green-300"}`}>{error || notice}</div>}
-    {data.accounts.length === 0 && <div className="mx-7 mt-5 rounded border border-amber-700 bg-amber-950/25 p-4 text-xs text-amber-200"><strong>Aucun compte personnel relié.</strong><p className="mt-1 text-amber-100/70">Dans « Structure financière », crée un lien « Titulaire » entre cette personne et un compte bancaire. Les transactions apparaîtront ensuite ici sans être copiées.</p></div>}
+    {data.accounts.length === 0 && <div className="mx-7 mt-5 rounded border border-amber-700 bg-amber-950/25 p-4 text-xs text-amber-200"><strong>Aucun compte personnel relié.</strong><p className="mt-1 text-amber-100/70">Utilise « Connecter une banque » pour ajouter le véritable compte de cette personne. Si un compte existant est réellement partagé, tu peux aussi le relier depuis Structure financière. Les transactions restent dans leur dossier source et ne sont jamais copiées.</p></div>}
 
     {section === "overview" && <main className="space-y-6 p-7">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

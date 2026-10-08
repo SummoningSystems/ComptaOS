@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const workspace = vi.hoisted(() => ({ root: "", companies: [] as Array<{ id: string; name: string; path: string; kind?: "business" | "personal"; scopeId?: string; createdAt: string }> }));
 vi.mock("../services/companiesService.js", () => ({ getCompaniesRoot: () => workspace.root, getActiveCompanyPath: () => workspace.root, loadCompanies: () => workspace.companies, resolveCompanyPath: (company: { path: string }) => path.resolve(workspace.root, company.path) }));
 
-import { createHousehold, createPerson, getPlatformState } from "../services/platformService.js";
-import { advancePortfolioTransfer, correctPortfolioTransfer, createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions } from "../services/portfolioService.js";
+import { createHousehold, createPerson, createRelation, getPlatformState } from "../services/platformService.js";
+import { advancePortfolioTransfer, correctPortfolioTransfer, createPortfolioCommitment, createPortfolioTransfer, getPortfolioSnapshot, savePortfolioAssumptions, suggestedPortfolioScopes } from "../services/portfolioService.js";
 import { loadFinanceTransactions, saveTransactionAllocations } from "../services/financeAllocationService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
 
@@ -41,6 +41,25 @@ describe("portfolio transfers and consolidated forecast", () => {
     await createPortfolioTransfer(actor, { kind: "planned", sourceScopeId: personId, destinationScopeId: "entity_default", amount: 250, date: "2026-10-15", label: "Apport", frequency: "once" });
     const group = await getPortfolioSnapshot(actor, personId, 3, [personId, "entity_default"], "2026-10"); const personOnly = await getPortfolioSnapshot(actor, personId, 3, [personId], "2026-10");
     expect(group.forecast[0]).toMatchObject({ transfersIn: 0, transfersOut: 0 }); expect(personOnly.forecast[0].transfersOut).toBe(250);
+  });
+
+  it("ne traverse pas un foyer pour inclure les entreprises privées des autres membres", () => {
+    let state = getPlatformState();
+    state = createPerson({ name: "Benoit", expectedRevision: state.revision });
+    state = createPerson({ name: "Laura", expectedRevision: state.revision });
+    state = createPerson({ name: "Paul", expectedRevision: state.revision });
+    state = createHousehold({ name: "Foyer", expectedRevision: state.revision });
+    const [benoit, laura, paul] = state.people;
+    const household = state.households[0];
+    state = createRelation({ fromId: benoit.id, toId: household.id, type: "member", expectedRevision: state.revision }).state;
+    state = createRelation({ fromId: laura.id, toId: household.id, type: "member", expectedRevision: state.revision }).state;
+    state = createRelation({ fromId: benoit.id, toId: "entity_default", type: "owner", ownershipPercent: 67, expectedRevision: state.revision }).state;
+    state = createRelation({ fromId: paul.id, toId: "entity_default", type: "owner", ownershipPercent: 33, expectedRevision: state.revision }).state;
+
+    expect(suggestedPortfolioScopes(state, laura.id)).toEqual([laura.id, household.id]);
+    expect(suggestedPortfolioScopes(state, benoit.id)).toEqual(expect.arrayContaining([benoit.id, household.id, "entity_default"]));
+    expect(suggestedPortfolioScopes(state, household.id)).toEqual(expect.arrayContaining([household.id, benoit.id, laura.id]));
+    expect(suggestedPortfolioScopes(state, household.id)).not.toContain("entity_default");
   });
 
   it("gère un transfert partiel intermois avec frais et propose les écritures", async () => {
