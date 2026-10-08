@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "../../api/client";
 
 interface BankAccount {
@@ -30,7 +30,7 @@ interface PowensConfig {
 
 type Step = "connections" | "setup" | "waiting_webview";
 
-export function BankingView() {
+export function BankingView({ dossierName }: { dossierName?: string }) {
   const [config, setConfig] = useState<PowensConfig>({ configured: false });
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [step, setStep] = useState<Step>("connections");
@@ -45,7 +45,12 @@ export function BankingView() {
 
   // Connexion en cours
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  const [connectTone, setConnectTone] = useState<"info" | "success" | "error">("info");
   const [connectLoading, setConnectLoading] = useState(false);
+  const powensPopup = useRef<Window | null>(null);
+  const powensPolling = useRef<number | null>(null);
+  const awaitingPowens = useRef(false);
+  const refreshAfterPowens = useRef<() => void>(() => undefined);
 
   // Sync
   const [syncStatus, setSyncStatus] = useState<Record<number, { loading: boolean; msg: string }>>({});
@@ -63,6 +68,21 @@ export function BankingView() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    const receivePowensResult = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== "comptaos:powens-callback") return;
+      awaitingPowens.current = false;
+      if (powensPolling.current !== null) window.clearInterval(powensPolling.current);
+      powensPopup.current = null;
+      refreshAfterPowens.current();
+    };
+    window.addEventListener("message", receivePowensResult);
+    return () => {
+      window.removeEventListener("message", receivePowensResult);
+      if (powensPolling.current !== null) window.clearInterval(powensPolling.current);
+    };
+  }, []);
 
   async function handleSetup(e: React.FormEvent) {
     e.preventDefault();
@@ -84,32 +104,69 @@ export function BankingView() {
 
   async function handleConnect() {
     setConnectMsg(null);
+    setConnectTone("info");
     setConnectLoading(true);
-    const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const redirect = new URL(import.meta.env.BASE_URL, window.location.origin);
+    redirect.searchParams.set("powens_callback", "1");
+    const popup = window.open("about:blank", "powens_webview", "popup,width=600,height=700");
+    if (!popup) {
+      setConnectMsg("La fenêtre Powens a été bloquée par le navigateur. Autorise les fenêtres contextuelles puis réessaie.");
+      setConnectTone("error");
+      setConnectLoading(false);
+      return;
+    }
+    powensPopup.current = popup;
     try {
-      const { data } = await api.post<{ url: string }>("/banking/connect", { redirectUrl });
+      const { data } = await api.post<{ url: string }>("/banking/connect", { redirectUrl: redirect.toString() });
       setStep("waiting_webview");
-      window.open(data.url, "powens_webview", "popup,width=600,height=700");
+      popup.location.href = data.url;
+      awaitingPowens.current = true;
+      powensPolling.current = window.setInterval(() => {
+        if (!popup.closed || !awaitingPowens.current) return;
+        awaitingPowens.current = false;
+        if (powensPolling.current !== null) window.clearInterval(powensPolling.current);
+        powensPolling.current = null;
+        powensPopup.current = null;
+        refreshAfterPowens.current();
+      }, 750);
     } catch (err: unknown) {
+      popup.close();
+      powensPopup.current = null;
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Erreur de connexion";
       setConnectMsg(msg);
+      setConnectTone("error");
     } finally {
       setConnectLoading(false);
     }
   }
 
-  async function handleRefresh() {
-    setConnectMsg("Récupération des connexions…");
+  async function handleRefresh(automatic = false) {
+    const previousAccountCount = connections.reduce((sum, connection) => sum + connection.accounts.length, 0);
+    setConnectMsg(automatic ? "Retour Powens reçu, vérification du compte…" : "Récupération des connexions…");
+    setConnectTone("info");
     try {
       const { data } = await api.post<BankConnection[]>("/banking/refresh");
       setConnections(data);
-      setConnectMsg(null);
+      const accountCount = data.reduce((sum, connection) => sum + connection.accounts.length, 0);
+      await api.get("/platform").catch(() => undefined);
+      if (accountCount === 0) {
+        setConnectMsg("Powens n’a renvoyé aucun compte bancaire. La ligne « Saisie manuelle » n’est pas une connexion bancaire : réouvre Powens et termine toutes les étapes.");
+        setConnectTone("error");
+      } else if (accountCount > previousAccountCount) {
+        setConnectMsg(`${accountCount - previousAccountCount} nouveau(x) compte(s) bancaire(s) relié(s) à ${dossierName ?? "ce dossier"}.`);
+        setConnectTone("success");
+      } else {
+        setConnectMsg(`${accountCount} compte(s) bancaire(s) présent(s) dans ${dossierName ?? "ce dossier"}.`);
+        setConnectTone("success");
+      }
       setStep("connections");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Erreur de synchronisation";
       setConnectMsg(msg);
+      setConnectTone("error");
     }
   }
+  refreshAfterPowens.current = () => { void handleRefresh(true); };
 
   async function handleSyncAll(conn: BankConnection) {
     setSyncStatus((s) => ({ ...s, [conn.connectionId]: { loading: true, msg: "" } }));
@@ -156,7 +213,7 @@ export function BankingView() {
           <div>
             <h1 className="text-base font-bold">🏦 Connexion bancaire PSD2</h1>
             <p className="text-xs text-vscode-muted mt-0.5">
-              Importez automatiquement vos transactions depuis votre banque via Open Banking (Powens).
+              {dossierName ? <>Dossier : <strong className="text-vscode-text">{dossierName}</strong>. </> : null}Importez automatiquement vos transactions depuis votre banque via Open Banking (Powens).
             </p>
           </div>
           <div className="flex gap-2">
@@ -170,7 +227,7 @@ export function BankingView() {
                   🔁 Dédoublonner
                 </button>
                 <button
-                  onClick={handleRefresh}
+                  onClick={() => void handleRefresh(false)}
                   className="text-xs border border-vscode-border text-vscode-muted px-3 py-1.5 rounded hover:text-vscode-text"
                   title="Rafraîchir la liste des connexions depuis Powens"
                 >
@@ -295,9 +352,9 @@ export function BankingView() {
               Une fenêtre Powens s'est ouverte. Sélectionnez votre banque et authentifiez-vous.
               Une fois terminé, revenez ici et cliquez sur le bouton ci-dessous.
             </p>
-            {connectMsg && <p className="text-xs text-vscode-muted mb-3">{connectMsg}</p>}
+            {connectMsg && <p className={`mb-3 text-xs ${connectTone === "error" ? "text-red-400" : connectTone === "success" ? "text-green-400" : "text-vscode-muted"}`}>{connectMsg}</p>}
             <button
-              onClick={handleRefresh}
+              onClick={() => void handleRefresh(false)}
               className="bg-vscode-accent text-white text-xs px-4 py-2 rounded hover:opacity-90"
             >
               ✓ J'ai terminé — importer mes comptes
@@ -308,7 +365,7 @@ export function BankingView() {
         {/* ── Liste des connexions ── */}
         {step === "connections" && config.configured && (
           <>
-            {connectMsg && <p className="text-xs text-red-400">{connectMsg}</p>}
+            {connectMsg && <p className={`rounded border px-3 py-2 text-xs ${connectTone === "error" ? "border-red-800 bg-red-950/20 text-red-300" : connectTone === "success" ? "border-green-800 bg-green-950/20 text-green-300" : "border-vscode-border text-vscode-muted"}`}>{connectMsg}</p>}
             {connections.length === 0 ? (
               <div className="text-center py-12 text-vscode-muted">
                 <p className="text-3xl mb-3">🏦</p>

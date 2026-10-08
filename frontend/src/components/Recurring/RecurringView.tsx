@@ -12,7 +12,7 @@ const DECISION_LABELS = { keep: "Conserver", reduce: "Réduire", cancel: "Suppri
 const today = () => new Date().toISOString().slice(0, 10);
 const euros = (value: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 
-export function RecurringView() {
+export function RecurringView({ mode = "business" }: { mode?: "business" | "personal" | "household" }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]); const [manual, setManual] = useState<ManualRecurring[]>([]);
   const [alert, setAlert] = useState<TreasuryAlert>({ threshold: 5000, enabled: false }); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
   const [horizon, setHorizon] = useState<3 | 6 | 12>(6); const [view, setView] = useState<"pilot" | "calendar">("pilot");
@@ -50,7 +50,7 @@ export function RecurringView() {
 
   if (loading) return <div className="p-6 text-sm text-vscode-muted">Analyse des frais en cours…</div>;
   return <div className="h-full overflow-auto p-6 flex flex-col gap-5 max-w-6xl mx-auto">
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold text-vscode-text">Pilotage des frais récurrents</h1><p className="text-xs text-vscode-muted mt-1">Visualise le coût structurel, prépare les décisions et mesure leur effet sur la trésorerie.</p></div><button onClick={startNew} disabled={editingId !== null} className="px-3 py-2 bg-vscode-accent text-white text-xs rounded disabled:opacity-40">＋ Ajouter un frais</button></header>
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold text-vscode-text">{mode === "personal" ? "Charges fixes personnelles" : mode === "household" ? "Charges fixes du foyer" : "Pilotage des frais récurrents"}</h1><p className="text-xs text-vscode-muted mt-1">{mode === "business" ? "Visualise le coût structurel, prépare les décisions et mesure leur effet sur la trésorerie." : "Suis les abonnements, le logement, les assurances et les autres échéances régulières sans notion de TVA ni de facturation professionnelle."}</p></div><button onClick={startNew} disabled={editingId !== null} className="px-3 py-2 bg-vscode-accent text-white text-xs rounded disabled:opacity-40">＋ Ajouter une charge</button></header>
 
     <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[
       ["Coût mensuel", euros(baseMonthly), "text-red-400"], ["Coût annuel réel", euros(baseMonthly * 12), "text-vscode-text"], ["À payer sous 30 j", euros(next30), "text-amber-400"], [savingsMonthly >= 0 ? "Économie simulée" : "Surcoût simulé", euros(Math.abs(savingsMonthly) * 12) + "/an", savingsMonthly >= 0 ? "text-green-400" : "text-red-400"], ["Autonomie sur frais fixes", Number.isFinite(runway) ? `${runway.toFixed(1)} mois` : "∞", runway < 3 ? "text-red-400" : "text-vscode-text"],

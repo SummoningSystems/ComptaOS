@@ -121,6 +121,8 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
   const contextMonth = params.get("month") ?? undefined;
   const personId = params.get("person") ?? "";
   const householdId = params.get("household") ?? "";
+  const dossierName = params.get("dossier") ?? undefined;
+  const dossierMode = params.get("mode") ?? undefined;
   return (
     <Suspense fallback={<ViewLoading />}>
       {type === "dashboard"    && <Dashboard />}
@@ -134,7 +136,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "ocr"          && <PdfImporter />}
       {type === "transactions" && <TransactionsView workFilter={workFilter as "unjustified" | "misc" | "pending" | "duplicates" | "receipt-inbox" | undefined} month={contextMonth} />}
       {type === "reports"      && <ReportsView />}
-      {type === "recurring"    && <RecurringView />}
+      {type === "recurring"    && <RecurringView mode={dossierMode === "personal" ? "personal" : dossierMode === "household" ? "household" : "business"} />}
       {type === "invoices"     && <InvoicesView />}
       {type === "quotes"       && <QuotesView />}
       {type === "settings"     && <SettingsView />}
@@ -153,7 +155,7 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
       {type === "profitloss"   && <ProfitLossView />}
       {type === "plugins"       && <PluginsView />}
       {type === "pricing"       && <PricingView />}
-      {type === "banking"       && <BankingView />}
+      {type === "banking"       && <BankingView dossierName={dossierName} />}
       {type === "users"         && currentUser && <UsersView currentUser={currentUser} />}
       {type === "hr"            && <HrView />}
     </Suspense>

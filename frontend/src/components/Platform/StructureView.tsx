@@ -22,7 +22,7 @@ const financialLinkLabels = { none: "Aucun financement associé", shareholder_cu
 function NodeCard({ node, dossier, selected, dimmed, onSelect }: { node: Node; dossier?: AccountingDossier; selected: boolean; dimmed?: boolean; onSelect: () => void }) {
   const meta = node.kind === "person"
     ? (node.profile === "professional" ? "Personne · activité professionnelle" : "Personne")
-    : node.kind === "household" ? "Foyer" : node.kind === "entity" ? (node.legalType === "sci" ? "SCI" : node.legalType === "holding" ? "Holding" : "Entreprise") : `${node.provider ?? "Compte bancaire"}${node.maskedIdentifier ? ` · ${node.maskedIdentifier}` : ""}`;
+    : node.kind === "household" ? "Foyer" : node.kind === "entity" ? (node.legalType === "sci" ? "SCI" : node.legalType === "holding" ? "Holding" : "Entreprise") : node.sourceAccountId === "main" ? "Canal de saisie · pas une banque" : `${node.provider ?? "Compte bancaire"}${node.maskedIdentifier ? ` · ${node.maskedIdentifier}` : ""}`;
   return (
     <button onClick={onSelect} className={`w-full rounded border p-4 text-left shadow-sm transition-all ${dimmed ? "opacity-35" : "opacity-100"} ${selected ? "border-vscode-accent bg-blue-950/30 ring-1 ring-vscode-accent" : "border-vscode-border bg-vscode-panel hover:border-vscode-accent/60 hover:bg-vscode-highlight"}`}>
       <div className="flex items-start gap-3">
@@ -61,12 +61,14 @@ export function AccountingDossierDirectory({ dossiers, busy, onOpen, onConnectBa
   onConnectBank: (dossier: AccountingDossier) => void;
   onShowDetails: (dossier: AccountingDossier) => void;
 }) {
-  return <section className="mx-4 mt-4 rounded border border-vscode-border bg-vscode-panel p-4 sm:mx-8">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="text-sm font-semibold">Dossiers comptables</h2><p className="mt-1 text-[11px] text-vscode-muted">Chaque personne, foyer ou structure possède ici son point d’entrée vers sa comptabilité et ses comptes bancaires.</p></div>
-      <span className="rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-[10px] text-vscode-muted">{dossiers.length} dossier{dossiers.length !== 1 ? "s" : ""}</span>
-    </div>
-    <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+  const active = dossiers.filter((dossier) => dossier.created).length;
+  return <details className="group mx-4 mt-4 rounded border border-vscode-border bg-vscode-panel sm:mx-8">
+    <summary className="flex cursor-pointer list-none items-center gap-3 p-4 marker:content-none">
+      <span className="text-vscode-accent transition-transform group-open:rotate-90">▶</span>
+      <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">Dossiers comptables</h2><p className="mt-1 truncate text-[11px] text-vscode-muted">{dossiers.length} dossier{dossiers.length !== 1 ? "s" : ""} · {active} actif{active !== 1 ? "s" : ""} · déplier pour ouvrir une comptabilité ou connecter une banque</p></div>
+      <span className="hidden rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-[10px] text-vscode-muted sm:inline">Afficher</span>
+    </summary>
+    <div className="grid gap-3 border-t border-vscode-border p-4 md:grid-cols-2 2xl:grid-cols-3">
       {dossiers.map((dossier) => <article key={dossier.scopeId} className="rounded border border-vscode-border bg-black/10 p-3">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-xs font-semibold">{dossier.name}</div><div className="mt-1 text-[10px] text-vscode-muted">{dossierKindLabels[dossier.scopeKind]}</div></div><span className={`shrink-0 rounded px-2 py-1 text-[9px] ${dossier.created ? "bg-green-950/60 text-green-300" : "bg-amber-950/50 text-amber-300"}`}>{dossier.created ? "Actif" : "À créer"}</span></div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -77,7 +79,7 @@ export function AccountingDossierDirectory({ dossiers, busy, onOpen, onConnectBa
       </article>)}
       {dossiers.length === 0 && <p className="py-4 text-xs text-vscode-muted">Aucun dossier visible avec tes droits actuels.</p>}
     </div>
-  </section>;
+  </details>;
 }
 
 function organicLayout(nodes: Node[], state: PlatformState): PlatformLayout {
@@ -309,7 +311,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
       const businessWorkspace = await fetchActiveCompany();
       if (businessWorkspace && businessWorkspace.id !== ready.workspaceId) sessionStorage.setItem("comptaos:last-business-workspace", businessWorkspace.id);
       await setActiveCompanyApi(ready.workspaceId);
-      openTab({ id: `dossier:${ready.scopeKind}:${ready.scopeId}:banking`, title: `Banque · ${ready.name}`, type: "banking", path: `workspace=${encodeURIComponent(ready.workspaceId)}` });
+      openTab({ id: `dossier:${ready.scopeKind}:${ready.scopeId}:banking`, title: `Banque · ${ready.name}`, type: "banking", path: `workspace=${encodeURIComponent(ready.workspaceId)}&dossier=${encodeURIComponent(ready.name)}` });
     } catch (e) { setError(e instanceof Error ? e.message : "Connexion bancaire impossible"); }
     finally { setBusy(false); }
   }

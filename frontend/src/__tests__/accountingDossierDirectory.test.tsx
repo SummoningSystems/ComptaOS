@@ -16,6 +16,7 @@ describe("AccountingDossierDirectory", () => {
     render(<AccountingDossierDirectory dossiers={dossiers} onOpen={onOpen} onConnectBank={onConnectBank} onShowDetails={onShowDetails} />);
 
     expect(screen.getByText("Dossiers comptables")).toBeInTheDocument();
+    expect(screen.getByText("Dossiers comptables").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByRole("button", { name: "Créer la comptabilité" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ouvrir la comptabilité" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Voir la fiche et les liens" })).toHaveLength(2);
