@@ -5,6 +5,7 @@ import { getPlatformState } from "../services/platformService.js";
 import { workspaceContext } from "../services/workspaceContext.js";
 import { buildAnnualClosingSnapshot, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, type AnnualReview, type FiscalPeriod, type OpeningBalanceLine, type ProfitTaxRegime } from "../services/annualClosingService.js";
 import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, updateInventoryEntry, validateInventoryEntry, type InventoryEntryInput } from "../services/annualInventoryService.js";
+import { cancelFiscalAdjustment, createFiscalAdjustment, deleteFiscalDraft, saveFiscalReview, updateFiscalAdjustment, validateFiscalAdjustment, type FiscalAdjustmentInput } from "../services/annualFiscalService.js";
 
 function periods(): FiscalPeriod[] {
   const companyId = workspaceContext.getStore()?.companyId ?? getActiveCompanyId(); const entity = getPlatformState().entities.find((item) => item.workspaceId === companyId);
@@ -53,6 +54,30 @@ export async function annualClosingRoutes(app: FastifyInstance) {
   });
   app.delete<{ Params: { periodId: string; entryId: string } }>("/:periodId/inventory/:entryId", async (request, reply) => {
     try { const { period } = selected(request.params.periodId); deleteInventoryDraft(period.id, request.params.entryId); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.post<{ Params: { periodId: string }; Body: FiscalAdjustmentInput }>("/:periodId/fiscal-adjustments", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); createFiscalAdjustment(period.id, request.body); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.put<{ Params: { periodId: string; adjustmentId: string }; Body: FiscalAdjustmentInput }>("/:periodId/fiscal-adjustments/:adjustmentId", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); updateFiscalAdjustment(period.id, request.params.adjustmentId, request.body); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.post<{ Params: { periodId: string; adjustmentId: string } }>("/:periodId/fiscal-adjustments/:adjustmentId/validate", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); validateFiscalAdjustment(period.id, request.params.adjustmentId); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.post<{ Params: { periodId: string; adjustmentId: string }; Body: { reason: string } }>("/:periodId/fiscal-adjustments/:adjustmentId/cancel", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); cancelFiscalAdjustment(period.id, request.params.adjustmentId, request.body?.reason); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.delete<{ Params: { periodId: string; adjustmentId: string } }>("/:periodId/fiscal-adjustments/:adjustmentId", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); deleteFiscalDraft(period.id, request.params.adjustmentId); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
+    catch (caught) { return error(reply, caught); }
+  });
+  app.put<{ Params: { periodId: string }; Body: { confirmed: boolean; note?: string } }>("/:periodId/fiscal-review", async (request, reply) => {
+    try { const { period } = selected(request.params.periodId); saveFiscalReview(period.id, request.body?.confirmed === true, request.body?.note ?? ""); return buildAnnualClosingSnapshot(period, await loadAllTransactions()); }
     catch (caught) { return error(reply, caught); }
   });
 }
