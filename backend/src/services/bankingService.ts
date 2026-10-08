@@ -3,7 +3,7 @@
  * Doc : https://docs.powens.com
  *
  * Flux :
- *  1. POST /auth/init → userToken permanent (une seule fois, stocké dans config)
+ *  1. POST /auth/init → userToken permanent propre au dossier comptable
  *  2. GET  /auth/token/code → code temporaire
  *  3. Ouvrir webview.powens.com/connect?domain=...&client_id=...&code=...&redirect_uri=...
  *  4. Powens redirige vers redirectUri?connection_id={id} après auth bancaire
@@ -126,6 +126,10 @@ function connectionsFile(): string {
   return path.join(bankingDir(), "connections.json");
 }
 
+function workspaceUserFile(): string {
+  return path.join(bankingDir(), ".powens_user.json");
+}
+
 export async function getConfig(): Promise<BankingConfig | null> {
   // Priorité 1 : variables d'environnement (mode hébergé)
   const envDomain = process.env.POWENS_DOMAIN?.trim();
@@ -233,17 +237,30 @@ async function initUser(config: BankingConfig): Promise<string> {
   return data.auth_token;
 }
 
-/** Retourne le userToken existant ou en crée un, et persiste la config si nécessaire */
+async function readWorkspaceUserToken(): Promise<string | null> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(workspaceUserFile(), "utf-8")) as { userToken?: unknown };
+    return typeof parsed.userToken === "string" && parsed.userToken ? parsed.userToken : null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new Error("Utilisateur Powens du dossier invalide.");
+  }
+}
+
+/** Retourne le userToken du dossier ou en crée un. Le jeton historique global
+ * reste accepté uniquement pour le dossier racine afin de ne pas mélanger les
+ * banques d'une personne, d'un foyer et d'une entreprise. */
 async function ensureUserToken(config: BankingConfig): Promise<{ token: string; config: BankingConfig }> {
-  if (config.userToken) {
-    return { token: config.userToken, config };
-  }
+  const workspaceToken = await readWorkspaceUserToken();
+  if (workspaceToken) return { token: workspaceToken, config };
+  const rootWorkspace = path.resolve(getWorkspaceRoot()) === path.resolve(getCompaniesRoot());
+  if (rootWorkspace && config.userToken) return { token: config.userToken, config };
   const token = await initUser(config);
-  const updated = { ...config, userToken: token };
-  if (!isConfiguredViaEnv()) {
-    await saveConfig(updated);
-  }
-  return { token, config: updated };
+  await atomicWriteFile(workspaceUserFile(), JSON.stringify({ userToken: token }, null, 2));
+  // Un nouveau Powens user ne possède encore aucune connexion : supprimer les
+  // métadonnées héritées par erreur d'un ancien jeton partagé.
+  await saveConnections([]);
+  return { token, config };
 }
 
 /** Génère un code temporaire pour le webview (à usage unique) */
