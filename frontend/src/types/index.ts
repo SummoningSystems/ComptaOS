@@ -197,7 +197,8 @@ export interface AiConfigStatus {
 
 export interface Company {
   id: string;
-  kind?: "business" | "household" | "ecosystem";
+  kind?: "business" | "personal" | "household" | "ecosystem";
+  scopeId?: string;
   legalType?: "company" | "sci" | "holding" | "association" | "sole_proprietorship" | "other";
   name: string;
   path: string;
@@ -211,7 +212,7 @@ export type PlatformLegalType = "company" | "sci" | "holding" | "association" | 
 export type PlatformTaxRegime = "is" | "ir" | "micro" | "non_profit" | "other";
 export interface PlatformFiscalPeriod { id: string; startDate: string; endDate: string; label?: string }
 export interface PlatformEntity { id: string; kind: "entity"; name: string; workspaceId: string; legalType?: PlatformLegalType; capitalAmount?: number; taxRegime?: PlatformTaxRegime; vatRegime?: "monthly_ca3" | "quarterly_ca3" | "simplified_ca12" | "franchise"; startDate?: string; endDate?: string; fiscalYearStart?: string; fiscalYearEnd?: string; fiscalPeriods?: PlatformFiscalPeriod[]; createdAt: string }
-export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; createdAt: string }
+export interface PlatformAccount { id: string; kind: "account"; name: string; currency: string; maskedIdentifier?: string; provider?: string; sourceWorkspaceId: string; sourceAccountId: string; balance?: number; technical?: boolean; createdAt: string }
 export interface PlatformRelation { id: string; fromId: string; toId: string; type: PlatformRelationType; label?: string; ownershipPercent?: number; shareCount?: number; ultimateBeneficiaryId?: string; effectiveFrom?: string; effectiveTo?: string; financialLinkType?: "none" | "shareholder_current_account" | "intercompany_loan"; financialAmount?: number; interestRate?: number; source: "manual" | "workspace"; createdAt: string }
 export type PlatformAccessRole = "owner" | "manager" | "viewer";
 export interface PlatformAccessGrant { id: string; userId: string; scopeId: string; role: PlatformAccessRole; createdAt: string; createdBy: string }

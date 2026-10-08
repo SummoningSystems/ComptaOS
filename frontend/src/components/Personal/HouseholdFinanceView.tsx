@@ -8,10 +8,10 @@ const euro = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR"
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 function householdCategory(label: string, category: string): PersonalCategory { const source = `${label} ${category}`.toLowerCase(); if (/restaurant|repas/.test(source)) return "dining"; if (/aliment|boulanger|course/.test(source)) return "groceries"; if (/loyer|logement|rent/.test(source)) return "housing"; if (/engie|edf|énergie|electric|gaz|eau/.test(source)) return "utilities"; if (/assurance|mutuelle/.test(source)) return "insurance"; if (/transport|sncf|ratp|uber|carbur/.test(source)) return "transport"; if (/abonnement|subscription/.test(source)) return "subscriptions"; return "personal_misc"; }
 
-export function HouseholdFinanceView({ householdId }: { householdId: string }) {
+export function HouseholdFinanceView({ householdId, initialSection = "overview" }: { householdId: string; initialSection?: "overview" | "transactions" | "budgets" }) {
   const openTab = useAppStore((store) => store.openTab);
   const [month, setMonth] = useState(currentMonth()); const [data, setData] = useState<HouseholdFinanceSnapshot | null>(null); const [error, setError] = useState("");
-  const [section, setSection] = useState<"overview" | "transactions" | "budgets">("overview"); const [budgets, setBudgets] = useState<PersonalBudget[]>([]); const [notice, setNotice] = useState("");
+  const [section, setSection] = useState<"overview" | "transactions" | "budgets">(initialSection); const [budgets, setBudgets] = useState<PersonalBudget[]>([]); const [notice, setNotice] = useState("");
   useEffect(() => { fetchHouseholdFinance(householdId, month).then((snapshot) => { setData(snapshot); setBudgets(snapshot.budgets); }).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible")); }, [householdId, month]);
   const spending = useMemo(() => { const result: Record<string, number> = {}; for (const transaction of data?.transactions ?? []) if (!transaction.internalTransfer && transaction.allocatedAmount < 0) { const category = householdCategory(transaction.label, transaction.category); result[category] = (result[category] ?? 0) + Math.abs(transaction.allocatedAmount); } return result; }, [data]);
   const expenseCategories = data?.categories.filter((category) => category.kind !== "income") ?? [];

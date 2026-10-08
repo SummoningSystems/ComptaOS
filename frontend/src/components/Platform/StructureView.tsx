@@ -251,7 +251,10 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
 
   useEffect(() => { Promise.all([fetchPlatformState(), fetchPlatformLayout(), fetchAccountingDossiers(), fetchStructureIssues()]).then(([nextState, nextLayout, nextDossiers, nextIssues]) => { setState(nextState); setLayout(nextLayout); setDossiers(nextDossiers); setIssues(nextIssues); }).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible")); }, []);
   useEffect(() => { if (canAdminister) fetchUsers().then(setUsers).catch(() => setUsers([])); }, [canAdminister]);
-  const nodes = useMemo<Node[]>(() => state ? [...state.people, ...state.households, ...state.entities, ...state.accounts] : [], [state]);
+  const nodes = useMemo<Node[]>(() => state ? [...state.people, ...state.households, ...state.entities, ...state.accounts.filter((account) => !account.technical)] : [], [state]);
+  const visibleNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  const visibleAccountCount = state?.accounts.filter((account) => !account.technical).length ?? 0;
+  const visibleRelationCount = state?.relations.filter((relation) => visibleNodeIds.has(relation.fromId) && visibleNodeIds.has(relation.toId)).length ?? 0;
   const selected = nodes.find((node) => node.id === selectedId);
   useEffect(() => { if (selected?.kind === "entity") setEntityDraft({ ...selected }); else setEntityDraft({}); }, [selectedId, state?.revision]);
   const selectedDossier = dossiers.find((dossier) => dossier.scopeId === selectedId);
@@ -380,7 +383,7 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
       </header>
 
       <div className="border-b border-vscode-border px-4 py-3 text-xs text-vscode-muted sm:px-8">
-        <span className="text-vscode-text">{state.people.length} personne{state.people.length !== 1 ? "s" : ""}</span> · {state.households.length} foyer{state.households.length !== 1 ? "s" : ""} · {state.entities.length} entreprise{state.entities.length !== 1 ? "s" : ""} · {state.accounts.length} compte{state.accounts.length !== 1 ? "s" : ""} · {state.relations.length} lien{state.relations.length !== 1 ? "s" : ""}
+        <span className="text-vscode-text">{state.people.length} personne{state.people.length !== 1 ? "s" : ""}</span> · {state.households.length} foyer{state.households.length !== 1 ? "s" : ""} · {state.entities.length} entreprise{state.entities.length !== 1 ? "s" : ""} · {visibleAccountCount} compte{visibleAccountCount !== 1 ? "s" : ""} bancaire{visibleAccountCount !== 1 ? "s" : ""} · {visibleRelationCount} lien{visibleRelationCount !== 1 ? "s" : ""}
       </div>
 
       <section className="mx-4 mt-4 grid gap-2 rounded border border-blue-900 bg-blue-950/10 p-4 text-[11px] text-vscode-muted sm:mx-8 lg:grid-cols-3">

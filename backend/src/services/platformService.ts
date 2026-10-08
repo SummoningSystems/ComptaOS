@@ -50,6 +50,8 @@ export interface PlatformAccount {
   sourceWorkspaceId: string;
   sourceAccountId: string;
   balance?: number;
+  /** Canal interne nécessaire aux mouvements saisis sans banque, masqué dans le graphe patrimonial. */
+  technical?: boolean;
   createdAt: string;
 }
 
@@ -217,7 +219,10 @@ export function getPlatformState(): PlatformState {
     if (company.scopeId) {
       const manualAccountId = stableId("account", `${company.id}:main`);
       if (!state.accounts.some((account) => account.id === manualAccountId)) {
-        state.accounts.push({ id: manualAccountId, kind: "account", name: "Saisie manuelle", currency: "EUR", provider: "ComptaOS", sourceWorkspaceId: company.id, sourceAccountId: "main", createdAt: company.createdAt }); changed = true;
+        state.accounts.push({ id: manualAccountId, kind: "account", name: "Saisie manuelle", currency: "EUR", provider: "ComptaOS", sourceWorkspaceId: company.id, sourceAccountId: "main", technical: true, createdAt: company.createdAt }); changed = true;
+      } else {
+        const manualAccount = state.accounts.find((account) => account.id === manualAccountId)!;
+        if (!manualAccount.technical) { manualAccount.technical = true; changed = true; }
       }
       const manualRelationId = stableId("relation", `${company.scopeId}:uses:${manualAccountId}`);
       if (!state.relations.some((relation) => relation.id === manualRelationId)) {

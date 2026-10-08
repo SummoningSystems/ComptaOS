@@ -261,13 +261,13 @@ export async function getConnectWebviewUrl(
 ): Promise<{ url: string }> {
   const { token, config: updated } = await ensureUserToken(config);
   const code = await getTempCode(updated.domain, token);
-  const url =
-    `https://webview.powens.com/connect` +
-    `?domain=${updated.domain}` +
-    `&client_id=${updated.clientId}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&code=${code}`;
-  return { url };
+  return { url: buildConnectWebviewUrl(updated.domain, updated.clientId, redirectUri, code) };
+}
+
+export function buildConnectWebviewUrl(domain: string, clientId: string, redirectUri: string, code: string): string {
+  const fullDomain = domain.endsWith(".biapi.pro") ? domain : `${domain}.biapi.pro`;
+  const params = new URLSearchParams({ domain: fullDomain, client_id: clientId, redirect_uri: redirectUri, code });
+  return `https://webview.powens.com/fr/connect?${params.toString()}`;
 }
 
 /** Rafraîchit les connexions depuis l'API Powens et met à jour le stockage local */

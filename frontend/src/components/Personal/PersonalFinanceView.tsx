@@ -7,12 +7,12 @@ import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
 const money = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-export function PersonalFinanceView({ personId }: { personId: string }) {
+export function PersonalFinanceView({ personId, initialSection = "overview" }: { personId: string; initialSection?: "overview" | "transactions" | "budgets" }) {
   const openTab = useAppStore((store) => store.openTab);
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<PersonalFinanceSnapshot | null>(null);
   const [budgets, setBudgets] = useState<PersonalBudget[]>([]);
-  const [section, setSection] = useState<"overview" | "transactions" | "budgets">("overview");
+  const [section, setSection] = useState<"overview" | "transactions" | "budgets">(initialSection);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");

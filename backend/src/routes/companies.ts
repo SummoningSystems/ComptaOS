@@ -21,13 +21,13 @@ export async function companiesRoutes(app: FastifyInstance) {
   /** Liste toutes les entreprises */
   app.get("/", async () => {
     ensureDefaultCompany();
-    return visibleCompanies().filter((company) => !company.scopeId);
+    return visibleCompanies();
   });
 
   /** Retourne l'entreprise active */
   app.get("/active", async () => {
     ensureDefaultCompany();
-    const companies = visibleCompanies().filter((company) => !company.scopeId);
+    const companies = visibleCompanies();
     const actor = actorContext.getStore() ?? { id: "local", role: "local" as const };
     const activeId = getSelectedCompany(actor.id) ?? getActiveCompanyId();
     return companies.find((c) => c.id === activeId) ?? companies[0] ?? null;

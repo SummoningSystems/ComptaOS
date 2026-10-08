@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../../stores/appStore";
 import { FileTree } from "../Explorer/FileTree";
-import type { TabType } from "../../types";
+import type { Company, Tab } from "../../types";
 
 export type SidebarSection = "dashboard" | "compta" | "documents" | "finance" | "hr" | "analyses" | "explorer" | "outils";
 
@@ -9,16 +9,17 @@ interface SidebarProps {
   activeSection: SidebarSection;
   onSectionChange: (s: SidebarSection) => void;
   pendingCount?: number;
+  workspace?: Company | null;
 }
 
-type NavItem = { icon: string; label: string; tab: { id: string; title: string; type: TabType }; badge?: number };
+type NavItem = { icon: string; label: string; tab: Tab; badge?: number };
 
 type NavGroup = {
   id: SidebarSection;
   icon: string;
   title: string;
   direct?: boolean;
-  directTab?: { id: string; title: string; type: TabType };
+  directTab?: Tab;
   items?: NavItem[];
 };
 
@@ -99,11 +100,34 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: SidebarProps) {
+function scopedGroups(workspace: Company): NavGroup[] {
+  const personal = workspace.kind === "personal";
+  const scopeParam = `${personal ? "person" : "household"}=${encodeURIComponent(workspace.scopeId ?? "")}&workspace=${encodeURIComponent(workspace.id)}`;
+  const mode = personal ? "personal" : "household";
+  return [
+    { id: "compta", icon: personal ? "👤" : "⌂", title: personal ? "Comptabilité personnelle" : "Comptabilité du foyer", items: [
+      { icon: "📊", label: "Vue d’ensemble", tab: { id: `workspace:${workspace.id}:overview`, title: workspace.name, type: personal ? "personal" : "household", path: scopeParam } },
+      { icon: "📋", label: "Mouvements", tab: { id: `workspace:${workspace.id}:transactions`, title: `Mouvements · ${workspace.name}`, type: personal ? "personal" : "household", path: `${scopeParam}&section=transactions` } },
+      { icon: "🏦", label: "Banque PSD2", tab: { id: `workspace:${workspace.id}:banking`, title: `Banque · ${workspace.name}`, type: "banking", path: `workspace=${encodeURIComponent(workspace.id)}&mode=${mode}&dossier=${encodeURIComponent(workspace.name)}` } },
+    ] },
+    { id: "finance", icon: "💰", title: "Budget & prévision", items: [
+      { icon: "🔄", label: personal ? "Charges fixes" : "Charges du foyer", tab: { id: `workspace:${workspace.id}:recurring`, title: `Charges · ${workspace.name}`, type: "recurring", path: `workspace=${encodeURIComponent(workspace.id)}&mode=${mode}&dossier=${encodeURIComponent(workspace.name)}` } },
+      { icon: "🎯", label: "Budgets", tab: { id: `workspace:${workspace.id}:budgets`, title: `Budgets · ${workspace.name}`, type: personal ? "personal" : "household", path: `${scopeParam}&section=budgets` } },
+      { icon: "◇", label: "Vision consolidée", tab: { id: "portfolio", title: "Consolidation", type: "portfolio" } },
+    ] },
+    { id: "outils", icon: "⚙️", title: "Outils", items: [
+      { icon: "⚙️", label: "Paramètres", tab: { id: "settings", title: "Paramètres", type: "settings" } },
+      { icon: "🕐", label: "Historique", tab: { id: "history", title: "Historique", type: "history" } },
+    ] },
+  ];
+}
+
+export function Sidebar({ activeSection, onSectionChange, pendingCount = 0, workspace }: SidebarProps) {
   const { sidebarWidth, openTab, tabs, activeTabId } = useAppStore();
   const [hovered, setHovered] = useState<SidebarSection | null>(null);
+  const groups = workspace?.scopeId && (workspace.kind === "personal" || workspace.kind === "household") ? scopedGroups(workspace) : NAV_GROUPS;
 
-  const activeGroup = NAV_GROUPS.find((g) => g.id === activeSection);
+  const activeGroup = groups.find((g) => g.id === activeSection) ?? groups[0];
 
   return (
     <div
@@ -115,13 +139,13 @@ export function Sidebar({ activeSection, onSectionChange, pendingCount = 0 }: Si
         {/* Dashboard direct */}
         <button
           title="Dashboard"
-          onClick={() => { openTab({ id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange("compta"); }}
+          onClick={() => { openTab(workspace?.scopeId && (workspace.kind === "personal" || workspace.kind === "household") ? { id: `workspace:${workspace.id}:overview`, title: workspace.name, type: workspace.kind === "personal" ? "personal" : "household", path: `${workspace.kind === "personal" ? "person" : "household"}=${encodeURIComponent(workspace.scopeId)}&workspace=${encodeURIComponent(workspace.id)}` } : { id: "dashboard", title: "Dashboard", type: "dashboard" }); onSectionChange("compta"); }}
           className="w-8 h-8 flex items-center justify-center rounded text-base transition-colors text-vscode-muted hover:text-vscode-text"
         >
           📊
         </button>
         <div className="w-6 h-px bg-vscode-border my-1" />
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <button
             key={group.id}
             title={group.title}

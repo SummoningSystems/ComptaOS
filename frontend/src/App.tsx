@@ -1,5 +1,5 @@
 import { useEffect, useState, Component, lazy, Suspense, type ReactNode } from "react";
-import { api, fetchCompanies, setActiveCompanyApi } from "./api/client";
+import { api, fetchActiveCompany, fetchCompanies, setActiveCompanyApi } from "./api/client";
 import { Sidebar, type SidebarSection } from "./components/Layout/Sidebar";
 import { TabBar } from "./components/Layout/TabBar";
 import { StatusBar } from "./components/Layout/StatusBar";
@@ -13,7 +13,7 @@ import { LoginView } from "./components/Auth/LoginView";
 import { SetupView } from "./components/Auth/SetupView";
 import { AcceptInviteView } from "./components/Auth/AcceptInviteView";
 import { fetchAuthStatus, fetchMe, logout, type AuthUser } from "./api/auth";
-import type { TabType } from "./types";
+import type { Company, TabType } from "./types";
 import { MobileCaptureView } from "./components/Mobile/MobileCaptureView";
 
 const FileEditor = lazy(() => import("./components/Editor/FileEditor").then((m) => ({ default: m.FileEditor })));
@@ -115,7 +115,7 @@ class ViewErrorBoundary extends Component<{ children: ReactNode }, { error: stri
 }
 
 /** Rendu d'une vue par son type (partagé fenêtre principale + popup) */
-function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null }) {
+function ViewContent({ type, tabId, path, currentUser, workspace }: { type: TabType; tabId?: string; path?: string; currentUser: AuthUser | null; workspace?: Company | null }) {
   const params = new URLSearchParams(path ?? "");
   const workFilter = params.get("filter") ?? path;
   const contextMonth = params.get("month") ?? undefined;
@@ -123,14 +123,17 @@ function ViewContent({ type, tabId, path, currentUser }: { type: TabType; tabId?
   const householdId = params.get("household") ?? "";
   const dossierName = params.get("dossier") ?? undefined;
   const dossierMode = params.get("mode") ?? undefined;
+  const personalSection = (params.get("section") ?? "overview") as "overview" | "transactions" | "budgets";
   return (
     <Suspense fallback={<ViewLoading />}>
-      {type === "dashboard"    && <Dashboard />}
+      {type === "dashboard" && workspace?.kind === "personal" && workspace.scopeId && <PersonalFinanceView personId={workspace.scopeId} initialSection={personalSection} />}
+      {type === "dashboard" && workspace?.kind === "household" && workspace.scopeId && <HouseholdFinanceView householdId={workspace.scopeId} initialSection={personalSection} />}
+      {type === "dashboard" && workspace?.kind !== "personal" && workspace?.kind !== "household" && <Dashboard />}
       {type === "structure"    && <StructureView currentUser={currentUser} />}
       {type === "allocation"   && <AllocationView />}
       {type === "portfolio"    && <PortfolioView />}
-      {type === "personal"     && personId && <PersonalFinanceView personId={personId} />}
-      {type === "household"    && householdId && <HouseholdFinanceView householdId={householdId} />}
+      {type === "personal"     && personId && <PersonalFinanceView personId={personId} initialSection={personalSection} />}
+      {type === "household"    && householdId && <HouseholdFinanceView householdId={householdId} initialSection={personalSection} />}
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
@@ -180,6 +183,7 @@ export default function App() {
   const [workspaceReadyTabId, setWorkspaceReadyTabId] = useState<string | null>(null);
   const [showCompanyWizard, setShowCompanyWizard] = useState(false);
   const [wizardCanCancel, setWizardCanCancel] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<Company | null>(null);
   const [showMobileCapture, setShowMobileCapture] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("mobile") === "1" || (params.get("desktop") !== "1" && window.matchMedia("(max-width: 767px)").matches);
@@ -207,8 +211,9 @@ export default function App() {
       .then(({ data }) => setPendingCount(data.filter((t) => t.status === "pending").length))
       .catch(() => {});
     // Ouvrir automatiquement le wizard si aucune entreprise (non annulable)
-    fetchCompanies().then((list) => {
-      if (list.length === 0 && (!currentUser || currentUser.role === "owner" || currentUser.role === "admin")) {
+    Promise.all([fetchCompanies(), fetchActiveCompany()]).then(([list, active]) => {
+      setActiveWorkspace(active);
+      if (!list.some((company) => !company.scopeId) && (!currentUser || currentUser.role === "owner" || currentUser.role === "admin")) {
         setWizardCanCancel(false);
         setShowCompanyWizard(true);
       }
@@ -234,7 +239,7 @@ export default function App() {
     let cancelled = false;
     setWorkspaceReadyTabId(null);
     const dossierWorkspace = new URLSearchParams(activeTab.path ?? "").get("workspace");
-    const targetWorkspace = dossierWorkspace ?? sessionStorage.getItem("comptaos:last-business-workspace");
+    const targetWorkspace = dossierWorkspace;
     const prepare = targetWorkspace ? setActiveCompanyApi(targetWorkspace) : Promise.resolve();
     void prepare.catch(() => {}).finally(() => { if (!cancelled) setWorkspaceReadyTabId(activeTab.id); });
     return () => { cancelled = true; };
@@ -308,7 +313,7 @@ export default function App() {
           >✕ Fermer</button>
         </div>
         <div className="flex-1 min-h-0">
-          <ViewContent type={standaloneView} path={standalonePath} currentUser={currentUser} />
+          <ViewContent type={standaloneView} path={standalonePath} currentUser={currentUser} workspace={activeWorkspace} />
         </div>
       </div>
     );
@@ -330,7 +335,7 @@ export default function App() {
       <div className="relative z-[100] flex h-10 shrink-0 select-none items-center gap-1 overflow-visible border-b border-vscode-border bg-vscode-panel px-2 sm:gap-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-1 shrink-0 sm:gap-3">
           <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
-          <div className="hidden sm:block">{activeTab?.type === "personal" || activeTab?.id.startsWith("dossier:personal:") ? <span className="rounded border border-blue-700 bg-blue-950/30 px-2 py-0.5 text-xs text-blue-300">Comptabilité personnelle</span> : activeTab?.type === "household" || activeTab?.id.startsWith("dossier:household:") ? <span className="rounded border border-purple-700 bg-purple-950/30 px-2 py-0.5 text-xs text-purple-300">Comptabilité du foyer</span> : <CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} />}</div>
+          <div className="hidden sm:block"><CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} onManageStructure={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} onActiveChange={setActiveWorkspace} /></div>
           <button onClick={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} className="rounded border border-vscode-border px-2 py-0.5 text-xs text-vscode-muted transition-colors hover:border-vscode-accent hover:text-vscode-text" title="Personnes, entreprises, comptes et relations">Structure</button>
         </div>
         <div className="flex-1" />
@@ -417,7 +422,7 @@ export default function App() {
 
       {/* Main area */}
       <div className="relative z-0 flex flex-1 min-h-0">
-        <Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} />
+        <Sidebar activeSection={sidebarSection} onSectionChange={handleSectionChange} pendingCount={pendingCount} workspace={activeWorkspace} />
 
         <div className="flex flex-col flex-1 min-w-0">
           <TabBar />
@@ -425,7 +430,7 @@ export default function App() {
           <div className="flex-1 min-h-0">
             <ViewErrorBoundary key={activeTab?.id ?? "empty"}>
               {activeTab && workspaceReadyTabId === activeTab.id
-                ? <ViewContent type={activeTab.type} tabId={activeTab.id} path={(activeTab as { path?: string }).path} currentUser={currentUser} />
+                ? <ViewContent type={activeTab.type} tabId={activeTab.id} path={(activeTab as { path?: string }).path} currentUser={currentUser} workspace={activeWorkspace} />
                 : activeTab ? <div className="flex h-full items-center justify-center text-xs text-vscode-muted">Ouverture de l’espace de données…</div> : (
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-vscode-muted select-none">
                     <span className="text-4xl">📊</span>

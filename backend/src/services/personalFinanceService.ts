@@ -119,7 +119,7 @@ export async function getPersonalFinance(personId: string, month: string, actor:
     transactions.push({ ...transaction, amount_ttc: allocation.amount, amount_ht: Math.round(transaction.amount_ht * ratio * 100) / 100, vat: Math.round(transaction.vat * ratio * 100) / 100, sourceAccountId: transaction.account, personalCategory: store.categories[transaction.key] ?? defaultCategory(transaction), internalTransfer: false, originalAmountTtc: allocation.amount === transaction.amount_ttc ? undefined : transaction.amount_ttc });
   }
   const accountIds = new Set([...linkedAccounts.map((account) => account.id), ...allocated.transactions.filter((transaction) => transaction.allocations.some((item) => item.scopeId === personId)).map((transaction) => transaction.platformAccountId)]);
-  const accounts = allocated.accounts.filter((account) => accountIds.has(account.id));
+  const accounts = allocated.accounts.filter((account) => accountIds.has(account.id) && !account.technical);
   transactions.sort((a, b) => b.date.localeCompare(a.date));
   markInternalTransfers(transactions);
   const relevant = transactions.filter((transaction) => !transaction.internalTransfer);

@@ -62,7 +62,7 @@ export async function getHouseholdFinance(householdId: string, month: string, ac
   const income = active.filter((transaction) => transaction.allocatedAmount > 0).reduce((sum, transaction) => sum + transaction.allocatedAmount, 0);
   const expenses = active.filter((transaction) => transaction.allocatedAmount < 0).reduce((sum, transaction) => sum + Math.abs(transaction.allocatedAmount), 0);
   const accountIds = directAccountIds(includedScopes); for (const transaction of transactions) accountIds.add(transaction.platformAccountId);
-  const accounts = loaded.accounts.filter((account) => accountIds.has(account.id));
+  const accounts = loaded.accounts.filter((account) => accountIds.has(account.id) && !account.technical);
   return {
     household: { id: household.id, name: household.name }, month, accounts, transactions, budgets: readBudgets(householdId), categories: PERSONAL_CATEGORIES,
     members: members.map((member) => { const amounts = active.flatMap((transaction) => transaction.allocations.filter((allocation) => allocation.scopeId === member.id).map((allocation) => allocation.amount)); const memberIncome = amounts.filter((amount) => amount > 0).reduce((sum, amount) => sum + amount, 0); const memberExpenses = amounts.filter((amount) => amount < 0).reduce((sum, amount) => sum + Math.abs(amount), 0); return { id: member.id, name: member.name, income: memberIncome, expenses: memberExpenses, net: memberIncome - memberExpenses }; }),

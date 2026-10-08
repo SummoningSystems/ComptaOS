@@ -107,7 +107,6 @@ export function BankingView({ dossierName }: { dossierName?: string }) {
     setConnectTone("info");
     setConnectLoading(true);
     const redirect = new URL(import.meta.env.BASE_URL, window.location.origin);
-    redirect.searchParams.set("powens_callback", "1");
     const popup = window.open("about:blank", "powens_webview", "popup,width=600,height=700");
     if (!popup) {
       setConnectMsg("La fenêtre Powens a été bloquée par le navigateur. Autorise les fenêtres contextuelles puis réessaie.");
@@ -150,7 +149,7 @@ export function BankingView({ dossierName }: { dossierName?: string }) {
       const accountCount = data.reduce((sum, connection) => sum + connection.accounts.length, 0);
       await api.get("/platform").catch(() => undefined);
       if (accountCount === 0) {
-        setConnectMsg("Powens n’a renvoyé aucun compte bancaire. La ligne « Saisie manuelle » n’est pas une connexion bancaire : réouvre Powens et termine toutes les étapes.");
+        setConnectMsg("Powens n’a renvoyé aucun compte bancaire. Réouvre Powens et termine toutes les étapes de connexion.");
         setConnectTone("error");
       } else if (accountCount > previousAccountCount) {
         setConnectMsg(`${accountCount - previousAccountCount} nouveau(x) compte(s) bancaire(s) relié(s) à ${dossierName ?? "ce dossier"}.`);
