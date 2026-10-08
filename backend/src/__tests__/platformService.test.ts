@@ -57,6 +57,17 @@ describe("person-centric platform registry", () => {
     const manual = updateEntity("entity_default", { legalType: "holding", capitalAmount: 1200, expectedRevision: inferred.revision });
     expect(getPlatformState().entities.find((entity) => entity.id === "entity_default")).toMatchObject({ legalType: "holding", capitalAmount: 1200 });
     expect(manual.entities.find((entity) => entity.id === "entity_default")?.vatRegime).toBe("simplified_ca12");
+    expect(JSON.parse(await fs.readFile(path.join(workspace.root, "settings", "company_profile.json"), "utf-8"))).toMatchObject({ legalForm: "sas", capital: "1200", vatRegime: "simplified_ca12" });
+  });
+
+  it("reprend les champs comptables modifiés depuis Paramètres sans conserver une copie obsolète", async () => {
+    await fs.mkdir(path.join(workspace.root, "settings"), { recursive: true });
+    await fs.writeFile(path.join(workspace.root, "settings", "company_profile.json"), JSON.stringify({ name: "Société principale", capital: "900", vatRegime: "simplified_ca12", siren: "123456789" }), "utf-8");
+    const initial = getPlatformState();
+    updateEntity("entity_default", { capitalAmount: 1200, vatRegime: "monthly_ca3", expectedRevision: initial.revision });
+    await fs.writeFile(path.join(workspace.root, "settings", "company_profile.json"), JSON.stringify({ name: "Société principale", capital: "1500", vatRegime: "quarterly_ca3", siren: "123456789" }), "utf-8");
+
+    expect(getPlatformState().entities.find((entity) => entity.id === "entity_default")).toMatchObject({ capitalAmount: 1500, vatRegime: "quarterly_ca3" });
   });
 
   it("relie les saisies manuelles et les comptes bancaires à leur dossier personnel sans créer une entreprise", async () => {

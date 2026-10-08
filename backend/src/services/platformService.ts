@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "crypto";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { resolve, sep, join } from "path";
 import { atomicWriteFileSync } from "./atomicFile.js";
 import { getCompaniesRoot, loadCompanies, updateCompanyMetadata } from "./companiesService.js";
@@ -157,9 +157,11 @@ interface StoredBankConnection {
 }
 
 interface StoredCompanyProfile {
+  name?: string;
   legalForm?: string;
   capital?: string | number;
   vatRegime?: PlatformEntity["vatRegime"];
+  [key: string]: unknown;
 }
 
 function profileForCompany(companyPath: string): StoredCompanyProfile {
@@ -167,6 +169,13 @@ function profileForCompany(companyPath: string): StoredCompanyProfile {
   if (!existsSync(file)) return {};
   try { return JSON.parse(readFileSync(file, "utf-8")) as StoredCompanyProfile; }
   catch { return {}; }
+}
+
+function updateProfileForCompany(companyPath: string, patch: Partial<StoredCompanyProfile>): void {
+  const file = join(companyPath, "settings", "company_profile.json");
+  mkdirSync(join(companyPath, "settings"), { recursive: true });
+  const current = profileForCompany(companyPath);
+  atomicWriteFileSync(file, JSON.stringify({ ...current, ...patch }, null, 2));
 }
 
 function legalTypeFromProfile(value?: string): PlatformEntity["legalType"] | undefined {
@@ -199,8 +208,8 @@ export function getPlatformState(): PlatformState {
       const patch = {
         name: company.name,
         legalType: entity.legalType ?? inferredLegalType,
-        capitalAmount: entity.capitalAmount ?? (Number.isFinite(inferredCapital) ? inferredCapital : undefined),
-        vatRegime: entity.vatRegime ?? storedProfile.vatRegime,
+        capitalAmount: Number.isFinite(inferredCapital) ? inferredCapital : entity.capitalAmount,
+        vatRegime: storedProfile.vatRegime ?? entity.vatRegime,
       };
       if (entity.name !== patch.name || entity.legalType !== patch.legalType || entity.capitalAmount !== patch.capitalAmount || entity.vatRegime !== patch.vatRegime) { Object.assign(entity, patch); changed = true; }
     }
@@ -332,7 +341,17 @@ export function updateEntity(id: string, input: Partial<Omit<PlatformEntity, "id
     fiscalYearEnd: input.fiscalYearEnd === undefined ? entity.fiscalYearEnd : input.fiscalYearEnd || undefined,
     fiscalPeriods: input.fiscalPeriods === undefined ? entity.fiscalPeriods : input.fiscalPeriods.map((period) => ({ ...period, label: period.label?.trim() || undefined })),
   });
-  updateCompanyMetadata(entity.workspaceId, { name: entity.name, legalType: entity.legalType }); return writeState(state);
+  updateCompanyMetadata(entity.workspaceId, { name: entity.name, legalType: entity.legalType });
+  const company = loadCompanies().find((item) => item.id === entity.workspaceId);
+  const companyPath = company ? safeCompanyPath(company.path) : null;
+  if (companyPath && (input.name !== undefined || input.capitalAmount !== undefined || input.vatRegime !== undefined)) {
+    updateProfileForCompany(companyPath, {
+      ...(input.name !== undefined ? { name: entity.name } : {}),
+      ...(input.capitalAmount !== undefined ? { capital: String(entity.capitalAmount ?? 0) } : {}),
+      ...(input.vatRegime !== undefined ? { vatRegime: entity.vatRegime } : {}),
+    });
+  }
+  return writeState(state);
 }
 
 const RELATION_TYPES = new Set<PlatformRelationType>(["family", "spouse", "parent", "child", "member", "accountant", "advisor", "owner", "director", "employee", "beneficiary", "shareholder", "subsidiary", "management", "holder", "uses", "other"]);
