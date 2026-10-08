@@ -48,6 +48,38 @@ const CANVAS_HEIGHT = 1100;
 const EMPTY_LAYOUT: PlatformLayout = {};
 const EMPTY_DOSSIERS: AccountingDossier[] = [];
 
+const dossierKindLabels: Record<AccountingDossier["scopeKind"], string> = {
+  person: "Comptabilité personnelle",
+  household: "Comptabilité du foyer",
+  entity: "Comptabilité de la structure",
+};
+
+export function AccountingDossierDirectory({ dossiers, busy, onOpen, onConnectBank, onShowDetails }: {
+  dossiers: AccountingDossier[];
+  busy?: boolean;
+  onOpen: (dossier: AccountingDossier) => void;
+  onConnectBank: (dossier: AccountingDossier) => void;
+  onShowDetails: (dossier: AccountingDossier) => void;
+}) {
+  return <section className="mx-4 mt-4 rounded border border-vscode-border bg-vscode-panel p-4 sm:mx-8">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-sm font-semibold">Dossiers comptables</h2><p className="mt-1 text-[11px] text-vscode-muted">Chaque personne, foyer ou structure possède ici son point d’entrée vers sa comptabilité et ses comptes bancaires.</p></div>
+      <span className="rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-[10px] text-vscode-muted">{dossiers.length} dossier{dossiers.length !== 1 ? "s" : ""}</span>
+    </div>
+    <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+      {dossiers.map((dossier) => <article key={dossier.scopeId} className="rounded border border-vscode-border bg-black/10 p-3">
+        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-xs font-semibold">{dossier.name}</div><div className="mt-1 text-[10px] text-vscode-muted">{dossierKindLabels[dossier.scopeKind]}</div></div><span className={`shrink-0 rounded px-2 py-1 text-[9px] ${dossier.created ? "bg-green-950/60 text-green-300" : "bg-amber-950/50 text-amber-300"}`}>{dossier.created ? "Actif" : "À créer"}</span></div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button disabled={busy} onClick={() => onOpen(dossier)} className="rounded bg-vscode-accent px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40">{dossier.created ? "Ouvrir la comptabilité" : "Créer la comptabilité"}</button>
+          <button disabled={busy} onClick={() => onConnectBank(dossier)} className="rounded border border-sky-700 px-3 py-2 text-[11px] text-sky-300 disabled:opacity-40">Connecter une banque</button>
+          <button onClick={() => onShowDetails(dossier)} className="rounded border border-vscode-border px-3 py-2 text-[11px]">Voir la fiche et les liens</button>
+        </div>
+      </article>)}
+      {dossiers.length === 0 && <p className="py-4 text-xs text-vscode-muted">Aucun dossier visible avec tes droits actuels.</p>}
+    </div>
+  </section>;
+}
+
 function organicLayout(nodes: Node[], state: PlatformState): PlatformLayout {
   const positions: PlatformLayout = {};
   const degree = new Map(nodes.map((node) => [node.id, 0]));
@@ -268,6 +300,25 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
     finally { if (dossier.scopeKind !== "entity") setBusy(false); }
   }
 
+  async function connectBank(dossier: AccountingDossier) {
+    setBusy(true); setError("");
+    try {
+      const ready = await ensureAccountingDossier(dossier.scopeId);
+      if (!dossier.created) setDossiers((current) => current.map((item) => item.scopeId === ready.scopeId ? ready : item));
+      if (!ready.workspaceId) throw new Error("Espace comptable indisponible pour ce dossier.");
+      const businessWorkspace = await fetchActiveCompany();
+      if (businessWorkspace && businessWorkspace.id !== ready.workspaceId) sessionStorage.setItem("comptaos:last-business-workspace", businessWorkspace.id);
+      await setActiveCompanyApi(ready.workspaceId);
+      openTab({ id: `dossier:${ready.scopeKind}:${ready.scopeId}:banking`, title: `Banque · ${ready.name}`, type: "banking", path: `workspace=${encodeURIComponent(ready.workspaceId)}` });
+    } catch (e) { setError(e instanceof Error ? e.message : "Connexion bancaire impossible"); }
+    finally { setBusy(false); }
+  }
+
+  function showDossierDetails(dossier: AccountingDossier) {
+    setSelectedId(dossier.scopeId);
+    window.setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
   async function addRelation() {
     if (!state || !fromId || !toId) return;
     setBusy(true); setError(""); setRelationNotice(null);
@@ -332,15 +383,18 @@ export function StructureView({ currentUser }: { currentUser: AuthUser | null })
 
       <section className="mx-4 mt-4 grid gap-2 rounded border border-blue-900 bg-blue-950/10 p-4 text-[11px] text-vscode-muted sm:mx-8 lg:grid-cols-3">
         <div><strong className="text-vscode-text">1. Modéliser</strong><br/>Crée les personnes et foyers réels, puis relie-les aux structures.</div>
-        <div><strong className="text-vscode-text">2. Activer la comptabilité</strong><br/>Sélectionne une carte : les actions d’ouverture apparaissent immédiatement sous le graphe.</div>
-        <div><strong className="text-vscode-text">3. Connecter les comptes</strong><br/>Ouvre le dossier personnel ou du foyer, puis utilise Banque PSD2. Le compte apparaîtra automatiquement ici.</div>
+        <div><strong className="text-vscode-text">2. Activer la comptabilité</strong><br/>Utilise directement le dossier correspondant ci-dessous, sans passer par le graphe.</div>
+        <div><strong className="text-vscode-text">3. Connecter les comptes</strong><br/>Clique sur « Connecter une banque » dans le bon dossier. Le compte apparaîtra ensuite automatiquement dans la structure.</div>
       </section>
+
+      <AccountingDossierDirectory dossiers={dossiers} busy={busy} onOpen={(dossier) => void createOrOpenDossier(dossier)} onConnectBank={(dossier) => void connectBank(dossier)} onShowDetails={showDossierDetails} />
 
       {error && <div className="mx-4 mt-4 rounded border border-red-700 bg-red-950/30 px-4 py-2 text-xs text-red-300 sm:mx-8">{error}</div>}
       {issues.length > 0 && <section className="mx-4 mt-4 rounded border border-amber-700 bg-amber-950/20 p-4 sm:mx-8"><h2 className="text-sm font-semibold text-amber-300">Assistant · Structure incomplète</h2><p className="mt-1 text-[10px] text-vscode-muted">{issues.length} point(s) à compléter avant une consolidation fiable. La forme, le capital et la TVA déjà présents dans le profil entreprise sont repris automatiquement. Les informations nouvelles, comme le régime fiscal, les dates d’activité et l’exercice, doivent être complétées dans la fiche ci-dessous.</p><div className="mt-3 grid gap-2 md:grid-cols-2">{issues.map((issue) => <button key={issue.id} onClick={() => openIssue(issue)} className={`group flex items-center gap-3 rounded border p-2 text-left text-xs ${issue.severity === "blocking" ? "border-red-800 text-red-300" : "border-amber-800 text-amber-200"}`}><span className="min-w-0 flex-1">{issue.message}</span><span className="shrink-0 text-[10px] text-vscode-accent group-hover:underline">Corriger ↓</span></button>)}</div></section>}
 
       <main className="grid gap-4 p-4 sm:gap-6 sm:p-8 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded border border-vscode-border bg-black/10 p-5">
+          <div className="mb-4"><h2 className="text-sm font-semibold">Carte des relations</h2><p className="mt-1 text-[10px] text-vscode-muted">Le graphe sert à comprendre et modifier les liens. L’accès aux comptabilités se fait toujours depuis le bloc « Dossiers comptables » ci-dessus.</p></div>
           <StructureGraph nodes={nodes} state={state} dossiers={dossiers} selectedId={selectedId} onSelect={setSelectedId} initialPositions={layout} onPositionsChange={persistLayout} />
           {selected && <div className="mt-4 flex flex-wrap items-center gap-3 rounded border border-vscode-accent/60 bg-blue-950/20 p-3 text-xs"><div className="min-w-0 flex-1"><strong>{selected.name}</strong><div className="mt-0.5 text-[10px] text-vscode-muted">{selectedDossier ? selectedDossier.created ? "Dossier comptable actif" : "Dossier disponible, pas encore activé" : "Compte bancaire rattaché à sa source"}</div></div>{selectedDossier && <button disabled={busy} onClick={() => void createOrOpenDossier(selectedDossier)} className="rounded bg-vscode-accent px-3 py-2 font-semibold text-white disabled:opacity-40">{selectedDossier.created ? "Ouvrir la comptabilité" : "Créer la comptabilité"}</button>}<button onClick={() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded border border-vscode-border px-3 py-2">Voir la fiche et les liens</button></div>}
         </section>
