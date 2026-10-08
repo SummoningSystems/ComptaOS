@@ -540,13 +540,18 @@ export async function deletePlatformAccess(id: string, expectedRevision: number)
   return data;
 }
 
-export async function fetchPersonalFinance(personId: string, month: string): Promise<PersonalFinanceSnapshot> {
-  const { data } = await api.get<PersonalFinanceSnapshot>(`/platform/people/${encodeURIComponent(personId)}/finance`, { params: { month } });
+export async function fetchPersonalFinance(personId: string, month?: string): Promise<PersonalFinanceSnapshot> {
+  const { data } = await api.get<PersonalFinanceSnapshot>(`/platform/people/${encodeURIComponent(personId)}/finance`, { params: month ? { month } : { all: "true" } });
   return data;
 }
 
 export async function savePersonalCategory(personId: string, key: string, category: PersonalCategory): Promise<void> {
   await api.patch(`/platform/people/${encodeURIComponent(personId)}/finance/category`, { key, category });
+}
+
+export async function savePersonalCategories(personId: string, keys: string[], category: PersonalCategory): Promise<number> {
+  const { data } = await api.patch<{ saved: number }>(`/platform/people/${encodeURIComponent(personId)}/finance/categories`, { keys, category });
+  return data.saved;
 }
 
 export async function savePersonalFinanceBudgets(personId: string, budgets: PersonalBudget[]): Promise<PersonalBudget[]> {

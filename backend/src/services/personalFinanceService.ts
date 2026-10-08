@@ -104,7 +104,7 @@ function markInternalTransfers(transactions: PersonalTransaction[]): void {
   }
 }
 
-export async function getPersonalFinance(personId: string, month: string, actor: RequestActor): Promise<PersonalFinanceSnapshot> {
+export async function getPersonalFinance(personId: string, month: string | undefined, actor: RequestActor): Promise<PersonalFinanceSnapshot> {
   const state = getPlatformState();
   const person = state.people.find((item) => item.id === personId);
   if (!person) throw Object.assign(new Error("Personne introuvable."), { code: "NOT_FOUND" });
@@ -126,7 +126,7 @@ export async function getPersonalFinance(personId: string, month: string, actor:
   const income = relevant.filter((transaction) => transaction.amount_ttc > 0).reduce((sum, transaction) => sum + transaction.amount_ttc, 0);
   const expenses = relevant.filter((transaction) => transaction.amount_ttc < 0).reduce((sum, transaction) => sum + Math.abs(transaction.amount_ttc), 0);
   return {
-    person: { id: person.id, name: person.name }, month, accounts, transactions, budgets: store.budgets, categories: PERSONAL_CATEGORIES,
+    person: { id: person.id, name: person.name }, month: month ?? "all", accounts, transactions, budgets: store.budgets, categories: PERSONAL_CATEGORIES,
     summary: { balance: accounts.reduce((sum, account) => sum + (account.balance ?? 0), 0), income, expenses, net: income - expenses, internalTransfers: transactions.filter((transaction) => transaction.internalTransfer).length / 2 },
   };
 }
@@ -140,6 +140,18 @@ export function setPersonalTransactionCategory(personId: string, key: string, ca
   if (!state.people.some((person) => person.id === personId)) throw Object.assign(new Error("Personne introuvable."), { code: "NOT_FOUND" });
   assertCategory(category);
   const store = readStore(personId); store.categories[key] = category; writeStore(personId, store);
+}
+
+export function setPersonalTransactionCategories(personId: string, keys: string[], category: string): number {
+  const state = getPlatformState();
+  if (!state.people.some((person) => person.id === personId)) throw Object.assign(new Error("Personne introuvable."), { code: "NOT_FOUND" });
+  assertCategory(category);
+  const normalizedKeys = [...new Set(keys.filter((key) => typeof key === "string" && key.trim()))];
+  if (normalizedKeys.length === 0) throw new Error("Sélection de mouvements requise.");
+  const store = readStore(personId);
+  for (const key of normalizedKeys) store.categories[key] = category;
+  writeStore(personId, store);
+  return normalizedKeys.length;
 }
 
 export function savePersonalBudgets(personId: string, budgets: Array<{ category: string; monthlyLimit: number }>): PersonalBudget[] {

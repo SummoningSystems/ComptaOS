@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { actorHasGlobalAccess, createHousehold, createPerson, createRelation, deleteAccessGrant, deleteRelation, getPlatformState, getScopeAccess, getStructureIssues, getVisiblePlatformState, setAccessGrant, updateEntity, updatePerson, updateRelation, type PlatformAccessRole, type PlatformEntity, type RelationInput } from "../services/platformService.js";
 import { actorContext } from "../services/workspaceContext.js";
 import { getUserById } from "../services/authService.js";
-import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
+import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategories, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
 import { getFinanceAllocationSnapshot, saveAccountAssignment, saveBatchAllocation, saveTransactionAllocations, type AccountUsage, type FinanceAllocation } from "../services/financeAllocationService.js";
 import { getHouseholdFinance, saveHouseholdBudgets } from "../services/householdFinanceService.js";
 import { getPlatformLayout, savePlatformLayout, type PlatformLayout } from "../services/platformLayoutService.js";
@@ -124,8 +124,8 @@ export async function platformRoutes(app: FastifyInstance) {
   app.get("/people/:id/finance", async (req, reply) => {
     const { id } = req.params as { id: string }; const current = requirePersonAccess(id, reply); if (!current) return;
     try {
-      const query = req.query as { month?: string };
-      const month = /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : new Date().toISOString().slice(0, 7);
+      const query = req.query as { month?: string; all?: string };
+      const month = query.all === "true" ? undefined : /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : new Date().toISOString().slice(0, 7);
       return await getPersonalFinance(id, month, current);
     } catch (error) { return sendError(reply, error); }
   });
@@ -134,6 +134,14 @@ export async function platformRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }; if (!requirePersonAccess(id, reply, true)) return;
     try { const input = req.body as { key: string; category: string }; if (!input.key) throw new Error("Transaction requise."); setPersonalTransactionCategory(id, input.key, input.category); return { saved: true }; }
     catch (error) { return sendError(reply, error); }
+  });
+
+  app.patch("/people/:id/finance/categories", async (req, reply) => {
+    const { id } = req.params as { id: string }; if (!requirePersonAccess(id, reply, true)) return;
+    try {
+      const input = req.body as { keys?: string[]; category?: string };
+      return { saved: setPersonalTransactionCategories(id, input.keys ?? [], input.category ?? "") };
+    } catch (error) { return sendError(reply, error); }
   });
 
   app.put("/people/:id/finance/budgets", async (req, reply) => {

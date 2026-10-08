@@ -80,7 +80,7 @@ function resolveAllocations(transaction: Transaction, key: string, account: Plat
   return related.scopeId ? { allocations: [{ scopeId: related.scopeId, amount: transaction.amount_ttc }], allocationSource: "relation" } : { allocations: [], allocationSource: "unassigned" };
 }
 
-export async function loadFinanceTransactions(actor: RequestActor, month: string): Promise<{ state: PlatformState; store: AllocationStore; accounts: PlatformAccount[]; transactions: AllocatedTransaction[] }> {
+export async function loadFinanceTransactions(actor: RequestActor, month?: string): Promise<{ state: PlatformState; store: AllocationStore; accounts: PlatformAccount[]; transactions: AllocatedTransaction[] }> {
   const state = getVisiblePlatformState(actor);
   const store = readStore();
   const accounts = state.accounts;
@@ -93,7 +93,7 @@ export async function loadFinanceTransactions(actor: RequestActor, month: string
     const source = await workspaceContext.run({ companyId: company.id, root: resolveCompanyPath(company), actor, accessRole: "viewer" }, () => loadAllTransactions());
     for (const transaction of source) {
       const account = accountBySource.get(transaction.account);
-      if (!account || transaction.status === "rejected" || !transaction.date.startsWith(month)) continue;
+      if (!account || transaction.status === "rejected" || (month && !transaction.date.startsWith(month))) continue;
       const key = `${workspaceId}:${transaction.id}`;
       transactions.push({ ...transaction, key, platformAccountId: account.id, accountName: account.name, sourceWorkspaceId: workspaceId, ...resolveAllocations(transaction, key, account, state, store) });
     }

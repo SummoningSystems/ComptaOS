@@ -13,7 +13,7 @@ vi.mock("../services/companiesService.js", () => ({
 }));
 
 import { createPerson, createRelation, getPlatformState } from "../services/platformService.js";
-import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
+import { getPersonalFinance, savePersonalBudgets, setPersonalTransactionCategories, setPersonalTransactionCategory } from "../services/personalFinanceService.js";
 import { invalidateTransactionCache } from "../services/transactionService.js";
 
 describe("personal finance", () => {
@@ -28,6 +28,7 @@ describe("personal finance", () => {
       { id: "income", date: "2026-10-03", label: "Revenu", amount_ht: 1000, vat: 0, amount_ttc: 1000, currency: "EUR", category: "misc", account: "7", status: "validated" },
       { id: "transfer-out", date: "2026-10-04", label: "Virement vers épargne", amount_ht: -100, vat: 0, amount_ttc: -100, currency: "EUR", category: "misc", account: "7", status: "validated" },
       { id: "transfer-in", date: "2026-10-04", label: "Virement reçu", amount_ht: 100, vat: 0, amount_ttc: 100, currency: "EUR", category: "misc", account: "8", status: "validated" },
+      { id: "november", date: "2026-11-04", label: "Cinéma", amount_ht: -20, vat: 0, amount_ttc: -20, currency: "EUR", category: "misc", account: "7", status: "validated" },
     ];
     await Promise.all(transactions.map((transaction) => fs.writeFile(path.join(workspace.root, "transactions", `${transaction.id}.yaml`), yaml.stringify(transaction), "utf-8")));
   });
@@ -53,5 +54,20 @@ describe("personal finance", () => {
     const updated = await getPersonalFinance(personId, "2026-10", { id: "local", role: "local" });
     expect(updated.transactions.find((transaction) => transaction.id === "meal")?.personalCategory).toBe("groceries");
     expect(updated.budgets).toEqual([{ category: "groceries", monthlyLimit: 300 }]);
+  });
+
+  it("charge tout l'historique et classe plusieurs mouvements en une écriture", async () => {
+    const initial = getPlatformState();
+    const withPerson = createPerson({ name: "Alice", expectedRevision: initial.revision });
+    const account = withPerson.accounts[0];
+    createRelation({ fromId: withPerson.people[0].id, toId: account.id, type: "holder", expectedRevision: withPerson.revision });
+    const personId = withPerson.people[0].id;
+
+    const snapshot = await getPersonalFinance(personId, undefined, { id: "local", role: "local" });
+    expect(snapshot.month).toBe("all");
+    expect(snapshot.transactions.map((transaction) => transaction.id)).toContain("november");
+    expect(setPersonalTransactionCategories(personId, ["default:meal", "default:november"], "leisure")).toBe(2);
+    const updated = await getPersonalFinance(personId, undefined, { id: "local", role: "local" });
+    expect(updated.transactions.filter((transaction) => ["meal", "november"].includes(transaction.id)).every((transaction) => transaction.personalCategory === "leisure")).toBe(true);
   });
 });
