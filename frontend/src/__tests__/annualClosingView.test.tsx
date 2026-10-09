@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnnualClosingView } from "../components/AnnualClosing/AnnualClosingView";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() }));
-vi.mock("../api/client", () => ({ api: mocks }));
+vi.mock("../api/client", () => ({ api: mocks, apiUrl: (path: string) => `/api${path}` }));
 
 const snapshot = {
   availablePeriods: [{ id: "fy", startDate: "2025-10-01", endDate: "2026-09-30", label: "2e exercice" }], period: { id: "fy", startDate: "2025-10-01", endDate: "2026-09-30", label: "2e exercice" },
@@ -15,6 +15,8 @@ const snapshot = {
   taxConfig: { turnoverOverride: null, belongsToGroup: null, groupTurnover: null, capitalFullyPaid: null, naturalPersonOwnershipPercent: null, hasSpecialTaxRegime: null, taxCredits: 0, prepayments: 0, reviewed: false, note: "", updatedAt: "2026-10-08" },
   taxCalculation: { months: 12, reducedThreshold: 42500, automaticTurnover: 1000, turnover: 1000, eligibilityTurnover: 1000, conditionsComplete: false, reducedRateEligible: false, taxableBase: 500, reducedBase: 0, normalBase: 500, reducedTax: 0, normalTax: 125, grossTax: 125, taxCredits: 0, netTax: 125, prepayments: 0, balance: 125, reviewed: false, ready: false, warnings: ["Conditions incomplètes"] },
   simplifiedStatements: { balanceSheet: { assets: [], fixedAssetsTotal: 0, currentAssetsTotal: 1000, totalAssets: 1000, liabilities: [], equityTotal: 1000, debtsTotal: 0, totalLiabilities: 1000, difference: 0 }, profitAndLoss: { fields: [] }, fiscalTable: { fields: [] } },
+  filingConfig: { activity: "", signatoryName: "", signatoryRole: "", signatoryCity: "", declarationDate: "", averageEmployees: null, accountingSoftware: "ComptaOS", ownerDetails: {}, subsidiaryDetails: {}, review: { fixedAssets: false, provisionsAndLosses: false, valueAdded: false, capitalAndOwners: false, subsidiaries: false, corporateTaxReturn: false }, updatedAt: "2026-10-08" },
+  filingPackage: { millesime: 2026, ready: false, missing: ["SIREN à 9 chiffres"], unreviewed: ["fixedAssets", "provisionsAndLosses", "valueAdded", "capitalAndOwners", "subsidiaries", "corporateTaxReturn"], identity: { name: "Test", legalForm: "SAS", siren: "", siret: "", address: "", activity: "", capital: "900" }, form2065: { taxableAt15: 0, taxableAt25: 500, grossTax: 125, taxCredits: 0, netTax: 125, prepayments: 0, balance: 125 }, form2033C: { fixedAssets: [], capitalGains: { saleProceeds: 0, netBookValueDisposed: 0, netGain: 0 } }, form2033D: { provisions: [], lossCarryforwards: 0 }, form2033E: { turnover: 1000, production: 1000, externalConsumption: 500, valueAdded: 500, taxes: 0, wages: 0, socialCharges: 0, depreciation: 0, averageEmployees: null }, form2033F: { capital: 900, owners: [], ownershipTotal: 0 }, form2033G: { subsidiaries: [] } },
   deadlines: { resultDeclaration: "2026-12-31", corporateTaxBalance: "2027-01-15" }, completed: 0, total: 13, dataReady: false, filingReady: false,
   steps: [{ id: "transactions", label: "Opérations validées", status: "blocked", detail: "12 opération(s) encore en attente", count: 12 }, { id: "statutory-output", label: "Comptes annuels et liasse", status: "blocked", detail: "Génération verrouillée" }],
 };
@@ -24,7 +26,7 @@ describe("AnnualClosingView", () => {
   it("affiche la période réelle et distingue préparation et dépôt", async () => {
     render(<AnnualClosingView />);
     expect(await screen.findByText("Clôture annuelle guidée")).toBeInTheDocument();
-    expect(screen.getByText("Déclaration non encore déposable.")).toBeInTheDocument();
+    expect(screen.getByText("Déclaration encore à compléter.")).toBeInTheDocument();
     expect(screen.getByText("12 opération(s) encore en attente")).toBeInTheDocument();
     expect(screen.getByText("Journal d’inventaire")).toBeInTheDocument();
     expect(screen.getByText("Balance après inventaire et résultat fiscal")).toBeInTheDocument();

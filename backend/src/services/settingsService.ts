@@ -143,6 +143,7 @@ export interface CompanyProfile {
   name: string;
   legalForm?: string;       // SAS, SARL, Auto-entrepreneur…
   siren?: string;
+  siret?: string;
   vatNumber?: string;       // numéro TVA intracommunautaire
   capital?: string;
   rcs?: string;

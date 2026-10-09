@@ -9,6 +9,7 @@ import { loadAccountingConfig } from "./settingsService.js";
 import { loadPortfolioAccountingLines } from "./portfolioJournalService.js";
 import { getFiscalReview, listFiscalAdjustments } from "./annualFiscalService.js";
 import { buildSimplifiedStatements, calculateCorporateTax, getAnnualTaxConfig } from "./annualTaxService.js";
+import { buildAnnualFilingPackage, getAnnualFilingConfig } from "./annualFilingService.js";
 import type { Transaction } from "../types/index.js";
 
 export type ProfitTaxRegime = "simplified" | "normal" | "unknown";
@@ -124,6 +125,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const automaticTurnover = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("70")).reduce((sum, line) => sum + line.credit - line.debit, 0));
   const taxConfig = getAnnualTaxConfig(period.id); const rawTaxCalculation = calculateCorporateTax(period, fiscalResult, automaticTurnover, taxConfig); const taxCalculation = { ...rawTaxCalculation, ready: rawTaxCalculation.ready && !fiscalIssues.length, warnings: [...rawTaxCalculation.warnings, ...fiscalIssues] };
   const simplifiedStatements = buildSimplifiedStatements(accounting.balances, accounting.lines, accountingResult, fiscalAdjustments);
+  const filingPackage = buildAnnualFilingPackage({ period, openingBalance: record.openingBalance, balances: accounting.balances, lines: accounting.lines, statements: simplifiedStatements, tax: taxCalculation });
   const active = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date >= period.startDate && transaction.date <= period.endDate);
   const pending = active.filter((transaction) => transaction.status !== "validated");
   const unreconciled = active.filter((transaction) => transaction.reconciled !== true);
@@ -150,13 +152,14 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
     { id: "corporate-tax", label: "Calcul de l’impôt sur les sociétés", status: taxCalculation.ready ? "done" : "blocked", detail: taxCalculation.ready ? `IS net provisoire : ${taxCalculation.netTax.toFixed(2)} € ; solde après acomptes : ${taxCalculation.balance.toFixed(2)} €` : "Renseigne et confirme les conditions du taux réduit, les crédits d’impôt et les acomptes" },
     { id: "simplified-statements", label: "Bilan et compte de résultat 2033", status: record.profitTaxRegime !== "simplified" ? "warning" : Math.abs(simplifiedStatements.balanceSheet.difference) <= .01 ? "done" : "blocked", detail: record.profitTaxRegime !== "simplified" ? "Le mapping 2033 concerne le réel simplifié ; le mapping 2050 reste à construire pour le réel normal" : Math.abs(simplifiedStatements.balanceSheet.difference) <= .01 ? "Bilan simplifié équilibré et compte de résultat mappé" : `Écart actif/passif à expliquer : ${simplifiedStatements.balanceSheet.difference.toFixed(2)} €` },
     ...Object.entries({ bankBalance: "Solde bancaire au dernier jour", customersAndSuppliers: "Créances et dettes clients/fournisseurs", fixedAssets: "Immobilisations et amortissements", vat: "TVA et acomptes", accruals: "Écritures d’inventaire et cut-off", equityLoansAndShareholders: "Capital, emprunts et comptes courants" }).map(([id, label]) => ({ id, label, status: record.review[id as keyof AnnualReview] ? "done" as const : "blocked" as const, detail: record.review[id as keyof AnnualReview] ? "Contrôle confirmé" : "Contrôle à effectuer et documenter" })),
-    { id: "statutory-output", label: "Comptes annuels et liasse", status: "blocked", detail: "La génération reste verrouillée : les tableaux 2033-C à 2033-G, la 2065, les contrôles finaux et l’EDI-TDFC ne sont pas encore finalisés." },
+    { id: "statutory-output", label: "Comptes annuels et liasse", status: filingPackage.ready && taxCalculation.ready ? "done" : "blocked", detail: filingPackage.missing.length ? `Complète la fiche de dépôt : ${filingPackage.missing[0]}` : filingPackage.unreviewed.length ? `${filingPackage.unreviewed.length} contrôle(s) final(aux) 2033/2065 restent à confirmer` : !taxCalculation.ready ? "Confirme le calcul d’IS après les dernières modifications" : "Dossier de saisie 2065 + 2033-A à 2033-G complet et contrôlé ; transmission à effectuer séparément" , count: filingPackage.missing.length + filingPackage.unreviewed.length || undefined },
   ];
   const blocking = steps.filter((step) => step.status === "blocked").length;
   return {
     period, record, inventoryEntries, inventorySummary: { total: inventoryEntries.length, draft: inventoryDrafts.length, posted: inventoryPosted.length, cancelled: inventoryEntries.filter((entry) => entry.status === "cancelled").length, debit: inventoryDebit, credit: inventoryCredit, balanced: inventoryDebit === inventoryCredit }, accountingSummary: { eligibleTransactions: accounting.eligibleCount, excludedTransactions: accounting.excludedCount, lines: accounting.lines.length, debit: accounting.totalDebit, credit: accounting.totalCredit, balanced: accounting.balanced, anomalies: accounting.anomalies, balances: accounting.balances }, fiscalAdjustments, fiscalReview, fiscalSummary: { charges, products, accountingResult, reintegrations, deductions, fiscalResult, taxableProfit: Math.max(0, fiscalResult), taxLoss: Math.max(0, -fiscalResult), draft: fiscalDrafts.length, validated: fiscalValidated.length, fiscalBeforeLoss, lossesApplied, corporateTaxExpense, corporateTaxReintegration, issues: fiscalIssues }, taxConfig, taxCalculation, simplifiedStatements, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, unidentified: unidentified.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
     openingBalanceSummary: { lines: record.openingBalance.length, debit: openingDebit, credit: openingCredit, balanced: openingDebit === openingCredit },
     deadlines: { resultDeclaration: endOfMonth(addMonths(period.endDate, 3)), corporateTaxBalance: `${addMonths(period.endDate, 4).slice(0, 8)}15` },
-    steps, completed: steps.filter((step) => step.status === "done").length, total: steps.length, dataReady: blocking === 1 && steps.at(-1)?.id === "statutory-output", filingReady: false,
+    filingConfig: getAnnualFilingConfig(period.id), filingPackage,
+    steps, completed: steps.filter((step) => step.status === "done").length, total: steps.length, dataReady: blocking === 0 || (blocking === 1 && steps.at(-1)?.id === "statutory-output"), filingReady: blocking === 0, ediReady: false,
   };
 }

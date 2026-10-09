@@ -166,6 +166,7 @@ export interface CompanyProfile {
   name: string;
   legalForm?: string;
   siren?: string;
+  siret?: string;
   vatNumber?: string;
   capital?: string;
   rcs?: string;

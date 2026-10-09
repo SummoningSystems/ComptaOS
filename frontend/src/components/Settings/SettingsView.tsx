@@ -195,6 +195,7 @@ export function SettingsView() {
             { key: "name" as const, label: "Nom *", placeholder: "Ma Société SAS" },
             { key: "legalForm" as const, label: "Forme juridique", placeholder: "SAS, SARL…" },
             { key: "siren" as const, label: "SIREN", placeholder: "123 456 789" },
+            { key: "siret" as const, label: "SIRET", placeholder: "123 456 789 00012" },
             { key: "vatNumber" as const, label: "N° TVA", placeholder: "FR 12 123456789" },
             { key: "capital" as const, label: "Capital", placeholder: "10 000 €" },
             { key: "rcs" as const, label: "RCS", placeholder: "Paris B 123 456 789" },
