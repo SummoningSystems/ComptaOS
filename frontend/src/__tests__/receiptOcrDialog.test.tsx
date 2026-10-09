@@ -20,4 +20,13 @@ describe("vérification OCR d'un justificatif", () => {
     const onClose = vi.fn(); render(<ReceiptOcrDialog transaction={transaction} proposal={{ supplier: "", amountHt: 0, amountTtc: 0, category: "misc", confidence: "low", vatSplits: [] }} onApply={vi.fn()} onClose={onClose} />);
     fireEvent.click(screen.getByRole("button", { name: "Fermer et saisir manuellement" })); expect(onClose).toHaveBeenCalled();
   });
+  it("propose l'acompte fournisseur et force une ventilation sans TVA", async () => {
+    const onApply = vi.fn().mockResolvedValue(undefined);
+    render(<ReceiptOcrDialog transaction={{ ...transaction, amount_ht: -45.56, amount_ttc: -45.56 }} proposal={{ supplier: "ENGIE", amountHt: 37.97, amountTtc: 45.56, category: "utilities", confidence: "high", vatSplits: [{ rate: 20, amountTtc: 45.56 }] }} onApply={onApply} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Catégorie"), { target: { value: "supplier_advance_payment" } });
+    expect(screen.getByText("Mouvement de bilan sans TVA : il n’est pas compté comme une charge immédiate.")).toBeVisible();
+    expect(screen.getByLabelText("Taux TVA OCR 1")).toHaveValue("0");
+    fireEvent.click(screen.getByRole("button", { name: "Appliquer la TVA proposée" }));
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith({ category: "supplier_advance_payment", invoiceRef: undefined, vatSplits: [{ rate: 0, amountTtc: 45.56 }] }));
+  });
 });

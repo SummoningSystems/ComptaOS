@@ -31,7 +31,15 @@ let cached: CategoryDefinition[] | null = null;
 export function useCategoryCatalog() {
   const [categories, setCategories] = useState<CategoryDefinition[]>(cached ?? FALLBACK_CATEGORIES);
   const reload = useCallback(async () => {
-    try { cached = await fetchCategories(); setCategories(cached); } catch { /* fallback keeps the UI usable */ }
+    try {
+      const fetched = await fetchCategories();
+      // Keep newly shipped built-ins available even if an older or partially
+      // migrated workspace returns an incomplete category catalogue.
+      const merged = new Map(FALLBACK_CATEGORIES.map((category) => [category.id, category]));
+      for (const category of fetched) merged.set(category.id, category);
+      cached = [...merged.values()];
+      setCategories(cached);
+    } catch { /* fallback keeps the UI usable */ }
   }, []);
   useEffect(() => { void reload(); }, [reload]);
   return { categories: categories.filter((item) => item.active), allCategories: categories, reload };
