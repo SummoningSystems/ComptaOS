@@ -36,4 +36,12 @@ describe("AnnualClosingView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirmer la revue fiscale" }));
     await waitFor(() => expect(mocks.put).toHaveBeenCalledWith("/annual-closing/fy/fiscal-review", { confirmed: true, note: "" }));
   });
+  it("conserve la liste des exercices après une réponse de mutation partielle", async () => {
+    mocks.put.mockResolvedValueOnce({ data: { ...snapshot, availablePeriods: undefined, record: { ...snapshot.record, profitTaxRegime: "simplified" } } });
+    render(<AnnualClosingView />);
+    fireEvent.change(await screen.findByRole("combobox", { name: "Régime de la déclaration de résultat" }), { target: { value: "simplified" } });
+    await waitFor(() => expect(mocks.put).toHaveBeenCalledWith("/annual-closing/fy/setup", { profitTaxRegime: "simplified" }));
+    expect(screen.getByRole("combobox", { name: "Exercice" })).toHaveTextContent("2e exercice");
+    expect(screen.getByRole("combobox", { name: "Régime de la déclaration de résultat" })).toHaveValue("simplified");
+  });
 });
