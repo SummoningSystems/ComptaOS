@@ -8,6 +8,7 @@ import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, updat
 import { cancelFiscalAdjustment, createFiscalAdjustment, deleteFiscalDraft, saveFiscalReview, updateFiscalAdjustment, validateFiscalAdjustment, type FiscalAdjustmentInput } from "../services/annualFiscalService.js";
 import { saveAnnualTaxConfig, type AnnualTaxConfigInput } from "../services/annualTaxService.js";
 import { saveAnnualFilingConfig, type AnnualFilingConfigInput } from "../services/annualFilingService.js";
+import { generateAnnualFilingPdf } from "../services/annualFilingPdfService.js";
 import * as XLSX from "xlsx";
 
 function periods(): FiscalPeriod[] {
@@ -95,12 +96,13 @@ export async function annualClosingRoutes(app: FastifyInstance) {
     try { const { period, available } = selected(request.params.periodId); saveAnnualFilingConfig(period.id, request.body); return snapshot(period, available); }
     catch (caught) { return error(reply, caught); }
   });
-  app.get<{ Params: { periodId: string }; Querystring: { format?: "json" | "xlsx" } }>("/:periodId/filing-package", async (request, reply) => {
+  app.get<{ Params: { periodId: string }; Querystring: { format?: "json" | "xlsx" | "pdf" } }>("/:periodId/filing-package", async (request, reply) => {
     try {
       const { period, available } = selected(request.params.periodId); const data = await snapshot(period, available); const pack = data.filingPackage;
       if (!pack.ready || !data.taxCalculation.ready) return reply.status(409).send({ error: "Le dossier 2065/2033 doit être entièrement complété et confirmé avant export.", missing: pack.missing, unreviewed: pack.unreviewed });
       const baseName = `liasse-${period.endDate}-travail`;
       if (request.query.format === "json") return reply.header("Content-Disposition", `attachment; filename="${baseName}.json"`).send({ generatedAt: new Date().toISOString(), legalStatus: "Dossier de saisie contrôlé — transmission non effectuée", period, package: pack, statements: data.simplifiedStatements, taxCalculation: data.taxCalculation });
+      if (request.query.format === "pdf") { const bytes = await generateAnnualFilingPdf({ period, package: pack, statements: data.simplifiedStatements }); return reply.header("Content-Type", "application/pdf").header("Content-Disposition", `attachment; filename="${baseName}.pdf"`).send(Buffer.from(bytes)); }
       const wb = XLSX.utils.book_new(); const sheet = (name: string, rows: unknown[][]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
       sheet("2065", [["Champ", "Valeur"], ...Object.entries({ "Entreprise": pack.identity.name, "Forme juridique": pack.identity.legalForm, "SIREN": pack.identity.siren, "SIRET": pack.identity.siret, "Adresse": pack.identity.address, "Activité": pack.identity.activity, "Ouverture": period.startDate, "Clôture": period.endDate, "Bénéfice à 15 %": pack.form2065.taxableAt15, "Bénéfice à 25 %": pack.form2065.taxableAt25, "IS brut": pack.form2065.grossTax, "Crédits d’impôt": pack.form2065.taxCredits, "IS net": pack.form2065.netTax, "Acomptes": pack.form2065.prepayments, "Solde": pack.form2065.balance, "Logiciel": pack.form2065.accountingSoftware, "Signataire": pack.form2065.signatory.name, "Qualité": pack.form2065.signatory.role, "Lieu": pack.form2065.signatory.city, "Date": pack.form2065.signatory.date })]);
       sheet("2033-A", [["Code", "Libellé", "Montant", "Comptes sources"], ...data.simplifiedStatements.balanceSheet.assets.map((row) => [row.code, row.label, row.value, row.sourceAccounts.join(", ")]), ...data.simplifiedStatements.balanceSheet.liabilities.map((row) => [row.code, row.label, row.value, row.sourceAccounts.join(", ")]), ["TOTAL ACTIF", "", data.simplifiedStatements.balanceSheet.totalAssets], ["TOTAL PASSIF", "", data.simplifiedStatements.balanceSheet.totalLiabilities]]);
