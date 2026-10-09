@@ -618,13 +618,17 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     );
   }
 
-  async function handleAttachmentUpload(txnId: string, file: File) {
+  async function handleAttachmentUpload(txnId: string, file: File, runOcr = true) {
     setUploadingAttachment(txnId);
     setAttachmentMessage(null);
     try {
       const { transaction, compression } = await uploadAttachment(txnId, file, { skipOcr: true });
       setTransactions((prev) => prev.map((t) => (t.id === txnId ? transaction : t)));
       const uploadedMb = (compression.uploadedBytes / 1024 / 1024).toFixed(1);
+      if (!runOcr) {
+        setAttachmentMessage({ type: "success", text: compression.compressed ? `Pièce compressée de ${compression.savedPercent} % (${uploadedMb} Mo), enregistrée sans OCR.` : "Pièce justificative enregistrée sans analyse OCR." });
+        return;
+      }
       setAttachmentMessage({ type: "success", text: compression.compressed ? `Photo compressée de ${compression.savedPercent} % (${uploadedMb} Mo), puis enregistrée. Analyse OCR en cours…` : "Pièce justificative enregistrée. Analyse OCR en cours…" });
       const controller = new AbortController();
       ocrAbortRef.current = controller;
@@ -1270,6 +1274,10 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                     <div className="flex items-center gap-0.5">
                                       {ocrAnalyzingAttachment === txn.id && <button onClick={cancelAttachmentOcr} className="flex h-6 w-6 animate-pulse items-center justify-center rounded text-base text-amber-400 hover:bg-amber-900/30 hover:text-amber-300" title="Arrêter l’OCR et conserver la pièce" aria-label="Arrêter l’OCR et conserver la pièce">⏳</button>}
                                       {[...new Set([...(txn.attachments ?? []), ...(txn.attachment ? [txn.attachment] : [])])].map((filename, index) => <span key={filename} className="flex items-center gap-0.5"><a href={attachmentUrl(filename)} target="_blank" rel="noopener noreferrer" className="flex h-6 min-w-6 items-center justify-center rounded px-1 text-sm text-blue-400 transition-colors hover:bg-blue-900/30 hover:text-blue-300" title={`Voir la pièce jointe : ${filename}`}>📎{index === 0 && (txn.attachments?.length ?? 1) > 1 ? <small className="ml-0.5 text-[9px]">{txn.attachments?.length}</small> : null}</a><button onClick={() => handleAttachmentDelete(txn.id, filename)} className="flex h-4 w-4 items-center justify-center rounded text-xs text-vscode-muted transition-colors hover:bg-red-900/20 hover:text-red-400" title={`Supprimer ${filename}`}>×</button></span>)}
+                                      <label className="flex h-6 min-w-6 cursor-pointer items-center justify-center rounded px-1 text-[10px] text-vscode-muted hover:bg-blue-900/30 hover:text-blue-300" title="Ajouter une pièce sans OCR" aria-label={`Ajouter une pièce sans OCR à ${txn.label}`}>
+                                        ＋📄
+                                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" className="hidden" disabled={uploadingAttachment !== null} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAttachmentUpload(txn.id, file, false); event.target.value = ""; }} />
+                                      </label>
                                     </div>
                                   ) : (
                                     <AttachmentDropZone
@@ -1284,7 +1292,8 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                           ? "text-vscode-muted animate-pulse"
                                           : "text-vscode-muted hover:text-blue-400 hover:bg-blue-900/30"
                                       }`}
-                                      title="Joindre une pièce justificative (PDF, image)"
+                                      title="Joindre et analyser par OCR"
+                                      aria-label={`Joindre et analyser une pièce pour ${txn.label}`}
                                     >
                                       {uploadingAttachment === txn.id ? "⏳" : "📎"}
                                       <input
@@ -1294,10 +1303,14 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                         disabled={uploadingAttachment !== null}
                                         onChange={(e) => {
                                           const file = e.target.files?.[0];
-                                          if (file) handleAttachmentUpload(txn.id, file);
+                                          if (file) void handleAttachmentUpload(txn.id, file, true);
                                           e.target.value = "";
                                         }}
                                       />
+                                    </label>
+                                    <label className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded text-sm transition-colors ${uploadingAttachment === txn.id ? "animate-pulse text-vscode-muted" : "text-vscode-muted hover:bg-blue-900/30 hover:text-blue-300"}`} title="Joindre sans analyse OCR" aria-label={`Joindre une pièce sans OCR à ${txn.label}`}>
+                                      📄
+                                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" className="hidden" disabled={uploadingAttachment !== null} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAttachmentUpload(txn.id, file, false); event.target.value = ""; }} />
                                     </label>
                                     </AttachmentDropZone>
                                   )}
