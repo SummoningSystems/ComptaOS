@@ -48,6 +48,7 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("misc", "Divers (dépense)", "658000", "Charges diverses de gestion courante"),
   builtin("supplier_advance_payment", "Acompte fournisseur versé", "409100", "Fournisseurs - avances et acomptes versés", "expense", "balance_sheet"),
   builtin("security_deposit", "Dépôts et cautionnements versés", "275000", "Dépôts et cautionnements versés", "expense", "balance_sheet"),
+  builtin("corporate_tax_payment", "Règlement d’IS déjà comptabilisé", "444000", "État - Impôts sur les bénéfices", "expense", "balance_sheet"),
   builtin("unidentified_transaction", "Opération à identifier", "471000", "Compte d’attente - opérations à identifier", "expense", "balance_sheet"),
   builtin("shareholder_personal_expense", "Dépense personnelle d’un associé", "455100", "Associés - comptes courants", "expense", "balance_sheet"),
   builtin("shareholder_current_account_contribution", "Apport en compte courant d’associé", "455100", "Associés - comptes courants", "revenue", "balance_sheet"),

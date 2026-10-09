@@ -43,4 +43,22 @@ describe("calcul annuel de l’IS et pré-remplissage 2033", () => {
     expect(statements.balanceSheet).toMatchObject({ totalAssets: 1120, totalLiabilities: 1120, difference: 0 });
     expect(statements.profitAndLoss.fields).toEqual(expect.arrayContaining([expect.objectContaining({ code: "218", value: 200 }), expect.objectContaining({ code: "310", value: 120 })]));
   });
+
+  it("intègre le résultat antérieur 120 ou 129 sans le confondre avec le résultat courant", () => {
+    const priorProfit = buildSimplifiedStatements([
+      { accountNumber: "512000", accountLabel: "Banque", debit: 4106, credit: 0, balance: 4106 },
+      { accountNumber: "101000", accountLabel: "Capital", debit: 0, credit: 1000, balance: -1000 },
+      { accountNumber: "120000", accountLabel: "Résultat précédent", debit: 0, credit: 3106, balance: -3106 },
+    ], [], 0, []);
+    expect(priorProfit.balanceSheet).toMatchObject({ totalAssets: 4106, totalLiabilities: 4106, difference: 0 });
+    expect(priorProfit.balanceSheet.liabilities).toContainEqual(expect.objectContaining({ code: "134", value: 3106, sourceAccounts: ["120000"] }));
+
+    const priorLoss = buildSimplifiedStatements([
+      { accountNumber: "512000", accountLabel: "Banque", debit: 500, credit: 0, balance: 500 },
+      { accountNumber: "101000", accountLabel: "Capital", debit: 0, credit: 1000, balance: -1000 },
+      { accountNumber: "129000", accountLabel: "Perte précédente", debit: 500, credit: 0, balance: 500 },
+    ], [], 0, []);
+    expect(priorLoss.balanceSheet).toMatchObject({ totalAssets: 500, totalLiabilities: 500, difference: 0 });
+    expect(priorLoss.balanceSheet.liabilities).toContainEqual(expect.objectContaining({ code: "134", value: -500, sourceAccounts: ["129000"] }));
+  });
 });

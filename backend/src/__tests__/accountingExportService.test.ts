@@ -100,6 +100,17 @@ describe("dossier expert-comptable", () => {
     expect(preview.lines.some((item) => item.accountNumber.startsWith("6"))).toBe(false);
   });
 
+  it("solde l'impôt sur les sociétés antérieur au compte 444 sans nouvelle charge ni TVA", () => {
+    const preview = buildAccountingPreview([transaction({ id: "is-payment", label: "SIE - IS 2025", category: "corporate_tax_payment", amount_ht: -548, vat: 0, vat_rate: 0, amount_ttc: -548 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines.filter((line) => line.transactionId === "is-payment")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountNumber: "444000", debit: 548, credit: 0 }),
+      expect.objectContaining({ accountNumber: "512100", debit: 0, credit: 548 }),
+    ]));
+    expect(preview.lines.some((line) => line.accountNumber.startsWith("6") || line.accountNumber === "445660")).toBe(false);
+    expect(preview.anomalies).not.toContainEqual(expect.objectContaining({ code: "VAT_ON_BALANCE_SHEET_MOVEMENT" }));
+  });
+
+
   it("place une opération inconnue au 471 et bloque la clôture", () => {
     const preview = buildAccountingPreview([transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, vat_rate: 0, amount_ttc: -4.76 })], defaultAccountingConfig(), "2026");
     expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "471000", debit: 4.76 }), expect.objectContaining({ accountNumber: "512100", credit: 4.76 })]));

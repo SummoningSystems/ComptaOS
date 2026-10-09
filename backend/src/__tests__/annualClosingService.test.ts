@@ -37,6 +37,29 @@ describe("clôture annuelle par période datée", () => {
     expect(snapshot.steps.at(-1)).toMatchObject({ id: "statutory-output", status: "blocked" });
   });
 
+  it("équilibre le 2033 avec le compte 120 mais bloque son affectation tant qu'elle n'est pas enregistrée", () => {
+    saveAnnualSetup(period, "simplified");
+    saveOpeningBalance(period, [
+      { id: "1", accountNumber: "512000", accountLabel: "Banque", debit: 4006, credit: 0 },
+      { id: "2", accountNumber: "101000", accountLabel: "Capital", debit: 0, credit: 900 },
+      { id: "3", accountNumber: "120000", accountLabel: "Résultat exercice précédent", debit: 0, credit: 3106 },
+    ]);
+    const snapshot = buildAnnualClosingSnapshot(period, []);
+    expect(snapshot.simplifiedStatements.balanceSheet).toMatchObject({ totalAssets: 4006, totalLiabilities: 4006, difference: 0 });
+    expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "simplified-statements", status: "done" }));
+    expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "prior-result-allocation", status: "blocked", count: 1 }));
+
+    const allocation = createInventoryEntry(period, { date: "2026-03-31", kind: "other", label: "Affectation du résultat précédent", lines: [
+      { id: "1", accountNumber: "120000", accountLabel: "Résultat exercice précédent", debit: 3106, credit: 0 },
+      { id: "2", accountNumber: "106100", accountLabel: "Réserve légale", debit: 0, credit: 90 },
+      { id: "3", accountNumber: "110000", accountLabel: "Report à nouveau", debit: 0, credit: 3016 },
+    ] });
+    validateInventoryEntry(period.id, allocation.id);
+    const allocated = buildAnnualClosingSnapshot(period, []);
+    expect(allocated.simplifiedStatements.balanceSheet).toMatchObject({ totalAssets: 4006, totalLiabilities: 4006, difference: 0 });
+    expect(allocated.steps).toContainEqual(expect.objectContaining({ id: "prior-result-allocation", status: "done" }));
+  });
+
   it("calcule le résultat comptable puis le résultat fiscal explicable", () => {
     const adjustment = createFiscalAdjustment(period.id, { type: "reintegration", kind: "non_deductible_expense", label: "Charge non déductible", amount: 5, accountNumber: "625000" });
     validateFiscalAdjustment(period.id, adjustment.id); saveFiscalReview(period.id, true, "Contrôle effectué");
