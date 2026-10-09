@@ -35,69 +35,94 @@ const at = (rows: Row[], code: string) => rows.find((row) => row.code.split("/")
 const fit = (font: PDFFont, value: string, maxWidth: number, preferred = 9) => { let size = preferred; while (size > 5 && font.widthOfTextAtSize(value, size) > maxWidth) size -= .25; return size; };
 const write = (page: PDFPage, font: PDFFont, value: unknown, x: number, y: number, maxWidth = 250, size = 9) => { const text = String(value ?? "").trim(); if (text) page.drawText(text, { x, y, size: fit(font, text, maxWidth, size), font, color: rgb(0, 0, 0), maxWidth }); };
 const right = (page: PDFPage, font: PDFFont, value: number, xRight: number, y: number, size = 9) => { const text = amount(value); if (text) page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color: rgb(0, 0, 0) }); };
+const rightText = (page: PDFPage, font: PDFFont, value: unknown, xRight: number, y: number, size = 9) => { const text = String(value ?? "").trim(); if (text) page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color: rgb(0, 0, 0) }); };
 const watermark = (page: PDFPage, font: PDFFont) => page.drawText("DOSSIER DE SAISIE CONTROLE - TRANSMISSION NON EFFECTUEE", { x: 113, y: 12, size: 6, font, color: rgb(.65, .12, .12) });
 const header = (page: PDFPage, font: PDFFont, name: string, x: number, y: number) => write(page, font, name, x, y, 220, 9);
 const siretDigits = (page: PDFPage, font: PDFFont, value: string, x: number, y: number, step = 15) => [...value.replace(/\D/g, "")].forEach((digit, index) => write(page, font, digit, x + index * step, y, 8, 9));
+const boxedDate = (page: PDFPage, font: PDFFont, value: string, x: number, y: number, step: number) => {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  [...digits].forEach((digit, index) => write(page, font, digit, x + index * step, y, step, 8));
+};
+const frenchAddress = (value: string) => {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(?:(\d+[^\s]*)\s+)?(.+?)(?:[ ,]+(\d{5})\s+(.+))?$/);
+  return { number: match?.[1] ?? "", street: match?.[2] ?? normalized, postalCode: match?.[3] ?? "", city: match?.[4] ?? "" };
+};
 
 function fill2065(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const { identity, form2065 } = input.package;
   write(page, font, frDate(input.period.startDate), 132, 730, 80, 9); write(page, font, frDate(input.period.endDate), 243, 730, 80, 9);
-  write(page, font, identity.name, 26, 653, 230, 10); write(page, font, identity.address, 296, 653, 250, 8); write(page, font, identity.address, 26, 619, 250, 8);
-  siretDigits(page, font, identity.siret, 104, 640, 13.93); write(page, font, identity.email, 320, 640, 190, 8); write(page, font, identity.activity, 129, 541, 180, 8);
-  right(page, font, form2065.taxableAt25, 181, 494, 10); right(page, font, form2065.deficit, 374, 494, 10); right(page, font, form2065.taxableAt15, 566, 494, 10);
-  write(page, font, form2065.accountingSoftware, 439, 227, 110, 8); write(page, font, form2065.signatory.city, 260, 148, 100, 8); write(page, font, frDate(form2065.signatory.date), 315, 161, 75, 8); write(page, font, `${form2065.signatory.name} - ${form2065.signatory.role}`, 385, 148, 170, 8);
+  write(page, font, identity.name, 208, 657, 75, 8); write(page, font, identity.address, 484, 657, 69, 6); write(page, font, identity.address, 225, 620, 328, 8);
+  siretDigits(page, font, identity.siret, 104, 633, 13.93); write(page, font, identity.email, 323, 633, 225, 8); write(page, font, identity.activity, 109, 529, 255, 8);
+  right(page, font, form2065.taxableAt25, 474, 499, 10); right(page, font, form2065.deficit, 566, 499, 10); right(page, font, form2065.taxableAt15, 190, 479, 10);
+  write(page, font, "X", 260, 151, 10, 8); write(page, font, form2065.accountingSoftware, 449, 151, 103, 8);
+  write(page, font, frDate(form2065.signatory.date), 329, 68, 75, 8); write(page, font, form2065.signatory.city, 451, 68, 100, 8); write(page, font, `${form2065.signatory.name} - ${form2065.signatory.role}`, 400, 55, 152, 8);
 }
 
 function fill2033A(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const { identity, form2033C } = input.package, bs = input.statements.balanceSheet;
-  header(page, font, identity.name, 135, 743); write(page, font, identity.address, 135, 729, 240, 8); siretDigits(page, font, identity.siret, 93, 703, 15.03); write(page, font, months(input.period.startDate, input.period.endDate), 180, 690, 20, 9); write(page, font, frDate(input.period.endDate).replaceAll("/", "  "), 484, 657, 80, 8);
+  const dy = -1.5;
+  header(page, font, identity.name, 135, 743); write(page, font, identity.address, 135, 729, 240, 8); siretDigits(page, font, identity.siret, 93, 703, 15.03); write(page, font, months(input.period.startDate, input.period.endDate), 180, 690, 20, 9); boxedDate(page, font, frDate(input.period.endDate), 484, 655.5, 9.75);
   const fixed = new Map(form2033C.fixedAssets.map((row) => [row.code, row]));
   const fixedRows = [{ key: "immaterial", y: 601 }, { key: "tangible", y: 586 }, { key: "financial", y: 571 }];
-  for (const row of fixedRows) { const item = fixed.get(row.key); if (!item) continue; right(page, font, item.closingGross, 371, row.y); right(page, font, item.closingDepreciation, 468, row.y); right(page, font, item.closingGross - item.closingDepreciation, 565, row.y); }
+  for (const row of fixedRows) { const item = fixed.get(row.key); if (!item) continue; right(page, font, item.closingGross, 371, row.y + dy); right(page, font, item.closingDepreciation, 478, row.y + dy); right(page, font, item.closingGross - item.closingDepreciation, 565, row.y + dy); }
   const currentY: Record<string, number> = { "050": 542, "060": 527, "064": 512, "068": 498, "072": 483, "080": 469, "084": 454, "092": 439 };
-  for (const [code, y] of Object.entries(currentY)) { const value = at(bs.assets, code); right(page, font, value, 371, y); right(page, font, value, 565, y); }
+  for (const [code, y] of Object.entries(currentY)) { const value = at(bs.assets, code); right(page, font, value, 371, y + dy); right(page, font, value, 565, y + dy); }
   const grossFixed = form2033C.fixedAssets.reduce((sum, row) => sum + row.closingGross, 0), depreciation = form2033C.fixedAssets.reduce((sum, row) => sum + row.closingDepreciation, 0);
-  right(page, font, grossFixed, 371, 557); right(page, font, depreciation, 468, 557); right(page, font, bs.fixedAssetsTotal, 565, 557); right(page, font, bs.currentAssetsTotal, 371, 424); right(page, font, bs.currentAssetsTotal, 565, 424); right(page, font, grossFixed + bs.currentAssetsTotal, 371, 409); right(page, font, depreciation, 468, 409); right(page, font, bs.totalAssets, 565, 409);
+  right(page, font, grossFixed, 371, 557 + dy); right(page, font, depreciation, 478, 557 + dy); right(page, font, bs.fixedAssetsTotal, 565, 557 + dy); right(page, font, bs.currentAssetsTotal, 371, 424 + dy); right(page, font, bs.currentAssetsTotal, 565, 424 + dy); right(page, font, grossFixed + bs.currentAssetsTotal, 371, 409 + dy); right(page, font, depreciation, 478, 409 + dy); right(page, font, bs.totalAssets, 565, 409 + dy);
   const liabilityY: Record<string, number> = { "120": 366, "124": 352, "126": 337, "130": 322, "132": 307, "134": 293, "136": 278, "137": 263, "140": 248, "156": 204, "164": 190, "166": 175, "172": 159, "173": 143, "175": 128, "174": 113 };
-  for (const [code, y] of Object.entries(liabilityY)) right(page, font, at(bs.liabilities, code), 565, y);
-  right(page, font, bs.equityTotal, 565, 234); right(page, font, bs.debtsTotal, 565, 98); right(page, font, bs.totalLiabilities, 565, 83);
+  for (const [code, y] of Object.entries(liabilityY)) right(page, font, at(bs.liabilities, code), 565, y + dy);
+  right(page, font, bs.equityTotal, 565, 234 + dy); right(page, font, bs.debtsTotal, 565, 98 + dy); right(page, font, bs.totalLiabilities, 565, 83 + dy);
 }
 
 function fill2033B(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
-  header(page, font, input.package.identity.name, 298, 783); write(page, font, frDate(input.period.endDate).replaceAll("/", "  "), 447, 764, 80, 8);
+  const dy = -1.5;
+  header(page, font, input.package.identity.name, 298, 783); boxedDate(page, font, frDate(input.period.endDate), 447, 762.5, 9.5);
   const pnlY: Record<string, number> = { "210": 751, "214": 739, "218": 726, "222": 714, "224": 702, "226": 690, "230": 679, "232": 667, "234": 656, "236": 646, "238": 635, "240": 623, "242": 612, "244": 600, "250": 588, "252": 576, "254": 563, "256": 551, "262": 539, "264": 515, "270": 502, "280": 490, "294": 490, "290": 479, "300": 464, "306": 434, "310": 422 };
-  for (const [code, y] of Object.entries(pnlY)) right(page, font, at(input.statements.profitAndLoss.fields, code), 504, y);
-  const fiscal = input.statements.fiscalTable.fields; right(page, font, at(fiscal, "312"), 424, 409); right(page, font, at(fiscal, "314"), 504, 409); right(page, font, at(fiscal, "330"), 424, 345); right(page, font, at(fiscal, "344"), 343, 206); right(page, font, at(fiscal, "352"), 424, 80); right(page, font, at(fiscal, "354"), 504, 80); right(page, font, at(fiscal, "360"), 504, 56); right(page, font, at(fiscal, "370"), 424, 44); right(page, font, at(fiscal, "372"), 504, 44);
+  for (const [code, y] of Object.entries(pnlY)) right(page, font, at(input.statements.profitAndLoss.fields, code), 504, y + dy);
+  const fiscal = input.statements.fiscalTable.fields; right(page, font, at(fiscal, "312"), 424, 409 + dy); right(page, font, at(fiscal, "314"), 504, 409 + dy); right(page, font, at(fiscal, "330"), 424, 345 + dy); right(page, font, at(fiscal, "344"), 343, 206 + dy); right(page, font, at(fiscal, "352"), 424, 80 + dy); right(page, font, at(fiscal, "354"), 504, 80 + dy); right(page, font, at(fiscal, "360"), 504, 56 + dy); right(page, font, at(fiscal, "370"), 424, 44 + dy); right(page, font, at(fiscal, "372"), 504, 44 + dy);
 }
 
 function fill2033C(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
+  const dy = -1.5;
   header(page, font, input.package.identity.name, 332, 774); const rows = input.package.form2033C.fixedAssets, y: Record<string, number> = { immaterial: 701, tangible: 610, financial: 595 };
-  for (const row of rows) { const yy = y[row.code]; if (!yy) continue; right(page, font, row.openingGross, 246, yy); right(page, font, row.increases, 327, yy); right(page, font, row.decreases, 408, yy); right(page, font, row.closingGross, 488, yy); }
+  for (const row of rows) { const yy = y[row.code]; if (!yy) continue; right(page, font, row.openingGross, 246, yy + dy); right(page, font, row.increases, 327, yy + dy); right(page, font, row.decreases, 408, yy + dy); right(page, font, row.closingGross, 488, yy + dy); }
   const totals = rows.reduce((a, row) => ({ openingGross: a.openingGross + row.openingGross, increases: a.increases + row.increases, decreases: a.decreases + row.decreases, closingGross: a.closingGross + row.closingGross }), { openingGross: 0, increases: 0, decreases: 0, closingGross: 0 });
-  right(page, font, totals.openingGross, 246, 581); right(page, font, totals.increases, 327, 581); right(page, font, totals.decreases, 408, 581); right(page, font, totals.closingGross, 488, 581);
-  const amortY: Record<string, number> = { immaterial: 519, tangible: 430 }; for (const row of rows) { const yy = amortY[row.code]; if (!yy) continue; right(page, font, row.openingDepreciation, 311, yy); right(page, font, row.depreciationCharge, 392, yy); right(page, font, row.depreciationDecrease, 473, yy); right(page, font, row.closingDepreciation, 556, yy); }
+  right(page, font, totals.openingGross, 246, 581 + dy); right(page, font, totals.increases, 327, 581 + dy); right(page, font, totals.decreases, 408, 581 + dy); right(page, font, totals.closingGross, 488, 581 + dy);
+  const amortY: Record<string, number> = { immaterial: 519, tangible: 430 }; for (const row of rows) { const yy = amortY[row.code]; if (!yy) continue; right(page, font, row.openingDepreciation, 311, yy + dy); right(page, font, row.depreciationCharge, 392, yy + dy); right(page, font, row.depreciationDecrease, 473, yy + dy); right(page, font, row.closingDepreciation, 556, yy + dy); }
   const amort = rows.reduce((a, row) => ({ opening: a.opening + row.openingDepreciation, charge: a.charge + row.depreciationCharge, decrease: a.decrease + row.depreciationDecrease, closing: a.closing + row.closingDepreciation }), { opening: 0, charge: 0, decrease: 0, closing: 0 });
-  right(page, font, amort.opening, 311, 415); right(page, font, amort.charge, 392, 415); right(page, font, amort.decrease, 473, 415); right(page, font, amort.closing, 556, 415);
+  right(page, font, amort.opening, 311, 415 + dy); right(page, font, amort.charge, 392, 415 + dy); right(page, font, amort.decrease, 473, 415 + dy); right(page, font, amort.closing, 556, 415 + dy);
 }
 
 function fill2033D(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
-  header(page, font, input.package.identity.name, 319, 760); const d = input.package.form2033D; right(page, font, d.provisions[0]?.amount ?? 0, 543, 675); right(page, font, d.provisions[1]?.amount ?? 0, 543, 659); right(page, font, d.provisions[2]?.amount ?? 0, 543, 598); right(page, font, d.provisions.reduce((s, row) => s + row.amount, 0), 543, 582); right(page, font, d.lossCarryforwards, 300, 317); right(page, font, d.vatCollected ?? 0, 543, 201); right(page, font, d.vatDeductible ?? 0, 543, 185);
+  const dy = -1.5;
+  header(page, font, input.package.identity.name, 319, 760); const d = input.package.form2033D; right(page, font, d.provisions[0]?.amount ?? 0, 522, 675 + dy); right(page, font, d.provisions[1]?.amount ?? 0, 522, 659 + dy); right(page, font, d.provisions[2]?.amount ?? 0, 522, 598 + dy); right(page, font, d.provisions.reduce((s, row) => s + row.amount, 0), 522, 582 + dy); right(page, font, d.lossCarryforwards, 276, 317 + dy); right(page, font, d.vatCollected ?? 0, 522, 201 + dy); right(page, font, d.vatDeductible ?? 0, 522, 185 + dy);
 }
 
 function fill2033E(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
-  const { identity, form2033E } = input.package; header(page, font, identity.name, 311, 768); write(page, font, frDate(input.period.startDate), 96, 749, 80, 8); write(page, font, frDate(input.period.endDate), 217, 749, 80, 8); right(page, font, form2033E.averageEmployees ?? 0, 565, 706); right(page, font, form2033E.turnover, 565, 619); right(page, font, form2033E.turnover, 565, 575); right(page, font, form2033E.externalConsumption, 565, 406); right(page, font, form2033E.taxes, 565, 374); right(page, font, form2033E.externalConsumption + form2033E.taxes, 565, 298); right(page, font, form2033E.valueAdded - form2033E.taxes, 565, 267); right(page, font, Math.max(0, form2033E.valueAdded - form2033E.taxes), 565, 231);
+  const dy = -1.5;
+  const { identity, form2033E } = input.package; header(page, font, identity.name, 311, 768); write(page, font, frDate(input.period.startDate), 96, 749, 80, 8); write(page, font, frDate(input.period.endDate), 217, 749, 80, 8); right(page, font, form2033E.averageEmployees ?? 0, 565, 706 + dy); right(page, font, form2033E.turnover, 565, 619 + dy); right(page, font, form2033E.turnover, 565, 575 + dy); right(page, font, form2033E.externalConsumption, 565, 406 + dy); right(page, font, form2033E.taxes, 565, 374 + dy); right(page, font, form2033E.externalConsumption + form2033E.taxes, 565, 298 + dy); right(page, font, form2033E.valueAdded - form2033E.taxes, 565, 267 + dy); right(page, font, Math.max(0, form2033E.valueAdded - form2033E.taxes), 565, 231 + dy);
 }
 
 function fill2033F(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput, people: Owner[], index: number, count: number) {
-  const { identity, form2033F } = input.package; header(page, font, identity.name, 305, 722); write(page, font, identity.address, 260, 705, 220, 7); siretDigits(page, font, identity.siren, 400, 736, 15.32); write(page, font, frDate(input.period.endDate).replaceAll("/", "  "), 233, 736, 115, 8); write(page, font, `${index + 1}/${count}`, 42, 736, 30, 7);
+  const { identity, form2033F } = input.package, companyAddress = frenchAddress(identity.address); header(page, font, identity.name, 305, 722); write(page, font, `${companyAddress.number} ${companyAddress.street}`.trim(), 260, 705, 220, 7); siretDigits(page, font, companyAddress.postalCode, 231, 687, 15.2); write(page, font, companyAddress.city, 367, 687, 115, 7); siretDigits(page, font, identity.siren, 400, 736, 15.32); boxedDate(page, font, frDate(input.period.endDate), 233, 734.5, 15.05); write(page, font, `${index + 1}/${count}`, 42, 736, 30, 7);
   const legal = form2033F.owners.filter((owner) => owner.kind === "entity"), physical = form2033F.owners.filter((owner) => owner.kind === "person"); right(page, font, legal.length, 286, 663); right(page, font, legal.reduce((s, o) => s + (o.shareCount ?? 0), 0), 558, 663); right(page, font, physical.length, 286, 644); right(page, font, physical.reduce((s, o) => s + (o.shareCount ?? 0), 0), 558, 644); right(page, font, form2033F.owners.length, 286, 625); right(page, font, form2033F.totalShares, 558, 625);
-  const slotY = [273, 176]; people.forEach((owner, i) => { const yy = slotY[i]; const parts = owner.name.trim().split(/\s+/); write(page, font, "M", 154, yy, 20, 8); write(page, font, parts.slice(-1).join(" "), 307, yy, 130, 8); write(page, font, parts.slice(0, -1).join(" "), 522, yy, 35, 7); right(page, font, owner.ownershipPercent ?? 0, 424, yy - 18); right(page, font, owner.shareCount ?? 0, 548, yy - 18); write(page, font, frDate(owner.birthDate), 155, yy - 36, 80, 7); write(page, font, owner.birthPlace, 399, yy - 36, 95, 7); write(page, font, owner.address, 155, yy - 55, 330, 6); write(page, font, "France", 519, yy - 73, 35, 7); });
+  const slotY = [273, 176]; people.forEach((owner, i) => {
+    const yy = slotY[i], parts = owner.name.trim().split(/\s+/), address = frenchAddress(owner.address);
+    write(page, font, "M", 69, yy, 45, 8);
+    write(page, font, parts.slice(-1).join(" "), 215, yy, 118, 8);
+    write(page, font, parts.slice(0, -1).join(" "), 414, yy, 132, 8);
+    rightText(page, font, owner.ownershipPercent?.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) ?? "", 424, yy - 18); right(page, font, owner.shareCount ?? 0, 548, yy - 18);
+    write(page, font, frDate(owner.birthDate), 125, yy - 36, 85, 7); write(page, font, owner.birthPlace, 352, yy - 36, 87, 7);
+    write(page, font, address.number, 108, yy - 55, 72, 6); write(page, font, address.street, 275, yy - 55, 270, 6);
+    write(page, font, address.postalCode, 108, yy - 73, 72, 7); write(page, font, address.city, 275, yy - 73, 115, 7); write(page, font, "France", 490, yy - 73, 55, 7);
+  });
 }
 
 function fill2033G(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
-  const { identity, form2033G } = input.package; header(page, font, identity.name, 306, 724); write(page, font, identity.address, 263, 708, 220, 7); siretDigits(page, font, identity.siren, 405, 736, 15.54); write(page, font, frDate(input.period.endDate).replaceAll("/", "  "), 234, 736, 115, 8); right(page, font, form2033G.subsidiaries.length, 375, 673);
-  if (!form2033G.subsidiaries.length) { write(page, font, "X", 467, 789, 15, 9); return; }
-  const ys = [635, 562, 489, 415, 343, 270, 194, 120]; form2033G.subsidiaries.slice(0, ys.length).forEach((row, i) => { const y = ys[i]; write(page, font, row.legalForm, 150, y + 17, 80, 7); write(page, font, row.name, 310, y + 17, 200, 7); write(page, font, row.siren, 150, y, 80, 7); right(page, font, row.ownershipPercent ?? 0, 550, y); write(page, font, `${row.address} ${row.postalCode} ${row.city}`, 150, y - 18, 340, 6); write(page, font, row.country, 515, y - 18, 40, 6); });
+  const { identity, form2033G } = input.package, companyAddress = frenchAddress(identity.address); header(page, font, identity.name, 306, 724); write(page, font, `${companyAddress.number} ${companyAddress.street}`.trim(), 263, 708, 220, 7); siretDigits(page, font, companyAddress.postalCode, 232, 691, 15.5); write(page, font, companyAddress.city, 373, 691, 115, 7); siretDigits(page, font, identity.siren, 405, 736, 15.54); boxedDate(page, font, frDate(input.period.endDate), 234, 734.5, 15.05); right(page, font, form2033G.subsidiaries.length, 375, 673);
+  if (!form2033G.subsidiaries.length) { write(page, font, "X", 543, 760, 10, 8); return; }
+  const ys = [635, 562, 489, 415, 343, 270, 194, 120]; form2033G.subsidiaries.slice(0, ys.length).forEach((row, i) => { const y = ys[i]; write(page, font, row.legalForm, 150, y + 17, 80, 7); write(page, font, row.name, 310, y + 17, 200, 7); write(page, font, row.siren, 150, y, 80, 7); rightText(page, font, row.ownershipPercent?.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) ?? "", 550, y); write(page, font, `${row.address} ${row.postalCode} ${row.city}`, 150, y - 18, 340, 6); write(page, font, row.country, 515, y - 18, 40, 6); });
 }
 
 export async function generateAnnualFilingPdf(input: AnnualFilingPdfInput) {
