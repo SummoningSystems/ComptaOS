@@ -139,7 +139,7 @@ function ViewContent({ type, tabId, path, currentUser, workspace }: { type: TabT
       {type === "editor"       && tabId && path && <FileEditor key={tabId} tabId={tabId} path={path} />}
       {type === "import"       && <ImportView />}
       {type === "ocr"          && <PdfImporter />}
-      {type === "transactions" && <TransactionsView workFilter={workFilter as "unjustified" | "misc" | "pending" | "duplicates" | "receipt-inbox" | undefined} month={contextMonth} />}
+      {type === "transactions" && <TransactionsView workFilter={workFilter as "unjustified" | "misc" | "unidentified" | "pending" | "duplicates" | "receipt-inbox" | undefined} month={contextMonth} />}
       {type === "reports"      && <ReportsView />}
       {type === "recurring"    && <RecurringView mode={dossierMode === "personal" ? "personal" : dossierMode === "household" ? "household" : "business"} />}
       {type === "invoices"     && <InvoicesView />}

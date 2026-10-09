@@ -66,10 +66,11 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     const base = { journalCode: "BQ", journalLabel: "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
     const ht = Math.abs(round(transaction.amount_ht)); const vat = Math.abs(round(transaction.vat)); const ttc = Math.abs(round(transaction.amount_ttc));
     const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
+    if (transaction.category === "unidentified_transaction") anomalies.push({ severity: "blocking", code: "UNIDENTIFIED_TRANSACTION", message: "Cette opération doit être identifiée et reclassée avant la clôture.", transactionId: transaction.id });
     const advanceAccount = options.advanceAccounts?.[transaction.id];
     if (nature === "balance_sheet") {
       const balanceAccount = config.categories[transaction.category];
-      if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_BALANCE_SHEET_MOVEMENT", message: "Un acompte ou dépôt ne doit pas porter de TVA sur le mouvement bancaire sans facture justificative.", transactionId: transaction.id });
+      if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_BALANCE_SHEET_MOVEMENT", message: "Un mouvement de bilan ne doit pas porter de TVA sur le mouvement bancaire sans facture justificative.", transactionId: transaction.id });
       if (transaction.amount_ttc < 0) {
         lines.push(line(base, balanceAccount, `${transaction.label} - mouvement de bilan`, ttc, 0));
         lines.push(line(base, config.bank, `${transaction.label} - décaissement`, 0, ttc));

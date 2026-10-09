@@ -60,4 +60,12 @@ describe("clôture annuelle par période datée", () => {
     expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "fiscal-adjustments", status: "blocked" }));
     expect(snapshot.taxCalculation.ready).toBe(false);
   });
+
+  it("bloque la clôture tant qu'une opération reste au compte d'attente 471", () => {
+    const snapshot = buildAnnualClosingSnapshot(period, [transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, amount_ttc: -4.76, invoiceRef: "Carte du 03/03 à identifier" })]);
+    expect(snapshot.transactionSummary.unidentified).toBe(1);
+    expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "unidentified", status: "blocked", count: 1 }));
+    expect(snapshot.accountingSummary.anomalies).toContainEqual(expect.objectContaining({ code: "UNIDENTIFIED_TRANSACTION", transactionId: "unknown" }));
+    expect(snapshot.dataReady).toBe(false);
+  });
 });

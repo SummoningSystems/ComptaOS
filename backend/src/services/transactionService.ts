@@ -7,6 +7,7 @@ import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
 import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
+import { transactionAccountingNature } from "./categoryCatalogService.js";
 
 const TXN_DIR = "transactions";
 
@@ -118,6 +119,9 @@ function deriveVatRate(txn: Transaction): number {
 }
 
 function normalizeTransaction(txn: Transaction): Transaction {
+  if (transactionAccountingNature(txn.category, txn.amount_ttc, txn.accountingTreatment) === "balance_sheet") {
+    return { ...txn, vat_rate: 0, amount_ht: round2(txn.amount_ttc), vat: 0, vat_splits: [] };
+  }
   // Si des splits sont définis, on en déduit HT/TVA/taux effectif
   if (txn.vat_splits && txn.vat_splits.length > 0) {
     const totalHt = round2(
@@ -246,7 +250,7 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
   // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
   // recalculer silencieusement la TVA à partir d'un ancien taux.
-  let updated = changesAccounting ? normalizeTransaction(merged) : merged;
+  let updated = changesAccounting || transactionAccountingNature(merged.category, merged.amount_ttc, merged.accountingTreatment) === "balance_sheet" ? normalizeTransaction(merged) : merged;
   if (!Object.prototype.hasOwnProperty.call(patch, "reconciled") && shouldAutoReconcilePsd2(updated)) updated = { ...updated, reconciled: true };
   await atomicWriteFile(filePath, yaml.stringify(updated));
   invalidateCache();

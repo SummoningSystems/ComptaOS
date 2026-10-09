@@ -29,7 +29,8 @@ export interface ReceiptProposal {
   confidence: "high" | "medium" | "low";
 }
 
-const categoryIds = () => loadCategoryCatalog().filter((category) => category.active).map((category) => category.id);
+const categories = () => loadCategoryCatalog().filter((category) => category.active);
+const categoryIds = () => categories().map((category) => category.id);
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
@@ -45,10 +46,11 @@ export function normalizeReceiptProposal(value: unknown): ReceiptProposal {
     return [{ rate: round2(rate), amountHt: round2(splitHt), amountVat: round2(splitVat), amountTtc: round2(splitTtc) }];
   });
   const category = categoryIds().includes(String(input.category)) ? String(input.category) : "misc";
+  const balanceSheet = categories().find((definition) => definition.id === category)?.accountingNature === "balance_sheet";
   const confidence = ["high", "medium", "low"].includes(String(input.confidence)) ? input.confidence as ReceiptProposal["confidence"] : "low";
   const normalizedHt = Number.isFinite(amountHt) ? round2(Math.abs(amountHt)) : 0; const normalizedTtc = Number.isFinite(amountTtc) ? round2(Math.abs(amountTtc)) : 0;
   const providedVat = Number(input.amount_vat); const amountVat = Number.isFinite(providedVat) ? round2(Math.abs(providedVat)) : round2(Math.max(0, normalizedTtc - normalizedHt));
-  return { supplier: typeof input.supplier === "string" ? input.supplier.trim() : "Inconnu", date: typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : undefined, invoiceRef: typeof input.invoice_ref === "string" ? input.invoice_ref.trim() : undefined, amountHt: normalizedHt, amountVat, amountTtc: normalizedTtc, category, vatSplits, confidence };
+  return { supplier: typeof input.supplier === "string" ? input.supplier.trim() : "Inconnu", date: typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : undefined, invoiceRef: typeof input.invoice_ref === "string" ? input.invoice_ref.trim() : undefined, amountHt: balanceSheet ? normalizedTtc : normalizedHt, amountVat: balanceSheet ? 0 : amountVat, amountTtc: normalizedTtc, category, vatSplits: balanceSheet && normalizedTtc > 0 ? [{ rate: 0, amountHt: normalizedTtc, amountVat: 0, amountTtc: normalizedTtc }] : vatSplits, confidence };
 }
 
 async function extractTextRemotely(buffer: Buffer, mimetype: string): Promise<string> {

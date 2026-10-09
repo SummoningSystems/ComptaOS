@@ -19,6 +19,8 @@ export const FALLBACK_CATEGORIES: CategoryDefinition[] = [
 FALLBACK_CATEGORIES.push(
   { id: "supplier_advance_payment", label: "Acompte fournisseur versé", account: { number: "409100", label: "Fournisseurs - avances et acomptes versés" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
   { id: "security_deposit", label: "Dépôts et cautionnements versés", account: { number: "275000", label: "Dépôts et cautionnements versés" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
+  { id: "unidentified_transaction", label: "Opération à identifier", account: { number: "471000", label: "Compte d’attente - opérations à identifier" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
+  { id: "shareholder_personal_expense", label: "Dépense personnelle d’un associé", account: { number: "455100", label: "Associés - comptes courants" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
 );
 
 FALLBACK_CATEGORIES.push(

@@ -100,6 +100,20 @@ describe("dossier expert-comptable", () => {
     expect(preview.lines.some((item) => item.accountNumber.startsWith("6"))).toBe(false);
   });
 
+  it("place une opération inconnue au 471 et bloque la clôture", () => {
+    const preview = buildAccountingPreview([transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, vat_rate: 0, amount_ttc: -4.76 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "471000", debit: 4.76 }), expect.objectContaining({ accountNumber: "512100", credit: 4.76 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("6") || item.accountNumber.startsWith("445"))).toBe(false);
+    expect(preview.anomalies).toContainEqual(expect.objectContaining({ code: "UNIDENTIFIED_TRANSACTION", severity: "blocking", transactionId: "unknown" }));
+  });
+
+  it("comptabilise une dépense personnelle d'associé au 455 sans charge", () => {
+    const preview = buildAccountingPreview([transaction({ id: "personal", label: "Achat personnel", category: "shareholder_personal_expense", amount_ht: -25, vat: 0, vat_rate: 0, amount_ttc: -25 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "455100", debit: 25 }), expect.objectContaining({ accountNumber: "512100", credit: 25 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("6") || item.accountNumber.startsWith("445"))).toBe(false);
+    expect(preview.anomalies.some((item) => item.code === "UNIDENTIFIED_TRANSACTION")).toBe(false);
+  });
+
   it("signale les catégories imprécises et les écritures incohérentes", () => {
     const preview = buildAccountingPreview([transaction({ category: "misc", amount_ht: -25 })], defaultAccountingConfig(), "2026");
     expect(preview.anomalies).toEqual(expect.arrayContaining([expect.objectContaining({ code: "UNCATEGORIZED" }), expect.objectContaining({ code: "VAT_MISMATCH" }), expect.objectContaining({ code: "UNBALANCED_ENTRY" })]));

@@ -410,13 +410,15 @@ const CATEGORY_COLORS: Record<Category, string> = {
   insurance: "bg-sky-900 text-sky-300",
   supplier_advance_payment: "bg-amber-900 text-amber-300",
   security_deposit: "bg-cyan-950 text-cyan-300",
+  unidentified_transaction: "bg-red-950 text-red-300",
+  shareholder_personal_expense: "bg-fuchsia-950 text-fuchsia-300",
   supplier_advance_refund: "bg-emerald-900 text-emerald-300",
   supplier_compensation: "bg-green-900 text-green-300",
   misc: "bg-gray-700 text-gray-300",
 };
 
-type WorkFilter = "unjustified" | "misc" | "pending" | "duplicates" | "receipt-inbox";
-const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
+type WorkFilter = "unjustified" | "misc" | "unidentified" | "pending" | "duplicates" | "receipt-inbox";
+const WORK_FILTER_LABELS: Partial<Record<WorkFilter, string>> = { unjustified: "Transactions sans justificatif", misc: "Transactions à catégoriser", unidentified: "Opérations à identifier — compte 471", duplicates: "Doublons potentiels", "receipt-inbox": "Justificatifs en attente de rapprochement" };
 
 export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilter; month?: string }) {
   const { categories } = useCategoryCatalog();
@@ -436,7 +438,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     reasoning: string;
     confidence: string;
   } | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<Category | "">(workFilter === "misc" ? "misc" : "")
+  const [categoryFilter, setCategoryFilter] = useState<Category | "">(workFilter === "misc" ? "misc" : workFilter === "unidentified" ? "unidentified_transaction" : "")
   const [statusFilter, setStatusFilter] = useState<"" | "pending" | "validated" | "rejected">(workFilter === "pending" ? "pending" : "")
   const [dateFrom, setDateFrom] = useState(month ? `${month}-01` : "")
   const [dateTo, setDateTo] = useState(month ? `${month}-${new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()}` : "")
@@ -1235,7 +1237,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                     <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
                                     <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense" && c.accountingNature !== "balance_sheet").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
                                     <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                                  </> : <><optgroup label="Acomptes et dépôts — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
+                                  </> : <><optgroup label="Mouvements de bilan — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

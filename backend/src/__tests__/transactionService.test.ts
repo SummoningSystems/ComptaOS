@@ -90,6 +90,14 @@ describe("transactionService persistence", () => {
     expect(updated).toMatchObject({ amount_ttc: -15.8, amount_ht: -15.8, vat: 0, vat_rate: 20 });
   });
 
+  it("force la TVA à zéro lors du classement en 471", async () => {
+    await saveTransaction(transaction());
+
+    const updated = await updateTransaction("txn_test", { category: "unidentified_transaction" });
+
+    expect(updated).toMatchObject({ category: "unidentified_transaction", amount_ttc: -120, amount_ht: -120, vat: 0, vat_rate: 0, vat_splits: [] });
+  });
+
   it("rapproche automatiquement une transaction PSD2 devenue complète", async () => {
     await saveTransaction(transaction({ id: "bank_powens_42", status: "pending", justified: true }));
     const updated = await updateTransaction("bank_powens_42", { status: "validated" });

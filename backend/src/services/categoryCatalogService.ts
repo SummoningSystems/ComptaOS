@@ -48,6 +48,8 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("misc", "Divers (dépense)", "658000", "Charges diverses de gestion courante"),
   builtin("supplier_advance_payment", "Acompte fournisseur versé", "409100", "Fournisseurs - avances et acomptes versés", "expense", "balance_sheet"),
   builtin("security_deposit", "Dépôts et cautionnements versés", "275000", "Dépôts et cautionnements versés", "expense", "balance_sheet"),
+  builtin("unidentified_transaction", "Opération à identifier", "471000", "Compte d’attente - opérations à identifier", "expense", "balance_sheet"),
+  builtin("shareholder_personal_expense", "Dépense personnelle d’un associé", "455100", "Associés - comptes courants", "expense", "balance_sheet"),
   builtin("supplier_advance_refund", "Remboursement d'acompte fournisseur", "409100", "Fournisseurs - avances et acomptes versés", "revenue"),
   builtin("supplier_compensation", "Indemnité ou dédommagement reçu", "758000", "Indemnités et autres produits de gestion courante", "revenue"),
   builtin("service_revenue", "Prestations de services facturées", "706000", "Prestations de services", "revenue"),
@@ -77,7 +79,8 @@ export function loadCategoryCatalog(): CategoryDefinition[] {
 export type TransactionAccountingNature = "expense" | "revenue" | "expense_refund" | "supplier_advance_refund" | "balance_sheet" | "neutral";
 
 export function transactionAccountingNature(categoryId: string, amountTtc: number, treatment?: "revenue" | "expense_refund" | "supplier_advance_refund"): TransactionAccountingNature {
-  if (categoryId === "supplier_advance_payment" || categoryId === "security_deposit") return "balance_sheet";
+  const definition = BUILTIN_CATEGORIES.find((category) => category.id === categoryId) ?? customCategories().find((category) => category.id === categoryId);
+  if (definition?.accountingNature === "balance_sheet") return "balance_sheet";
   if (amountTtc < 0) return "expense";
   if (amountTtc === 0) return "neutral";
   if (treatment) return treatment;

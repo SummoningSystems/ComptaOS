@@ -12,7 +12,7 @@ interface BalanceLine { id: string; accountNumber: string; accountLabel: string;
 interface Snapshot {
   availablePeriods: Period[]; period: Period;
   record: { profitTaxRegime: Regime; openingBalance: BalanceLine[]; review: Record<ReviewKey, boolean>; updatedAt: string };
-  transactionSummary: { total: number; pending: number; unreconciled: number; misc: number; missingEvidence: number; missingFiles: number };
+  transactionSummary: { total: number; pending: number; unreconciled: number; misc: number; unidentified?: number; missingEvidence: number; missingFiles: number };
   openingBalanceSummary: { lines: number; debit: number; credit: number; balanced: boolean };
   inventoryEntries: InventoryEntry[];
   inventorySummary: { total: number; draft: number; posted: number; cancelled: number; debit: number; credit: number; balanced: boolean };

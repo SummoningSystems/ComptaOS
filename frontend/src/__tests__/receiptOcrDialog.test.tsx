@@ -23,6 +23,8 @@ describe("vérification OCR d'un justificatif", () => {
   it("propose l'acompte fournisseur et force une ventilation sans TVA", async () => {
     const onApply = vi.fn().mockResolvedValue(undefined);
     render(<ReceiptOcrDialog transaction={{ ...transaction, amount_ht: -45.56, amount_ttc: -45.56 }} proposal={{ supplier: "ENGIE", amountHt: 37.97, amountTtc: 45.56, category: "utilities", confidence: "high", vatSplits: [{ rate: 20, amountTtc: 45.56 }] }} onApply={onApply} onClose={vi.fn()} />);
+    expect(screen.getByRole("option", { name: "Opération à identifier" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Dépense personnelle d’un associé" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Catégorie"), { target: { value: "supplier_advance_payment" } });
     expect(screen.getByText("Mouvement de bilan sans TVA : il n’est pas compté comme une charge immédiate.")).toBeVisible();
     expect(screen.getByLabelText("Taux TVA OCR 1")).toHaveValue("0");

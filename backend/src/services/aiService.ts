@@ -97,8 +97,10 @@ JSON : {"category":"...","vat_rate":0,"reasoning":"...","confidence":"high|mediu
   try {
     const match = text.match(/\{[\s\S]*\}/);
     const result = JSON.parse(match?.[0] ?? text) as CategorizationResult;
-    if (!categories().some((category) => category.id === result.category)) result.category = "misc";
+    const definition = categories().find((category) => category.id === result.category);
+    if (!definition) result.category = "misc";
     if (![0, 5.5, 10, 20].includes(result.vat_rate)) result.vat_rate = 20;
+    if (definition?.accountingNature === "balance_sheet") result.vat_rate = 0;
     return result;
   } catch {
     return { category: "misc", vat_rate: 20, reasoning: "Impossible de parser la réponse IA", confidence: "low" };

@@ -106,4 +106,16 @@ describe("dashboard bank balance", () => {
     expect(dashboard.accounting_expenses).toBe(0);
     expect(dashboard.accounting_result).toBe(0);
   });
+
+  it("ne compte pas une dépense personnelle d'associé dans les charges", async () => {
+    state.transactions = [
+      { id: "personal", date: "2026-08-24", label: "Achat personnel", amount_ht: -25, amount_ttc: -25, vat: 0, category: "shareholder_personal_expense", status: "validated", account: "7" },
+    ];
+
+    const dashboard = await computeDashboard("2026");
+
+    expect(dashboard.transaction_flow).toBe(-25);
+    expect(dashboard.accounting_expenses).toBe(0);
+    expect(dashboard.accounting_result).toBe(0);
+  });
 });

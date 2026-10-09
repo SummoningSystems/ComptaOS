@@ -8,4 +8,7 @@ describe("proposition OCR de justificatif", () => {
   it("neutralise les valeurs inventées ou invalides", () => {
     expect(normalizeReceiptProposal({ amount_ttc: "inconnu", category: "pirate", confidence: "certain", vat_splits: [{ rate: -1, amount_ttc: 20 }] })).toMatchObject({ amountTtc: 0, category: "misc", confidence: "low", vatSplits: [] });
   });
+  it("supprime toute TVA d'une opération de bilan", () => {
+    expect(normalizeReceiptProposal({ amount_ht: 3.97, amount_vat: 0.79, amount_ttc: 4.76, category: "unidentified_transaction", confidence: "low", vat_splits: [{ rate: 20, amount_ttc: 4.76 }] })).toMatchObject({ amountHt: 4.76, amountVat: 0, amountTtc: 4.76, category: "unidentified_transaction", vatSplits: [{ rate: 0, amountTtc: 4.76 }] });
+  });
 });

@@ -184,7 +184,7 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
                   <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
                   <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense" && c.accountingNature !== "balance_sheet").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
                   <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                </> : <><optgroup label="Acomptes et dépôts — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Dépense">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "expense" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
+                </> : <><optgroup label="Mouvements de bilan — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Dépense">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "expense" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
               </select>
             </div>
             <div>
