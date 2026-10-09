@@ -55,22 +55,24 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
     if (!label.trim()) { setError("Le libellé est obligatoire."); return; }
     if (amount_ttc === null) { setError("Montant invalide (ex: -24.37 ou 1060,80)."); return; }
 
-    const vatFactor = vatRate / 100;
-    const amount_ht = amount_ttc / (1 + vatFactor);
-    const vat = amount_ttc - amount_ht;
     const selectedCategory = categories.find((item) => item.id === category);
     const accountingTreatment = amount_ttc >= 0
       ? category === "supplier_advance_refund" ? "supplier_advance_refund" as const
-        : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
+        : selectedCategory?.accountingNature === "balance_sheet" ? undefined
+          : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
       : undefined;
+    const effectiveVatRate = category === "supplier_advance_refund" || selectedCategory?.accountingNature === "balance_sheet" ? 0 : vatRate;
+    const effectiveVatFactor = effectiveVatRate / 100;
+    const effectiveAmountHt = amount_ttc / (1 + effectiveVatFactor);
+    const effectiveVat = amount_ttc - effectiveAmountHt;
 
     const txn: Omit<Transaction, "id"> = {
       date,
       label: label.trim(),
       amount_ttc,
-      amount_ht: Math.round(amount_ht * 100) / 100,
-      vat: Math.round(vat * 100) / 100,
-      vat_rate: vatRate,
+      amount_ht: Math.round(effectiveAmountHt * 100) / 100,
+      vat: Math.round(effectiveVat * 100) / 100,
+      vat_rate: effectiveVatRate,
       currency: "EUR",
       category,
       account: "main",
@@ -174,14 +176,15 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
               <label className="block text-[10px] text-vscode-muted mb-0.5">Catégorie</label>
               <select
                 value={category}
-                onChange={(e) => { const next = e.target.value as Category; setCategory(next); if (next === "supplier_advance_refund") setVatRate(0); }}
+                onChange={(e) => { const next = e.target.value as Category; setCategory(next); const definition = categories.find((item) => item.id === next); if (next === "supplier_advance_refund" || definition?.accountingNature === "balance_sheet") setVatRate(0); }}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
               >
                 {positiveAmount ? <>
                   <optgroup label="Remboursement d'acompte (sans TVA)">{categories.filter((c) => c.id === "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                  <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
+                  <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                  <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense" && c.accountingNature !== "balance_sheet").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
                   <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                </> : <optgroup label="Dépense">{categories.filter((c) => c.kind === "expense" || c.kind === "both").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>}
+                </> : <><optgroup label="Acomptes et dépôts — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Dépense">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "expense" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
               </select>
             </div>
             <div>

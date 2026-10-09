@@ -93,4 +93,17 @@ describe("dashboard bank balance", () => {
     expect(dashboard.accounting_result).toBe(-75);
     expect(dashboard.monthly_expenses[0]?.amount).toBe(90);
   });
+
+  it("conserve un acompte dans la trésorerie sans le compter dans le résultat", async () => {
+    state.transactions = [
+      { id: "advance", date: "2026-08-24", label: "ENGIE", amount_ht: -60, amount_ttc: -60, vat: 0, category: "supplier_advance_payment", status: "validated", account: "7" },
+    ];
+
+    const dashboard = await computeDashboard("2026");
+
+    expect(dashboard.transaction_flow).toBe(-60);
+    expect(dashboard.monthly_expenses[0]?.amount).toBe(60);
+    expect(dashboard.accounting_expenses).toBe(0);
+    expect(dashboard.accounting_result).toBe(0);
+  });
 });

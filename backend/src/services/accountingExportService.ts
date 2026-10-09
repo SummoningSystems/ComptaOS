@@ -65,8 +65,19 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     if (needsTransactionEvidence(transaction) && !options.evidenceTransactionIds?.includes(transaction.id)) anomalies.push({ severity: "blocking", code: "MISSING_EVIDENCE", message: "La dépense n'a aucun justificatif ni référence.", transactionId: transaction.id });
     const base = { journalCode: "BQ", journalLabel: "Banque", entryNumber: `${year}-${String(index + 1).padStart(6, "0")}`, entryDate: transaction.date, pieceRef: transaction.invoiceRef || transaction.id, pieceDate: transaction.date, transactionId: transaction.id };
     const ht = Math.abs(round(transaction.amount_ht)); const vat = Math.abs(round(transaction.vat)); const ttc = Math.abs(round(transaction.amount_ttc));
+    const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
     const advanceAccount = options.advanceAccounts?.[transaction.id];
-    if (transaction.amount_ttc < 0 && advanceAccount) {
+    if (nature === "balance_sheet") {
+      const balanceAccount = config.categories[transaction.category];
+      if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_BALANCE_SHEET_MOVEMENT", message: "Un acompte ou dépôt ne doit pas porter de TVA sur le mouvement bancaire sans facture justificative.", transactionId: transaction.id });
+      if (transaction.amount_ttc < 0) {
+        lines.push(line(base, balanceAccount, `${transaction.label} - mouvement de bilan`, ttc, 0));
+        lines.push(line(base, config.bank, `${transaction.label} - décaissement`, 0, ttc));
+      } else {
+        lines.push(line(base, config.bank, `${transaction.label} - encaissement`, ttc, 0));
+        lines.push(line(base, balanceAccount, `${transaction.label} - remboursement du mouvement de bilan`, 0, ttc));
+      }
+    } else if (transaction.amount_ttc < 0 && advanceAccount) {
       lines.push(line(base, advanceAccount, `${transaction.label} - acompte fournisseur`, ttc, 0));
       lines.push(line(base, config.bank, `${transaction.label} - règlement acompte`, 0, ttc));
     } else if (transaction.amount_ttc < 0) {

@@ -5,6 +5,7 @@ export interface CategoryDefinition {
   label: string;
   account: { number: string; label: string };
   kind: "expense" | "revenue" | "both";
+  accountingNature?: "profit_loss" | "balance_sheet";
   builtin: boolean;
   active: boolean;
 }

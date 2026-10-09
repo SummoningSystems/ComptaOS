@@ -8,12 +8,13 @@ export interface CategoryDefinition {
   label: string;
   account: { number: string; label: string };
   kind: "expense" | "revenue" | "both";
+  accountingNature?: "profit_loss" | "balance_sheet";
   builtin: boolean;
   active: boolean;
 }
 
-const builtin = (id: string, label: string, number: string, accountLabel: string, kind: CategoryDefinition["kind"] = "expense"): CategoryDefinition =>
-  ({ id, label, account: { number, label: accountLabel }, kind, builtin: true, active: true });
+const builtin = (id: string, label: string, number: string, accountLabel: string, kind: CategoryDefinition["kind"] = "expense", accountingNature: CategoryDefinition["accountingNature"] = "profit_loss"): CategoryDefinition =>
+  ({ id, label, account: { number, label: accountLabel }, kind, accountingNature, builtin: true, active: true });
 
 export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("telecom", "Internet et télécommunications", "626000", "Frais postaux et télécommunications"),
@@ -45,6 +46,8 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("vehicle", "Véhicules et carburant", "625100", "Voyages et déplacements"),
   builtin("interest", "Intérêts et frais financiers", "661000", "Charges d'intérêts"),
   builtin("misc", "Divers (dépense)", "658000", "Charges diverses de gestion courante"),
+  builtin("supplier_advance_payment", "Acompte fournisseur versé", "409100", "Fournisseurs - avances et acomptes versés", "expense", "balance_sheet"),
+  builtin("security_deposit", "Dépôts et cautionnements versés", "275000", "Dépôts et cautionnements versés", "expense", "balance_sheet"),
   builtin("supplier_advance_refund", "Remboursement d'acompte fournisseur", "409100", "Fournisseurs - avances et acomptes versés", "revenue"),
   builtin("supplier_compensation", "Indemnité ou dédommagement reçu", "758000", "Indemnités et autres produits de gestion courante", "revenue"),
   builtin("service_revenue", "Prestations de services facturées", "706000", "Prestations de services", "revenue"),
@@ -63,7 +66,7 @@ function customCategories(): CategoryDefinition[] {
   if (!existsSync(file())) return [];
   try {
     const value = JSON.parse(readFileSync(file(), "utf-8"));
-    return Array.isArray(value) ? value.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.account?.number === "string").map((item) => ({ ...item, kind: ["expense", "revenue", "both"].includes(item.kind) ? item.kind : "both" })) : [];
+    return Array.isArray(value) ? value.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.account?.number === "string").map((item) => ({ ...item, kind: ["expense", "revenue", "both"].includes(item.kind) ? item.kind : "both", accountingNature: item.accountingNature === "balance_sheet" ? "balance_sheet" : "profit_loss" })) : [];
   } catch { return []; }
 }
 
@@ -71,9 +74,10 @@ export function loadCategoryCatalog(): CategoryDefinition[] {
   return [...BUILTIN_CATEGORIES, ...customCategories()].map((item) => ({ ...item, account: { ...item.account } }));
 }
 
-export type TransactionAccountingNature = "expense" | "revenue" | "expense_refund" | "supplier_advance_refund" | "neutral";
+export type TransactionAccountingNature = "expense" | "revenue" | "expense_refund" | "supplier_advance_refund" | "balance_sheet" | "neutral";
 
 export function transactionAccountingNature(categoryId: string, amountTtc: number, treatment?: "revenue" | "expense_refund" | "supplier_advance_refund"): TransactionAccountingNature {
+  if (categoryId === "supplier_advance_payment" || categoryId === "security_deposit") return "balance_sheet";
   if (amountTtc < 0) return "expense";
   if (amountTtc === 0) return "neutral";
   if (treatment) return treatment;

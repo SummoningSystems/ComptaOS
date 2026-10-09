@@ -17,6 +17,11 @@ export const FALLBACK_CATEGORIES: CategoryDefinition[] = [
 ].map(([id, label]) => ({ id, label, account: { number: "", label: "" }, kind: "expense" as const, builtin: true, active: true }));
 
 FALLBACK_CATEGORIES.push(
+  { id: "supplier_advance_payment", label: "Acompte fournisseur versé", account: { number: "409100", label: "Fournisseurs - avances et acomptes versés" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
+  { id: "security_deposit", label: "Dépôts et cautionnements versés", account: { number: "275000", label: "Dépôts et cautionnements versés" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
+);
+
+FALLBACK_CATEGORIES.push(
   ...[["service_revenue", "Prestations de services facturées"], ["goods_sales", "Ventes de marchandises"], ["product_sales", "Ventes de produits fabriqués"], ["royalty_revenue", "Licences et redevances perçues"], ["operating_grant", "Subventions d’exploitation"], ["financial_revenue", "Produits financiers"], ["exceptional_revenue", "Produits exceptionnels"], ["other_revenue", "Autres recettes"]]
     .map(([id, label]) => ({ id, label, account: { number: "", label: "" }, kind: "revenue" as const, builtin: true, active: true })),
 );

@@ -408,6 +408,8 @@ const CATEGORY_COLORS: Record<Category, string> = {
   rent: "bg-teal-900 text-teal-300",
   legal: "bg-indigo-900 text-indigo-300",
   insurance: "bg-sky-900 text-sky-300",
+  supplier_advance_payment: "bg-amber-900 text-amber-300",
+  security_deposit: "bg-cyan-950 text-cyan-300",
   supplier_advance_refund: "bg-emerald-900 text-emerald-300",
   supplier_compensation: "bg-green-900 text-green-300",
   misc: "bg-gray-700 text-gray-300",
@@ -513,9 +515,11 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     const selectedCategory = categories.find((item) => item.id === category);
     const accountingTreatment = current && current.amount_ttc >= 0
       ? category === "supplier_advance_refund" ? "supplier_advance_refund" as const
-        : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
+        : selectedCategory?.accountingNature === "balance_sheet" ? undefined
+          : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
       : current?.accountingTreatment;
-    const patch = category === "supplier_advance_refund" && current
+    const withoutVat = category === "supplier_advance_refund" || selectedCategory?.accountingNature === "balance_sheet";
+    const patch = withoutVat && current
       ? { category, accountingTreatment, vat_rate: 0, vat: 0, amount_ht: current.amount_ttc, vat_splits: [] }
       : { category, accountingTreatment };
     const updated = await updateTransaction(id, patch);
@@ -1228,9 +1232,10 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
                                   {txn.amount_ttc >= 0 ? <>
                                     <optgroup label="Remboursement d'acompte (sans TVA)">{categories.filter((c) => c.id === "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                                    <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
+                                    <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                                    <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense" && c.accountingNature !== "balance_sheet").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
                                     <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                                  </> : <optgroup label="Catégories de dépenses">{categories.filter((c) => c.kind === "both" || c.kind === "expense" || c.id === txn.category).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>}
+                                  </> : <><optgroup label="Acomptes et dépôts — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

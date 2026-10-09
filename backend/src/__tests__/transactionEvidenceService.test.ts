@@ -19,4 +19,8 @@ describe("transaction evidence", () => {
     expect(needsTransactionEvidence(transaction({ amount_ht: 100, vat: 20, amount_ttc: 120, accountingTreatment: "expense_refund", justified: false }))).toBe(true);
     expect(needsTransactionEvidence(transaction({ amount_ht: 120, vat: 0, amount_ttc: 120, category: "supplier_advance_refund", accountingTreatment: "supplier_advance_refund", invoiceRef: "REG-ENGIE" }))).toBe(false);
   });
+  it("exige également une preuve pour un acompte ou un dépôt inscrit au bilan", () => {
+    expect(needsTransactionEvidence(transaction({ category: "supplier_advance_payment", amount_ht: -60, vat: 0, amount_ttc: -60 }))).toBe(true);
+    expect(needsTransactionEvidence(transaction({ category: "security_deposit", amount_ht: -700, vat: 0, amount_ttc: -700, invoiceRef: "BAIL-LOCAL" }))).toBe(false);
+  });
 });

@@ -88,6 +88,18 @@ describe("dossier expert-comptable", () => {
     expect(preview.lines.some((item) => item.accountNumber.startsWith("6"))).toBe(false);
   });
 
+  it("comptabilise directement un acompte fournisseur débité au 4091 sans charge ni TVA", () => {
+    const preview = buildAccountingPreview([transaction({ id: "engie-category", label: "ENGIE", category: "supplier_advance_payment", amount_ht: -60, vat: 0, vat_rate: 0, amount_ttc: -60 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "409100", debit: 60 }), expect.objectContaining({ accountNumber: "512100", credit: 60 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("6") || item.accountNumber.startsWith("445"))).toBe(false);
+  });
+
+  it("comptabilise un dépôt de garantie au 275 sans charge", () => {
+    const preview = buildAccountingPreview([transaction({ id: "deposit", label: "Dépôt local", category: "security_deposit", amount_ht: -700, vat: 0, vat_rate: 0, amount_ttc: -700 })], defaultAccountingConfig(), "2026");
+    expect(preview.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "275000", debit: 700 }), expect.objectContaining({ accountNumber: "512100", credit: 700 })]));
+    expect(preview.lines.some((item) => item.accountNumber.startsWith("6"))).toBe(false);
+  });
+
   it("signale les catégories imprécises et les écritures incohérentes", () => {
     const preview = buildAccountingPreview([transaction({ category: "misc", amount_ht: -25 })], defaultAccountingConfig(), "2026");
     expect(preview.anomalies).toEqual(expect.arrayContaining([expect.objectContaining({ code: "UNCATEGORIZED" }), expect.objectContaining({ code: "VAT_MISMATCH" }), expect.objectContaining({ code: "UNBALANCED_ENTRY" })]));

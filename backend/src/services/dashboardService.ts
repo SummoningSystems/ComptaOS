@@ -109,6 +109,9 @@ export async function computeDashboard(requestedYear?: string): Promise<Dashboar
     } else if (nature === "expense_refund") {
       monthlyMap[month].expenses -= txn.amount_ttc;
       accountingExpenses -= txn.amount_ht;
+    } else if (nature === "balance_sheet") {
+      if (txn.amount_ttc < 0) monthlyMap[month].expenses += Math.abs(txn.amount_ttc);
+      else monthlyMap[month].revenue += txn.amount_ttc;
     }
 
     if (nature === "expense") {
