@@ -21,6 +21,7 @@ FALLBACK_CATEGORIES.push(
   { id: "security_deposit", label: "Dépôts et cautionnements versés", account: { number: "275000", label: "Dépôts et cautionnements versés" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
   { id: "unidentified_transaction", label: "Opération à identifier", account: { number: "471000", label: "Compte d’attente - opérations à identifier" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
   { id: "shareholder_personal_expense", label: "Dépense personnelle d’un associé", account: { number: "455100", label: "Associés - comptes courants" }, kind: "expense", accountingNature: "balance_sheet", builtin: true, active: true },
+  { id: "shareholder_current_account_contribution", label: "Apport en compte courant d’associé", account: { number: "455100", label: "Associés - comptes courants" }, kind: "revenue", accountingNature: "balance_sheet", builtin: true, active: true },
 );
 
 FALLBACK_CATEGORIES.push(

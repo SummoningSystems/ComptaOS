@@ -412,6 +412,7 @@ const CATEGORY_COLORS: Record<Category, string> = {
   security_deposit: "bg-cyan-950 text-cyan-300",
   unidentified_transaction: "bg-red-950 text-red-300",
   shareholder_personal_expense: "bg-fuchsia-950 text-fuchsia-300",
+  shareholder_current_account_contribution: "bg-indigo-950 text-indigo-300",
   supplier_advance_refund: "bg-emerald-900 text-emerald-300",
   supplier_compensation: "bg-green-900 text-green-300",
   misc: "bg-gray-700 text-gray-300",
@@ -1237,11 +1238,12 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                 <select value={txn.category} onChange={(e) => handleCategoryChange(txn.id, e.target.value as Category)}
                                   className={`text-xs rounded px-1 py-0.5 border-0 focus:outline-none cursor-pointer ${CATEGORY_COLORS[txn.category] ?? "bg-gray-700 text-gray-300"}`}>
                                   {txn.amount_ttc >= 0 ? <>
+                                    <optgroup label="Financement reçu — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet" && (c.kind === "revenue" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
                                     <optgroup label="Remboursement d'acompte (sans TVA)">{categories.filter((c) => c.id === "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                                    <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                                    <optgroup label="Remboursement d’un mouvement de bilan">{categories.filter((c) => c.accountingNature === "balance_sheet" && c.kind === "expense").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
                                     <optgroup label="Avoir fournisseur — diminue une charge">{categories.filter((c) => c.kind === "expense" && c.accountingNature !== "balance_sheet").map((c) => <option key={c.id} value={c.id}>Avoir · {c.label}</option>)}</optgroup>
-                                    <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
-                                  </> : <><optgroup label="Mouvements de bilan — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
+                                    <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                                  </> : <><optgroup label="Mouvements de bilan — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet" && (c.kind === "expense" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
                                 </select>
                               </td>
                               <td className="px-2 py-1.5">

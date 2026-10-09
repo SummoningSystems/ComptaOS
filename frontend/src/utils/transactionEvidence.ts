@@ -7,5 +7,6 @@ export function hasTransactionEvidence(transaction: Transaction): boolean {
 
 export function needsTransactionEvidence(transaction: Transaction): boolean {
   const isSupplierRefund = transaction.amount_ttc > 0 && (transaction.accountingTreatment === "expense_refund" || transaction.accountingTreatment === "supplier_advance_refund" || transaction.category === "supplier_advance_refund");
-  return transaction.status !== "rejected" && (transaction.amount_ttc < 0 || isSupplierRefund) && !hasTransactionEvidence(transaction);
+  const isShareholderContribution = transaction.amount_ttc > 0 && transaction.category === "shareholder_current_account_contribution";
+  return transaction.status !== "rejected" && (transaction.amount_ttc < 0 || isSupplierRefund || isShareholderContribution) && !hasTransactionEvidence(transaction);
 }

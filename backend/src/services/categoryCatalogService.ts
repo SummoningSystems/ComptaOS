@@ -50,6 +50,7 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("security_deposit", "Dépôts et cautionnements versés", "275000", "Dépôts et cautionnements versés", "expense", "balance_sheet"),
   builtin("unidentified_transaction", "Opération à identifier", "471000", "Compte d’attente - opérations à identifier", "expense", "balance_sheet"),
   builtin("shareholder_personal_expense", "Dépense personnelle d’un associé", "455100", "Associés - comptes courants", "expense", "balance_sheet"),
+  builtin("shareholder_current_account_contribution", "Apport en compte courant d’associé", "455100", "Associés - comptes courants", "revenue", "balance_sheet"),
   builtin("supplier_advance_refund", "Remboursement d'acompte fournisseur", "409100", "Fournisseurs - avances et acomptes versés", "revenue"),
   builtin("supplier_compensation", "Indemnité ou dédommagement reçu", "758000", "Indemnités et autres produits de gestion courante", "revenue"),
   builtin("service_revenue", "Prestations de services facturées", "706000", "Prestations de services", "revenue"),
