@@ -3,6 +3,11 @@ export interface VatSplit {
   amount_ttc: number; // montant TTC (signe = signe de la transaction)
 }
 
+export interface AccountingSplit {
+  category: Category;
+  amount: number; // montant signé, dans le même sens que la transaction bancaire
+}
+
 export interface Transaction {
   id: string;
   date: string;
@@ -11,6 +16,7 @@ export interface Transaction {
   vat: number;
   vat_rate?: number;
   vat_splits?: VatSplit[];
+  accounting_splits?: AccountingSplit[];
   amount_ttc: number;
   currency: string;
   category: Category;

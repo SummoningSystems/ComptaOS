@@ -114,9 +114,12 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const fiscalResult = round(accountingResult + reintegrations - deductions);
   const corporateTaxExpense = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("695")).reduce((sum, line) => sum + line.debit - line.credit, 0));
   const corporateTaxReintegration = round(fiscalValidated.filter((item) => item.kind === "corporate_tax" && item.type === "reintegration").reduce((sum, item) => sum + item.amount, 0));
+  const fiscalPenalties = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("6712")).reduce((sum, line) => sum + line.debit - line.credit, 0));
+  const penaltyReintegration = round(fiscalValidated.filter((item) => item.kind === "fines_penalties" && item.type === "reintegration").reduce((sum, item) => sum + item.amount, 0));
   const lossesApplied = round(fiscalValidated.filter((item) => item.kind === "loss_carryforward").reduce((sum, item) => sum + item.amount, 0)); const fiscalBeforeLoss = round(fiscalResult + lossesApplied);
   const fiscalIssues: string[] = [];
   if (corporateTaxExpense > 0 && Math.abs(corporateTaxExpense - corporateTaxReintegration) > .01) fiscalIssues.push(`L’IS comptabilisé au 695 (${corporateTaxExpense.toFixed(2)} €) n’est pas réintégré pour le même montant.`);
+  if (fiscalPenalties > 0 && Math.abs(fiscalPenalties - penaltyReintegration) > .01) fiscalIssues.push(`Les pénalités fiscales comptabilisées au 6712 (${fiscalPenalties.toFixed(2)} €) doivent être réintégrées pour le même montant.`);
   if (lossesApplied > Math.max(0, fiscalBeforeLoss)) fiscalIssues.push(`Les déficits antérieurs imputés (${lossesApplied.toFixed(2)} €) dépassent le bénéfice fiscal avant imputation (${Math.max(0, fiscalBeforeLoss).toFixed(2)} €).`);
   const automaticTurnover = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("70")).reduce((sum, line) => sum + line.credit - line.debit, 0));
   const taxConfig = getAnnualTaxConfig(period.id); const rawTaxCalculation = calculateCorporateTax(period, fiscalResult, automaticTurnover, taxConfig); const taxCalculation = { ...rawTaxCalculation, ready: rawTaxCalculation.ready && !fiscalIssues.length, warnings: [...rawTaxCalculation.warnings, ...fiscalIssues] };

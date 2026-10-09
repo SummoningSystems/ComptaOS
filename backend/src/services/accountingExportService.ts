@@ -68,7 +68,18 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
     if (transaction.category === "unidentified_transaction") anomalies.push({ severity: "blocking", code: "UNIDENTIFIED_TRANSACTION", message: "Cette opération doit être identifiée et reclassée avant la clôture.", transactionId: transaction.id });
     const advanceAccount = options.advanceAccounts?.[transaction.id];
-    if (nature === "balance_sheet") {
+    if (transaction.accounting_splits?.length) {
+      if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_ACCOUNTING_SPLIT", message: "Une ventilation de paiement fiscal ne doit pas porter de TVA déductible.", transactionId: transaction.id });
+      for (const split of transaction.accounting_splits) {
+        const splitAccount = config.categories[split.category];
+        if (!splitAccount || !validAccount(splitAccount)) {
+          anomalies.push({ severity: "blocking", code: "INVALID_SPLIT_ACCOUNT", message: `Compte absent pour la ventilation ${split.category}.`, transactionId: transaction.id });
+          continue;
+        }
+        lines.push(line(base, splitAccount, `${transaction.label} - ${splitAccount.label}`, Math.abs(split.amount), 0));
+      }
+      lines.push(line(base, config.bank, `${transaction.label} - paiement ventilé`, 0, ttc));
+    } else if (nature === "balance_sheet") {
       const balanceAccount = config.categories[transaction.category];
       if (vat !== 0) anomalies.push({ severity: "blocking", code: "VAT_ON_BALANCE_SHEET_MOVEMENT", message: "Un mouvement de bilan ne doit pas porter de TVA sur le mouvement bancaire sans facture justificative.", transactionId: transaction.id });
       if (transaction.amount_ttc < 0) {

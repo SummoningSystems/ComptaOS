@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "../types/index.js";
-import { computeVatPosition, isVatPayment } from "../services/vatPositionService.js";
+import { computeVatPosition, isVatPayment, vatPaymentAmount } from "../services/vatPositionService.js";
 
 const transaction = (patch: Partial<Transaction>): Transaction => ({ id: "txn", date: "2026-08-01", label: "Opération", amount_ht: 0, vat: 0, amount_ttc: 0, currency: "EUR", category: "misc", account: "main", status: "validated", ...patch });
 
@@ -27,6 +27,15 @@ describe("position de TVA et trésorerie disponible", () => {
 
   it("reconnaît aussi un paiement marqué explicitement", () => {
     expect(isVatPayment(transaction({ amount_ttc: -200, tags: ["vat_payment"] }))).toBe(true);
+  });
+
+  it("exclut la pénalité du montant de TVA payé dans un virement ventilé", () => {
+    const payment = transaction({ amount_ttc: -630, category: "vat_advance_payment", accounting_splits: [
+      { category: "vat_advance_payment", amount: -609 },
+      { category: "tax_penalty", amount: -21 },
+    ] });
+    expect(isVatPayment(payment)).toBe(true);
+    expect(vatPaymentAmount(payment)).toBe(609);
   });
 
   it("ne confond pas un avoir fournisseur avec de la TVA collectée", () => {

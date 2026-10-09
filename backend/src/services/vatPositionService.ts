@@ -15,8 +15,16 @@ export interface VatPosition {
 
 export function isVatPayment(transaction: Transaction): boolean {
   if (transaction.amount_ttc >= 0) return false;
+  if (transaction.category === "vat_advance_payment" || transaction.category === "vat_balance_payment") return true;
+  if (transaction.accounting_splits?.some((split) => split.category === "vat_advance_payment" || split.category === "vat_balance_payment")) return true;
   if (transaction.tags?.some((tag) => tag.toLowerCase() === "vat_payment")) return true;
   return /\b(tva|ca\s*3|ca\s*12|3514|3310)\b/i.test(transaction.label);
+}
+
+export function vatPaymentAmount(transaction: Transaction): number {
+  const vatSplits = transaction.accounting_splits?.filter((split) => split.category === "vat_advance_payment" || split.category === "vat_balance_payment");
+  if (vatSplits?.length) return round2(vatSplits.reduce((sum, split) => sum + Math.abs(split.amount), 0));
+  return isVatPayment(transaction) ? Math.abs(transaction.amount_ttc) : 0;
 }
 
 function simplifiedNextDue(profile: CompanyProfile, now: Date) {
@@ -38,7 +46,7 @@ export function computeVatPosition(transactions: Transaction[], profile: Company
     if (nature === "expense_refund") return sum - Math.abs(transaction.vat);
     return sum;
   }, 0));
-  const payments = round2(valid.filter(isVatPayment).reduce((sum, transaction) => sum + Math.abs(transaction.amount_ttc), 0));
+  const payments = round2(valid.reduce((sum, transaction) => sum + vatPaymentAmount(transaction), 0));
   const opening = Number.isFinite(profile.vatOpeningBalance) ? Math.max(0, Number(profile.vatOpeningBalance)) : 0;
   const netLiability = round2(Math.max(0, opening + collected - deductible - payments));
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);

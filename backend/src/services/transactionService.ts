@@ -7,7 +7,7 @@ import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
 import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
-import { transactionAccountingNature } from "./categoryCatalogService.js";
+import { categoryForcesZeroVat, loadCategoryCatalog } from "./categoryCatalogService.js";
 
 const TXN_DIR = "transactions";
 
@@ -97,6 +97,20 @@ export function validateVatSplits(amountTtc: number, splits: Transaction["vat_sp
   return null;
 }
 
+export function validateAccountingSplits(amountTtc: number, splits: Transaction["accounting_splits"]): string | null {
+  if (splits === undefined || splits.length === 0) return null;
+  if (amountTtc >= 0) return "La ventilation comptable est actuellement réservée aux décaissements";
+  if (splits.length < 2) return "Une ventilation comptable doit contenir au moins deux lignes";
+  const categories = new Map(loadCategoryCatalog().filter((item) => item.active).map((item) => [item.id, item]));
+  for (const split of splits) {
+    if (!categories.has(split.category)) return `Catégorie de ventilation inconnue : ${split.category}`;
+    if (!Number.isFinite(split.amount) || split.amount >= 0) return "Chaque montant ventilé doit être un décaissement strictement négatif";
+  }
+  const total = round2(splits.reduce((sum, split) => sum + split.amount, 0));
+  if (Math.abs(total - round2(amountTtc)) >= 0.01) return "Le total de la ventilation comptable doit correspondre au montant de la transaction";
+  return null;
+}
+
 /** Snap un taux calculé vers le taux légal le plus proche si écart < 0.5 pt */
 function snapVatRate(rate: number): number {
   for (const std of STANDARD_VAT_RATES) {
@@ -119,7 +133,10 @@ function deriveVatRate(txn: Transaction): number {
 }
 
 function normalizeTransaction(txn: Transaction): Transaction {
-  if (transactionAccountingNature(txn.category, txn.amount_ttc, txn.accountingTreatment) === "balance_sheet") {
+  if (txn.accounting_splits?.length) {
+    return { ...txn, vat_rate: 0, amount_ht: round2(txn.amount_ttc), vat: 0, vat_splits: [] };
+  }
+  if (categoryForcesZeroVat(txn.category)) {
     return { ...txn, vat_rate: 0, amount_ht: round2(txn.amount_ttc), vat: 0, vat_splits: [] };
   }
   // Si des splits sont définis, on en déduit HT/TVA/taux effectif
@@ -246,11 +263,11 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   await assertMonthOpen(txn.date);
   if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
   const merged = { ...txn, ...patch };
-  const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits"];
+  const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits", "accounting_splits"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
   // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
   // recalculer silencieusement la TVA à partir d'un ancien taux.
-  let updated = changesAccounting || transactionAccountingNature(merged.category, merged.amount_ttc, merged.accountingTreatment) === "balance_sheet" ? normalizeTransaction(merged) : merged;
+  let updated = changesAccounting || categoryForcesZeroVat(merged.category) ? normalizeTransaction(merged) : merged;
   if (!Object.prototype.hasOwnProperty.call(patch, "reconciled") && shouldAutoReconcilePsd2(updated)) updated = { ...updated, reconciled: true };
   await atomicWriteFile(filePath, yaml.stringify(updated));
   invalidateCache();

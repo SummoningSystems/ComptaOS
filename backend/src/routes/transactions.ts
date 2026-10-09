@@ -5,6 +5,7 @@ import {
   updateTransaction,
   deleteTransaction,
   validateVatSplits,
+  validateAccountingSplits,
 } from "../services/transactionService.js";
 import { Transaction, Category } from "../types/index.js";
 import { autoCommit } from "../services/gitService.js";
@@ -121,6 +122,8 @@ export async function transactionsRoutes(app: FastifyInstance) {
     }
     const vatError = validateVatSplits(txn.amount_ttc, txn.vat_splits);
     if (vatError) return reply.status(400).send({ error: vatError });
+    const accountingError = validateAccountingSplits(txn.amount_ttc, txn.accounting_splits);
+    if (accountingError) return reply.status(400).send({ error: accountingError });
     await saveTransaction(txn);
     const sign = txn.amount_ttc >= 0 ? "+" : "";
     autoCommit(getWorkspaceRoot(), `ajout: ${txn.label} (${sign}${txn.amount_ttc.toFixed(2)}€)`).catch(() => {});
@@ -129,11 +132,14 @@ export async function transactionsRoutes(app: FastifyInstance) {
 
   // PATCH /api/transactions/:id
   app.patch<{ Params: { id: string }; Body: Partial<Transaction> }>( "/:id", async (req, reply) => {
-    if (req.body.vat_splits !== undefined) {
+    if (req.body.vat_splits !== undefined || req.body.accounting_splits !== undefined || req.body.amount_ttc !== undefined) {
       const current = (await loadAllTransactions()).find((transaction) => transaction.id === req.params.id);
       if (!current) return reply.status(404).send({ error: "Transaction introuvable" });
-      const vatError = validateVatSplits(current.amount_ttc, req.body.vat_splits);
+      const amountTtc = req.body.amount_ttc ?? current.amount_ttc;
+      const vatError = validateVatSplits(amountTtc, req.body.vat_splits ?? current.vat_splits);
       if (vatError) return reply.status(400).send({ error: vatError });
+      const accountingError = validateAccountingSplits(amountTtc, req.body.accounting_splits ?? current.accounting_splits);
+      if (accountingError) return reply.status(400).send({ error: accountingError });
     }
     const updated = await updateTransaction(req.params.id, req.body);
     const learned = learnMerchantRule(updated.label, {

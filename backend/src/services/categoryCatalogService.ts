@@ -49,6 +49,9 @@ export const BUILTIN_CATEGORIES: CategoryDefinition[] = [
   builtin("supplier_advance_payment", "Acompte fournisseur versé", "409100", "Fournisseurs - avances et acomptes versés", "expense", "balance_sheet"),
   builtin("security_deposit", "Dépôts et cautionnements versés", "275000", "Dépôts et cautionnements versés", "expense", "balance_sheet"),
   builtin("corporate_tax_payment", "Règlement d’IS déjà comptabilisé", "444000", "État - Impôts sur les bénéfices", "expense", "balance_sheet"),
+  builtin("vat_advance_payment", "Acompte de TVA versé", "445810", "Acomptes - régime simplifié d’imposition", "expense", "balance_sheet"),
+  builtin("vat_balance_payment", "Règlement de TVA à décaisser", "445510", "TVA à décaisser", "expense", "balance_sheet"),
+  builtin("tax_penalty", "Pénalité fiscale non déductible", "671200", "Pénalités et amendes fiscales et pénales"),
   builtin("unidentified_transaction", "Opération à identifier", "471000", "Compte d’attente - opérations à identifier", "expense", "balance_sheet"),
   builtin("shareholder_personal_expense", "Dépense personnelle d’un associé", "455100", "Associés - comptes courants", "expense", "balance_sheet"),
   builtin("shareholder_current_account_contribution", "Apport en compte courant d’associé", "455100", "Associés - comptes courants", "revenue", "balance_sheet"),
@@ -88,6 +91,11 @@ export function transactionAccountingNature(categoryId: string, amountTtc: numbe
   if (treatment) return treatment;
   if (categoryId === "supplier_advance_refund") return "supplier_advance_refund";
   return "revenue";
+}
+
+export function categoryForcesZeroVat(categoryId: string): boolean {
+  const definition = BUILTIN_CATEGORIES.find((category) => category.id === categoryId) ?? customCategories().find((category) => category.id === categoryId);
+  return definition?.accountingNature === "balance_sheet" || categoryId === "tax_penalty";
 }
 
 export function upsertCustomCategory(input: Omit<CategoryDefinition, "builtin">): CategoryDefinition {

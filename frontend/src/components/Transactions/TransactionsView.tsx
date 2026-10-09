@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Transaction, Category, VatSplit } from "../../types";
+import { Transaction, Category, VatSplit, AccountingSplit, CategoryDefinition } from "../../types";
 import { needsTransactionEvidence } from "../../utils/transactionEvidence";
 import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
@@ -300,6 +300,91 @@ function VatSplitDialog({
   );
 }
 
+export function AccountingSplitDialog({
+  txn,
+  categories,
+  onSave,
+  onClose,
+}: {
+  txn: Transaction;
+  categories: CategoryDefinition[];
+  onSave: (id: string, splits: AccountingSplit[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const round2 = (value: number) => Math.round(value * 100) / 100;
+  const initial = txn.accounting_splits?.length
+    ? txn.accounting_splits
+    : [
+        { category: txn.category, amount: txn.amount_ttc },
+        { category: "tax_penalty", amount: 0 },
+      ];
+  const [splits, setSplits] = useState<AccountingSplit[]>(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const total = round2(splits.reduce((sum, split) => sum + split.amount, 0));
+  const remaining = round2(txn.amount_ttc - total);
+  const isBalanced = splits.length >= 2 && splits.every((split) => split.amount < 0) && Math.abs(remaining) < 0.005;
+  const expenseCategories = categories.filter((category) => category.kind === "expense" || category.kind === "both");
+
+  function updateSplit(index: number, patch: Partial<AccountingSplit>) {
+    setSplits((current) => current.map((split, row) => row === index ? { ...split, ...patch } : split));
+    setError("");
+  }
+
+  function fillRemaining(index: number) {
+    const otherTotal = splits.reduce((sum, split, row) => row === index ? sum : sum + split.amount, 0);
+    updateSplit(index, { amount: round2(txn.amount_ttc - otherTotal) });
+  }
+
+  async function save(next: AccountingSplit[]) {
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(txn.id, next);
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "La ventilation comptable n'a pas pu être enregistrée.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Ventilation du paiement fiscal">
+      <div className="w-full max-w-xl rounded-lg border border-vscode-border bg-vscode-panel p-4 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div><h3 className="text-sm font-semibold text-vscode-text">Ventiler le paiement fiscal</h3><p className="mt-1 text-xs text-vscode-muted">{txn.label} · Débit bancaire {Math.abs(txn.amount_ttc).toFixed(2)} €</p></div>
+          <button onClick={onClose} className="text-vscode-muted hover:text-vscode-text" aria-label="Fermer">×</button>
+        </div>
+        <p className="mb-3 rounded border border-blue-900 bg-blue-950/30 px-3 py-2 text-xs text-blue-300">La TVA déductible est forcée à 0. Chaque ligne alimente directement son compte comptable.</p>
+        <div className="space-y-2">
+          {splits.map((split, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <select value={split.category} onChange={(event) => updateSplit(index, { category: event.target.value })} className="min-w-0 flex-1 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs text-vscode-text" aria-label={`Nature ligne ${index + 1}`}>
+                {expenseCategories.map((category) => <option key={category.id} value={category.id}>{category.label} · {category.account.number}</option>)}
+              </select>
+              <LocalizedNumberInput min={0} value={Math.abs(split.amount)} onValueChange={(amount) => updateSplit(index, { amount: round2(-amount) })} className="w-28 rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-right font-mono text-vscode-text" aria-label={`Montant ligne ${index + 1}`} />
+              <span className="text-xs text-vscode-muted">€</span>
+              <button onClick={() => fillRemaining(index)} className="rounded border border-vscode-border px-2 py-1 text-xs text-vscode-muted hover:text-vscode-text">Solde</button>
+              <button onClick={() => setSplits((current) => current.filter((_, row) => row !== index))} disabled={splits.length <= 2} className="px-1 text-vscode-muted hover:text-red-400 disabled:opacity-30" aria-label={`Supprimer la ligne ${index + 1}`}>×</button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button onClick={() => setSplits((current) => [...current, { category: "tax_penalty", amount: remaining < 0 ? remaining : 0 }])} className="rounded border border-vscode-border px-2 py-1 text-xs text-vscode-muted hover:text-vscode-text">+ Ajouter une ligne</button>
+          <span className={`text-xs font-mono ${isBalanced ? "text-green-400" : "text-orange-400"}`}>{isBalanced ? "Total équilibré" : `Reste ${Math.abs(remaining).toFixed(2)} €`}</span>
+        </div>
+        {error && <p role="alert" className="mt-3 text-xs text-red-400">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          {!!txn.accounting_splits?.length && <button onClick={() => void save([])} disabled={saving} className="mr-auto rounded px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/20">Supprimer la ventilation</button>}
+          <button onClick={onClose} disabled={saving} className="rounded px-3 py-1.5 text-xs text-vscode-muted">Annuler</button>
+          <button onClick={() => void save(splits)} disabled={!isBalanced || saving} className="rounded bg-vscode-accent px-3 py-1.5 text-xs text-white disabled:opacity-40">{saving ? "Enregistrement…" : "Enregistrer la ventilation"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Smart Catégoriser ─────────────────────────────────────────────────────────
 
 interface SmartSuggestion {
@@ -459,6 +544,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
   const [smartApplying, setSmartApplying] = useState(false);
   const [smartSelected, setSmartSelected] = useState<Set<string>>(new Set());
   const [vatSplitTransaction, setVatSplitTransaction] = useState<Transaction | null>(null);
+  const [accountingSplitTransaction, setAccountingSplitTransaction] = useState<Transaction | null>(null);
   const [vatSaveMessage, setVatSaveMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [ocrReview, setOcrReview] = useState<{ transaction: Transaction; proposal: ReceiptOcrProposal } | null>(null);
@@ -521,10 +607,10 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
         : selectedCategory?.accountingNature === "balance_sheet" ? undefined
           : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
       : current?.accountingTreatment;
-    const withoutVat = category === "supplier_advance_refund" || selectedCategory?.accountingNature === "balance_sheet";
+    const withoutVat = category === "supplier_advance_refund" || category === "tax_penalty" || selectedCategory?.accountingNature === "balance_sheet";
     const patch = withoutVat && current
-      ? { category, accountingTreatment, vat_rate: 0, vat: 0, amount_ht: current.amount_ttc, vat_splits: [] }
-      : { category, accountingTreatment };
+      ? { category, accountingTreatment, vat_rate: 0, vat: 0, amount_ht: current.amount_ttc, vat_splits: [], accounting_splits: [] }
+      : { category, accountingTreatment, accounting_splits: [] };
     const updated = await updateTransaction(id, patch);
     setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
     setAttachmentMessage({ type: "success", text: "Catégorie enregistrée. ComptaOS mémorisera ce fournisseur pour les prochaines transactions similaires." });
@@ -565,6 +651,15 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
     setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
     setVatSplitTransaction(updated);
     setVatSaveMessage({ id, type: "success", text: vat_splits.length >= 2 ? "Ventilation TVA enregistrée" : "Ventilation supprimée" });
+  }
+
+  async function handleAccountingSplitsChange(id: string, accounting_splits: AccountingSplit[]) {
+    const current = transactions.find((transaction) => transaction.id === id);
+    if (!current) throw new Error("Transaction introuvable");
+    const updated = await updateTransaction(id, { accounting_splits, vat_rate: 0, vat: 0, amount_ht: current.amount_ttc, vat_splits: [] });
+    setTransactions((previous) => previous.map((transaction) => transaction.id === id ? updated : transaction));
+    setAccountingSplitTransaction(updated);
+    setVatSaveMessage({ id, type: "success", text: accounting_splits.length ? "Ventilation comptable enregistrée" : "Ventilation supprimée" });
   }
 
   async function handleTagsChange(id: string, tags: string[]) {
@@ -848,6 +943,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
           onClose={() => setVatSplitTransaction(null)}
         />
       )}
+      {accountingSplitTransaction && <AccountingSplitDialog txn={accountingSplitTransaction} categories={categories} onSave={handleAccountingSplitsChange} onClose={() => setAccountingSplitTransaction(null)} />}
       {showAddModal && (
         <AddTransactionModal
           onClose={() => setShowAddModal(false)}
@@ -1245,6 +1341,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
                                     <optgroup label="Recette ou indemnité réelle">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "revenue" || c.kind === "both") && c.id !== "supplier_advance_refund").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
                                   </> : <><optgroup label="Mouvements de bilan — sans TVA">{categories.filter((c) => c.accountingNature === "balance_sheet" && (c.kind === "expense" || c.kind === "both")).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup><optgroup label="Catégories de dépenses">{categories.filter((c) => c.accountingNature !== "balance_sheet" && (c.kind === "both" || c.kind === "expense" || c.id === txn.category)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup></>}
                                 </select>
+                                {(txn.accounting_splits?.length || ["vat_advance_payment", "vat_balance_payment", "tax_penalty"].includes(txn.category)) && txn.amount_ttc < 0 && <button onClick={() => setAccountingSplitTransaction(txn)} className={`mt-1 block rounded border px-2 py-0.5 text-[9px] ${txn.accounting_splits?.length ? "border-blue-500 text-blue-300" : "border-vscode-border text-vscode-muted hover:text-vscode-text"}`} title="Ventiler un paiement entre TVA, pénalités ou autres comptes">{txn.accounting_splits?.length ? `${txn.accounting_splits.length} lignes comptables` : "Ventiler le paiement"}</button>}
                               </td>
                               <td className="px-2 py-1.5">
                                 <TagEditor tags={txn.tags ?? []} allTags={allTags} onChange={(tags) => handleTagsChange(txn.id, tags)} />

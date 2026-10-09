@@ -18,6 +18,7 @@ import {
   loadAllTransactions,
   saveTransaction,
   updateTransaction,
+  validateAccountingSplits,
   validateVatSplits,
 } from "../services/transactionService.js";
 
@@ -139,6 +140,26 @@ describe("transactionService persistence", () => {
     expect(validateVatSplits(-87.59, [
       { rate: 20, amount_ttc: -87.59 },
     ])).toBeNull();
+  });
+
+  it("valide une ventilation comptable qui couvre exactement le paiement", () => {
+    expect(validateAccountingSplits(-630, [
+      { category: "vat_advance_payment", amount: -609 },
+      { category: "tax_penalty", amount: -21 },
+    ])).toBeNull();
+    expect(validateAccountingSplits(-630, [
+      { category: "vat_advance_payment", amount: -609 },
+      { category: "tax_penalty", amount: -20 },
+    ])).toContain("total");
+  });
+
+  it("force la TVA à zéro sur un paiement fiscal ventilé", async () => {
+    await saveTransaction(transaction({ amount_ttc: -630, amount_ht: -525, vat: -105 }));
+    const updated = await updateTransaction("txn_test", { accounting_splits: [
+      { category: "vat_advance_payment", amount: -609 },
+      { category: "tax_penalty", amount: -21 },
+    ] });
+    expect(updated).toMatchObject({ amount_ht: -630, vat: 0, vat_rate: 0, vat_splits: [] });
   });
 
   it("met a jour une transaction PSD2 dont le nom de fichier contient la date", async () => {

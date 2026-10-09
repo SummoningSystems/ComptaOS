@@ -61,7 +61,7 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
         : selectedCategory?.accountingNature === "balance_sheet" ? undefined
           : selectedCategory?.kind === "expense" ? "expense_refund" as const : "revenue" as const
       : undefined;
-    const effectiveVatRate = category === "supplier_advance_refund" || selectedCategory?.accountingNature === "balance_sheet" ? 0 : vatRate;
+    const effectiveVatRate = category === "supplier_advance_refund" || category === "tax_penalty" || selectedCategory?.accountingNature === "balance_sheet" ? 0 : vatRate;
     const effectiveVatFactor = effectiveVatRate / 100;
     const effectiveAmountHt = amount_ttc / (1 + effectiveVatFactor);
     const effectiveVat = amount_ttc - effectiveAmountHt;
@@ -176,7 +176,7 @@ export function AddTransactionModal({ onClose, onSave }: Props) {
               <label className="block text-[10px] text-vscode-muted mb-0.5">Catégorie</label>
               <select
                 value={category}
-                onChange={(e) => { const next = e.target.value as Category; setCategory(next); const definition = categories.find((item) => item.id === next); if (next === "supplier_advance_refund" || definition?.accountingNature === "balance_sheet") setVatRate(0); }}
+                onChange={(e) => { const next = e.target.value as Category; setCategory(next); const definition = categories.find((item) => item.id === next); if (next === "supplier_advance_refund" || next === "tax_penalty" || definition?.accountingNature === "balance_sheet") setVatRate(0); }}
                 className="w-full bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
               >
                 {positiveAmount ? <>

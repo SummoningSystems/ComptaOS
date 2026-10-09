@@ -110,6 +110,25 @@ describe("dossier expert-comptable", () => {
     expect(preview.anomalies).not.toContainEqual(expect.objectContaining({ code: "VAT_ON_BALANCE_SHEET_MOVEMENT" }));
   });
 
+  it("ventile un acompte de TVA et sa pénalité dans un seul débit bancaire", () => {
+    const preview = buildAccountingPreview([transaction({
+      id: "vat-installment", label: "ACOTVA/072026", category: "vat_advance_payment",
+      amount_ht: -630, vat: 0, vat_rate: 0, amount_ttc: -630,
+      accounting_splits: [
+        { category: "vat_advance_payment", amount: -609 },
+        { category: "tax_penalty", amount: -21 },
+      ],
+    })], defaultAccountingConfig(), "2026");
+    expect(preview.lines.filter((line) => line.transactionId === "vat-installment")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountNumber: "445810", debit: 609, credit: 0 }),
+      expect.objectContaining({ accountNumber: "671200", debit: 21, credit: 0 }),
+      expect.objectContaining({ accountNumber: "512100", debit: 0, credit: 630 }),
+    ]));
+    expect(preview.totalDebit).toBe(630);
+    expect(preview.totalCredit).toBe(630);
+    expect(preview.anomalies.filter((item) => item.severity === "blocking")).toEqual([]);
+  });
+
 
   it("place une opération inconnue au 471 et bloque la clôture", () => {
     const preview = buildAccountingPreview([transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, vat_rate: 0, amount_ttc: -4.76 })], defaultAccountingConfig(), "2026");

@@ -84,6 +84,19 @@ describe("clôture annuelle par période datée", () => {
     expect(snapshot.taxCalculation.ready).toBe(false);
   });
 
+  it("bloque les pénalités fiscales tant qu'elles ne sont pas réintégrées", () => {
+    const snapshot = buildAnnualClosingSnapshot(period, [transaction({
+      id: "vat-penalty", label: "ACOTVA/072026", category: "vat_advance_payment",
+      amount_ht: -630, vat: 0, amount_ttc: -630,
+      accounting_splits: [
+        { category: "vat_advance_payment", amount: -609 },
+        { category: "tax_penalty", amount: -21 },
+      ],
+    })]);
+    expect(snapshot.fiscalSummary.issues[0]).toContain("pénalités fiscales");
+    expect(snapshot.steps).toContainEqual(expect.objectContaining({ id: "fiscal-adjustments", status: "blocked" }));
+  });
+
   it("bloque la clôture tant qu'une opération reste au compte d'attente 471", () => {
     const snapshot = buildAnnualClosingSnapshot(period, [transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, amount_ttc: -4.76, invoiceRef: "Carte du 03/03 à identifier" })]);
     expect(snapshot.transactionSummary.unidentified).toBe(1);
