@@ -13,7 +13,7 @@ export interface FilingPackage {
   form2033C: { fixedAssets: Array<{ label: string; openingGross: number; increases: number; decreases: number; closingGross: number; openingDepreciation: number; depreciationCharge: number; depreciationDecrease: number; closingDepreciation: number; closingNet: number }>; capitalGains: { saleProceeds: number; netBookValueDisposed: number; netGain: number } };
   form2033D: { provisions: Array<{ label: string; amount: number }>; lossCarryforwards: number };
   form2033E: { turnover: number; production: number; externalConsumption: number; valueAdded: number; taxes: number; wages: number; socialCharges: number; depreciation: number; averageEmployees: number | null };
-  form2033F: { capital: number; owners: Array<{ id: string; kind: "person" | "entity"; name: string; ownershipPercent: number | null; shareCount: number | null; address: string; birthDate: string; birthPlace: string; legalForm: string; siren: string }>; ownershipTotal: number };
+  form2033F: { capital: number; owners: Array<{ id: string; kind: "person" | "entity"; name: string; ownershipPercent: number | null; shareCount: number | null; address: string; birthDate: string; birthPlace: string; legalForm: string; siren: string }>; ownershipTotal: number; totalShares: number };
   form2033G: { subsidiaries: Array<{ id: string; name: string; ownershipPercent: number | null; shareCount: number | null; address: string; postalCode: string; city: string; country: string; legalForm: string; siren: string }> };
 }
 
