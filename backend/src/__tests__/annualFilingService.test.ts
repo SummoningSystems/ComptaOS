@@ -44,4 +44,21 @@ describe("dossier final 2065 et 2033-C à G", () => {
     expect(pack.missing).toContain("Cohérence entre le nombre de titres et les pourcentages de détention (2033-F)");
     expect(pack.ready).toBe(false);
   });
+
+  it("accepte 99,99 % quand trois tiers égaux sont arrondis à 33,33 %", () => {
+    platform.relations = [
+      { id: "owner-1", fromId: "person", toId: "entity", type: "shareholder", ownershipPercent: 33.33, shareCount: 3000 },
+      { id: "owner-2", fromId: "person", toId: "entity", type: "shareholder", ownershipPercent: 33.33, shareCount: 3000 },
+      { id: "owner-3", fromId: "person", toId: "entity", type: "shareholder", ownershipPercent: 33.33, shareCount: 3000 },
+    ];
+    const pack = buildAnnualFilingPackage({
+      period,
+      openingBalance: [], balances: [], lines: [],
+      statements: { balanceSheet: { totalAssets: 0, totalLiabilities: 0, difference: 0 }, fiscalTable: { fields: [] } },
+      tax: { turnover: 0, taxableBase: 0, reducedBase: 0, normalBase: 0, grossTax: 0, taxCredits: 0, netTax: 0, prepayments: 0, balance: 0 },
+    });
+    expect(pack.form2033F).toMatchObject({ ownershipTotal: 99.99, totalShares: 9000 });
+    expect(pack.missing).not.toContain("Répartition du capital à 100 % (actuellement 99.99 %)");
+    expect(pack.missing).not.toContain("Cohérence entre le nombre de titres et les pourcentages de détention (2033-F)");
+  });
 });
