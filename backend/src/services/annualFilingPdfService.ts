@@ -68,7 +68,7 @@ function fill2065(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
 function fill2033A(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const { identity, form2033C } = input.package, bs = input.statements.balanceSheet;
   const dy = -1.5;
-  header(page, font, identity.name, 135, 743); write(page, font, identity.address, 135, 729, 240, 8); siretDigits(page, font, identity.siret, 93, 703, 15.03); write(page, font, months(input.period.startDate, input.period.endDate), 180, 690, 20, 9); boxedDate(page, font, frDate(input.period.endDate), 484, 655.5, 9.75);
+  header(page, font, identity.name, 135, 743); write(page, font, identity.address, 135, 729, 240, 8); siretDigits(page, font, identity.siret, 93, 703, 15.03); write(page, font, months(input.period.startDate, input.period.endDate), 180, 690, 20, 9); centeredDigitsInCells(page, font, frDate(input.period.endDate), [480.689, 491.615, 502.541, 513.467, 524.393, 535.319, 546.245, 557.171, 568.096], 657, 5);
   const fixed = new Map(form2033C.fixedAssets.map((row) => [row.code, row]));
   const fixedRows = [{ key: "immaterial", y: 601 }, { key: "tangible", y: 586 }, { key: "financial", y: 571 }];
   for (const row of fixedRows) { const item = fixed.get(row.key); if (!item) continue; right(page, font, item.closingGross, 371, row.y + dy); right(page, font, item.closingDepreciation, 478, row.y + dy); right(page, font, item.closingGross - item.closingDepreciation, 565, row.y + dy); }
