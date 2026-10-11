@@ -83,7 +83,7 @@ function fill2033A(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
 
 function fill2033B(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const dy = -1.5;
-  header(page, font, input.package.identity.name, 298, 783); centeredDigitsInCells(page, font, frDate(input.period.endDate), [440.307, 448.574, 456.842, 465.109, 473.377, 481.644, 489.911, 498.179, 506.446], 762.5, 7);
+  header(page, font, input.package.identity.name, 298, 783); centeredDigitsInCells(page, font, frDate(input.period.endDate), [440.307, 448.574, 456.842, 465.109, 473.377, 481.644, 489.911, 498.179, 506.446], 764.5, 5);
   const pnlY: Record<string, number> = { "210": 751, "214": 739, "218": 726, "222": 714, "224": 702, "226": 690, "230": 679, "232": 667, "234": 656, "236": 646, "238": 635, "240": 623, "242": 612, "244": 600, "250": 588, "252": 576, "254": 563, "256": 551, "262": 539, "264": 515, "270": 502, "280": 490, "294": 490, "290": 479, "300": 464, "306": 434, "310": 422 };
   for (const [code, y] of Object.entries(pnlY)) right(page, font, at(input.statements.profitAndLoss.fields, code), 504, y + dy);
   const fiscal = input.statements.fiscalTable.fields; right(page, font, at(fiscal, "312"), 424, 409 + dy); right(page, font, at(fiscal, "314"), 504, 409 + dy); right(page, font, at(fiscal, "330"), 424, 345 + dy); right(page, font, at(fiscal, "344"), 343, 206 + dy); right(page, font, at(fiscal, "352"), 424, 80 + dy); right(page, font, at(fiscal, "354"), 504, 80 + dy); right(page, font, at(fiscal, "360"), 504, 56 + dy); right(page, font, at(fiscal, "370"), 424, 44 + dy); right(page, font, at(fiscal, "372"), 504, 44 + dy);
