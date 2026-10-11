@@ -36,7 +36,6 @@ const fit = (font: PDFFont, value: string, maxWidth: number, preferred = 9) => {
 const write = (page: PDFPage, font: PDFFont, value: unknown, x: number, y: number, maxWidth = 250, size = 9) => { const text = String(value ?? "").trim(); if (text) page.drawText(text, { x, y, size: fit(font, text, maxWidth, size), font, color: rgb(0, 0, 0), maxWidth }); };
 const right = (page: PDFPage, font: PDFFont, value: number, xRight: number, y: number, size = 9) => { const text = amount(value); if (text) page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color: rgb(0, 0, 0) }); };
 const rightText = (page: PDFPage, font: PDFFont, value: unknown, xRight: number, y: number, size = 9) => { const text = String(value ?? "").trim(); if (text) page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color: rgb(0, 0, 0) }); };
-const watermark = (page: PDFPage, font: PDFFont) => page.drawText("DOSSIER DE SAISIE CONTROLE - TRANSMISSION NON EFFECTUEE", { x: 113, y: 12, size: 6, font, color: rgb(.65, .12, .12) });
 const header = (page: PDFPage, font: PDFFont, name: string, x: number, y: number) => write(page, font, name, x, y, 220, 9);
 const siretDigits = (page: PDFPage, font: PDFFont, value: string, x: number, y: number, step = 15) => [...value.replace(/\D/g, "")].forEach((digit, index) => write(page, font, digit, x + index * step, y, 8, 9));
 const centeredDigitsInCells = (page: PDFPage, font: PDFFont, value: string, boundaries: number[], y: number, size = 8) => {
@@ -84,7 +83,7 @@ function fill2033A(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
 
 function fill2033B(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const dy = -1.5;
-  header(page, font, input.package.identity.name, 298, 783); boxedDate(page, font, frDate(input.period.endDate), 447, 762.5, 9.5);
+  header(page, font, input.package.identity.name, 298, 783); centeredDigitsInCells(page, font, frDate(input.period.endDate), [440.307, 448.574, 456.842, 465.109, 473.377, 481.644, 489.911, 498.179, 506.446], 762.5, 7);
   const pnlY: Record<string, number> = { "210": 751, "214": 739, "218": 726, "222": 714, "224": 702, "226": 690, "230": 679, "232": 667, "234": 656, "236": 646, "238": 635, "240": 623, "242": 612, "244": 600, "250": 588, "252": 576, "254": 563, "256": 551, "262": 539, "264": 515, "270": 502, "280": 490, "294": 490, "290": 479, "300": 464, "306": 434, "310": 422 };
   for (const [code, y] of Object.entries(pnlY)) right(page, font, at(input.statements.profitAndLoss.fields, code), 504, y + dy);
   const fiscal = input.statements.fiscalTable.fields; right(page, font, at(fiscal, "312"), 424, 409 + dy); right(page, font, at(fiscal, "314"), 504, 409 + dy); right(page, font, at(fiscal, "330"), 424, 345 + dy); right(page, font, at(fiscal, "344"), 343, 206 + dy); right(page, font, at(fiscal, "352"), 424, 80 + dy); right(page, font, at(fiscal, "354"), 504, 80 + dy); right(page, font, at(fiscal, "360"), 504, 56 + dy); right(page, font, at(fiscal, "370"), 424, 44 + dy); right(page, font, at(fiscal, "372"), 504, 44 + dy);
@@ -133,9 +132,9 @@ function fill2033G(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
 }
 
 export async function generateAnnualFilingPdf(input: AnnualFilingPdfInput) {
-  const source2065 = await PDFDocument.load(template("2065-sd-2026.pdf")), source2033 = await PDFDocument.load(template("2033-sd-2026.pdf")); const output = await PDFDocument.create(); const font = await output.embedFont(StandardFonts.Helvetica); const bold = await output.embedFont(StandardFonts.HelveticaBold);
+  const source2065 = await PDFDocument.load(template("2065-sd-2026.pdf")), source2033 = await PDFDocument.load(template("2033-sd-2026.pdf")); const output = await PDFDocument.create(); const font = await output.embedFont(StandardFonts.Helvetica);
   const pages2065 = await output.copyPages(source2065, [0, 1]); pages2065.forEach((page) => output.addPage(page)); const pages2033 = await output.copyPages(source2033, [0, 1, 2, 3, 4]); pages2033.forEach((page) => output.addPage(page));
   const people = input.package.form2033F.owners.filter((owner) => owner.kind === "person"), chunks = Array.from({ length: Math.max(1, Math.ceil(people.length / 2)) }, (_, i) => people.slice(i * 2, i * 2 + 2)); for (let i = 0; i < chunks.length; i++) { const [page] = await output.copyPages(source2033, [5]); output.addPage(page); fill2033F(page, font, input, chunks[i], i, chunks.length); }
   const [pageG] = await output.copyPages(source2033, [6]); output.addPage(pageG);
-  const pages = output.getPages(); fill2065(pages[0], font, input); fill2033A(pages[2], font, input); fill2033B(pages[3], font, input); fill2033C(pages[4], font, input); fill2033D(pages[5], font, input); fill2033E(pages[6], font, input); fill2033G(pageG, font, input); pages.forEach((page) => watermark(page, bold)); output.setTitle(`Liasse fiscale 2065 et 2033 - ${input.package.identity.name}`); output.setSubject("Dossier de saisie contrôlé - transmission non effectuée"); return output.save();
+  const pages = output.getPages(); fill2065(pages[0], font, input); fill2033A(pages[2], font, input); fill2033B(pages[3], font, input); fill2033C(pages[4], font, input); fill2033D(pages[5], font, input); fill2033E(pages[6], font, input); fill2033G(pageG, font, input); output.setTitle(`Liasse fiscale 2065 et 2033 - ${input.package.identity.name}`); output.setSubject("Dossier de saisie contrôlé - transmission non effectuée"); return output.save();
 }
