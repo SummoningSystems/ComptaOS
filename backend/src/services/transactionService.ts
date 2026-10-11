@@ -6,6 +6,7 @@ import { Transaction } from "../types/index.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { atomicWriteFile } from "./atomicFile.js";
 import { assertMonthOpen } from "./closingService.js";
+import { assertAnnualDateOpen } from "./annualClosingService.js";
 import { shouldAutoReconcilePsd2 } from "./reconciliationService.js";
 import { categoryForcesZeroVat, loadCategoryCatalog } from "./categoryCatalogService.js";
 
@@ -223,6 +224,7 @@ export async function loadAllTransactions(): Promise<Transaction[]> {
 /** Sauvegarde une transaction dans un fichier YAML. */
 export async function saveTransaction(txn: Transaction): Promise<void> {
   await assertMonthOpen(txn.date);
+  assertAnnualDateOpen(txn.date);
   const dir = txnDir();
   await fs.mkdir(dir, { recursive: true });
   const normalized = normalizeTransaction(txn);
@@ -261,7 +263,9 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   const content = await fs.readFile(filePath, "utf-8");
   const txn = yaml.parse(content) as Transaction;
   await assertMonthOpen(txn.date);
+  assertAnnualDateOpen(txn.date);
   if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
+  if (patch.date && patch.date !== txn.date) assertAnnualDateOpen(patch.date);
   const merged = { ...txn, ...patch };
   const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits", "accounting_splits"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
@@ -279,6 +283,7 @@ export async function deleteTransaction(id: string): Promise<void> {
   const filePath = await findTransactionFile(id);
   const txn = yaml.parse(await fs.readFile(filePath, "utf-8")) as Transaction;
   await assertMonthOpen(txn.date);
+  assertAnnualDateOpen(txn.date);
   await fs.unlink(filePath);
   invalidateCache();
 }

@@ -6,7 +6,7 @@ import type { Transaction } from "../types/index.js";
 
 const workspace = vi.hoisted(() => ({ root: "" }));
 vi.mock("../services/fileSystem.js", () => ({ getWorkspaceRoot: () => workspace.root }));
-import { buildAnnualClosingSnapshot, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, validateOpeningBalance, type FiscalPeriod } from "../services/annualClosingService.js";
+import { assertAnnualDateOpen, buildAnnualClosingSnapshot, buildCarryForwardBalance, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, validateOpeningBalance, type FiscalPeriod } from "../services/annualClosingService.js";
 import { createFiscalAdjustment, saveFiscalReview, validateFiscalAdjustment } from "../services/annualFiscalService.js";
 import { createInventoryEntry, validateInventoryEntry } from "../services/annualInventoryService.js";
 
@@ -19,6 +19,19 @@ describe("clôture annuelle par période datée", () => {
 
   it("rejette une balance d’ouverture déséquilibrée", () => {
     expect(() => validateOpeningBalance([{ id: "1", accountNumber: "512000", accountLabel: "Banque", debit: 100, credit: 0 }])).toThrow("déséquilibrée");
+  });
+
+  it("reporte uniquement les comptes de bilan, affecte le résultat puis verrouille la période", () => {
+    const lines = buildCarryForwardBalance({ accountingSummary: { balances: [
+      { accountNumber: "101000", accountLabel: "Capital", balance: -900 },
+      { accountNumber: "512000", accountLabel: "Banque", balance: 1400 },
+      { accountNumber: "706000", accountLabel: "Prestations", balance: -500 },
+    ] }, fiscalSummary: { accountingResult: 500 } } as any);
+    expect(lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountNumber: "512000", debit: 1400 }), expect.objectContaining({ accountNumber: "101000", credit: 900 }), expect.objectContaining({ accountNumber: "120000", credit: 500 })]));
+    expect(lines.some((line) => line.accountNumber === "706000")).toBe(false);
+    saveAnnualLock(period, { lockHash: "abc", archiveFile: "archives/annual-closing/test.zip" });
+    expect(() => assertAnnualDateOpen("2026-03-01")).toThrow("verrouillé");
+    expect(() => assertAnnualDateOpen("2026-10-01")).not.toThrow();
   });
 
   it("utilise les bornes exactes et conserve un verrou fiscal final", () => {

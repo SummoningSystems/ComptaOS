@@ -4,12 +4,13 @@ import { atomicWriteFileSync } from "./atomicFile.js";
 import { getWorkspaceRoot } from "./fileSystem.js";
 import { needsTransactionEvidence } from "./transactionEvidenceService.js";
 import { inventoryAccountingLines, listInventoryEntries } from "./annualInventoryService.js";
-import { buildAccountingPreview, type AccountingLine } from "./accountingExportService.js";
+import { buildAccountingPreview, type AccountingLine, type AccountingPreview } from "./accountingExportService.js";
 import { loadAccountingConfig } from "./settingsService.js";
 import { loadPortfolioAccountingLines } from "./portfolioJournalService.js";
 import { getFiscalReview, listFiscalAdjustments } from "./annualFiscalService.js";
 import { buildSimplifiedStatements, calculateCorporateTax, getAnnualTaxConfig } from "./annualTaxService.js";
 import { buildAnnualFilingPackage, getAnnualFilingConfig } from "./annualFilingService.js";
+import { buildEfiGuide, buildTdfcPreparation, getEdiPartnerConfig, getGovernanceConfig, listTaxTransmissions } from "./annualComplianceService.js";
 import type { Transaction } from "../types/index.js";
 
 export type ProfitTaxRegime = "simplified" | "normal" | "unknown";
@@ -31,6 +32,10 @@ export interface AnnualClosingRecord {
   profitTaxRegime: ProfitTaxRegime;
   openingBalance: OpeningBalanceLine[];
   review: AnnualReview;
+  lockedAt?: string;
+  lockHash?: string;
+  archiveFile?: string;
+  carriedForwardTo?: string;
   updatedAt: string;
 }
 export interface AnnualClosingStep { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number }
@@ -58,6 +63,24 @@ function persist(period: FiscalPeriod, update: (record: AnnualClosingRecord) => 
   const records = loadStore(); const index = records.findIndex((record) => record.periodId === period.id); const record = index >= 0 ? records[index] : getAnnualClosingRecord(period);
   record.startDate = period.startDate; record.endDate = period.endDate; record.label = period.label?.trim() || record.label; update(record); record.updatedAt = new Date().toISOString();
   if (index >= 0) records[index] = record; else records.push(record); saveStore(records); return record;
+}
+
+export function assertAnnualPeriodOpen(period: FiscalPeriod) {
+  if (getAnnualClosingRecord(period).lockedAt) throw new Error(`L’exercice clos le ${period.endDate} est verrouillé. Crée une correction traçable au lieu de modifier directement ses données.`);
+}
+
+export function assertAnnualDateOpen(date: string) {
+  const locked = loadStore().find((record) => record.lockedAt && date >= record.startDate && date <= record.endDate);
+  if (locked) throw new Error(`L’exercice ${locked.label} est verrouillé : cette opération ne peut plus être modifiée directement.`);
+}
+
+export function saveAnnualLock(period: FiscalPeriod, input: { lockHash: string; archiveFile: string; carriedForwardTo?: string }) {
+  return persist(period, (record) => {
+    record.lockedAt = new Date().toISOString();
+    record.lockHash = input.lockHash;
+    record.archiveFile = input.archiveFile;
+    record.carriedForwardTo = input.carriedForwardTo;
+  });
 }
 
 export function saveAnnualSetup(period: FiscalPeriod, profitTaxRegime: ProfitTaxRegime) {
@@ -94,6 +117,19 @@ function addMonths(dateValue: string, months: number) {
 }
 function endOfMonth(dateValue: string) { const [year, month] = dateValue.split("-").map(Number); return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); }
 
+export function buildAnnualAccountingPreview(period: FiscalPeriod, transactions: Transaction[]): AccountingPreview {
+  const record = getAnnualClosingRecord(period);
+  const openingLines: AccountingLine[] = record.openingBalance.map((line, index) => ({ journalCode: "AN", journalLabel: "À nouveaux", entryNumber: `${period.id}-AN-000001`, entryDate: period.startDate, accountNumber: line.accountNumber, accountLabel: line.accountLabel, pieceRef: "BALANCE-OUVERTURE", pieceDate: period.startDate, label: `À nouveau - ${line.accountLabel}`, debit: line.debit, credit: line.credit, transactionId: `opening:${index + 1}` }));
+  return buildAccountingPreview(transactions, loadAccountingConfig(), { startDate: period.startDate, endDate: period.endDate, label: period.id }, { extraLines: [...openingLines, ...loadPortfolioAccountingLines(), ...inventoryAccountingLines(period.id)] });
+}
+
+export function buildCarryForwardBalance(snapshot: ReturnType<typeof buildAnnualClosingSnapshot>): OpeningBalanceLine[] {
+  const retained = snapshot.accountingSummary.balances.filter((line) => /^[1-5]/.test(line.accountNumber) && !/^(120|129)/.test(line.accountNumber) && Math.abs(line.balance) > .009).map((line, index) => ({ id: `carry_${index + 1}`, accountNumber: line.accountNumber, accountLabel: line.accountLabel, debit: line.balance > 0 ? round(line.balance) : 0, credit: line.balance < 0 ? round(-line.balance) : 0 }));
+  const result = round(snapshot.fiscalSummary.accountingResult);
+  if (Math.abs(result) > .009) retained.push({ id: "carry_result", accountNumber: result >= 0 ? "120000" : "129000", accountLabel: result >= 0 ? "Résultat de l’exercice (bénéfice)" : "Résultat de l’exercice (perte)", debit: result < 0 ? -result : 0, credit: result > 0 ? result : 0 });
+  return validateOpeningBalance(retained);
+}
+
 export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: Transaction[]) {
   const record = getAnnualClosingRecord(period);
   const inventoryEntries = listInventoryEntries(period.id);
@@ -101,8 +137,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const inventoryPosted = inventoryEntries.filter((entry) => entry.status !== "draft");
   const inventoryDebit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.debit, 0));
   const inventoryCredit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.credit, 0));
-  const openingLines: AccountingLine[] = record.openingBalance.map((line, index) => ({ journalCode: "AN", journalLabel: "À nouveaux", entryNumber: `${period.id}-AN-000001`, entryDate: period.startDate, accountNumber: line.accountNumber, accountLabel: line.accountLabel, pieceRef: "BALANCE-OUVERTURE", pieceDate: period.startDate, label: `À nouveau - ${line.accountLabel}`, debit: line.debit, credit: line.credit, transactionId: `opening:${index + 1}` }));
-  const accounting = buildAccountingPreview(transactions, loadAccountingConfig(), { startDate: period.startDate, endDate: period.endDate, label: period.id }, { extraLines: [...openingLines, ...loadPortfolioAccountingLines(), ...inventoryAccountingLines(period.id)] });
+  const accounting = buildAnnualAccountingPreview(period, transactions);
   const accountingBlockers = accounting.anomalies.filter((item) => item.severity === "blocking");
   const currentPeriodLines = accounting.lines.filter((line) => line.journalCode !== "AN");
   const charges = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("6")).reduce((sum, line) => sum + line.debit - line.credit, 0));
@@ -155,11 +190,23 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
     { id: "statutory-output", label: "Comptes annuels et liasse", status: filingPackage.ready && taxCalculation.ready ? "done" : "blocked", detail: filingPackage.missing.length ? `Complète la fiche de dépôt : ${filingPackage.missing[0]}` : filingPackage.unreviewed.length ? `${filingPackage.unreviewed.length} contrôle(s) final(aux) 2033/2065 restent à confirmer` : !taxCalculation.ready ? "Confirme le calcul d’IS après les dernières modifications" : "Dossier de saisie 2065 + 2033-A à 2033-G complet et contrôlé ; transmission à effectuer séparément" , count: filingPackage.missing.length + filingPackage.unreviewed.length || undefined },
   ];
   const blocking = steps.filter((step) => step.status === "blocked").length;
+  const complianceSource = { period, filingPackage, simplifiedStatements, taxCalculation, fiscalSummary: { accountingResult }, accountingSummary: { balances: accounting.balances } };
+  const tdfc = buildTdfcPreparation(complianceSource);
+  const transmissions = listTaxTransmissions(period.id);
   return {
     period, record, inventoryEntries, inventorySummary: { total: inventoryEntries.length, draft: inventoryDrafts.length, posted: inventoryPosted.length, cancelled: inventoryEntries.filter((entry) => entry.status === "cancelled").length, debit: inventoryDebit, credit: inventoryCredit, balanced: inventoryDebit === inventoryCredit }, accountingSummary: { eligibleTransactions: accounting.eligibleCount, excludedTransactions: accounting.excludedCount, lines: accounting.lines.length, debit: accounting.totalDebit, credit: accounting.totalCredit, balanced: accounting.balanced, anomalies: accounting.anomalies, balances: accounting.balances }, fiscalAdjustments, fiscalReview, fiscalSummary: { charges, products, accountingResult, reintegrations, deductions, fiscalResult, taxableProfit: Math.max(0, fiscalResult), taxLoss: Math.max(0, -fiscalResult), draft: fiscalDrafts.length, validated: fiscalValidated.length, fiscalBeforeLoss, lossesApplied, corporateTaxExpense, corporateTaxReintegration, issues: fiscalIssues }, taxConfig, taxCalculation, simplifiedStatements, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, unidentified: unidentified.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
     openingBalanceSummary: { lines: record.openingBalance.length, debit: openingDebit, credit: openingCredit, balanced: openingDebit === openingCredit },
     deadlines: { resultDeclaration: endOfMonth(addMonths(period.endDate, 3)), corporateTaxBalance: `${addMonths(period.endDate, 4).slice(0, 8)}15` },
     filingConfig: getAnnualFilingConfig(period.id), filingPackage,
+    compliance: {
+      efiGuide: buildEfiGuide(complianceSource),
+      tdfc: { sha256: tdfc.sha256, schemaVersion: tdfc.schemaVersion, officialInterchange: tdfc.officialInterchange, transmittableDirectly: tdfc.transmittableDirectly, warnings: tdfc.warnings },
+      transmissions,
+      governanceConfig: getGovernanceConfig(period.id, complianceSource),
+      lock: { locked: Boolean(record.lockedAt), lockedAt: record.lockedAt, archiveFile: record.archiveFile, carriedForwardTo: record.carriedForwardTo },
+      partnerConnector: { ...getEdiPartnerConfig(), configured: getEdiPartnerConfig().apiConfigured, detail: "Le fichier généré reste un dossier préparatoire tant qu’un adaptateur technique partenaire n’est pas configuré et testé." },
+      taxEntryReady: taxCalculation.ready && (taxCalculation.netTax <= .009 || (Math.abs(corporateTaxExpense - taxCalculation.netTax) <= .01 && Math.abs(corporateTaxReintegration - taxCalculation.netTax) <= .01)),
+    },
     steps, completed: steps.filter((step) => step.status === "done").length, total: steps.length, dataReady: blocking === 0 || (blocking === 1 && steps.at(-1)?.id === "statutory-output"), filingReady: blocking === 0, ediReady: false,
   };
 }
