@@ -39,10 +39,11 @@ const rightText = (page: PDFPage, font: PDFFont, value: unknown, xRight: number,
 const watermark = (page: PDFPage, font: PDFFont) => page.drawText("DOSSIER DE SAISIE CONTROLE - TRANSMISSION NON EFFECTUEE", { x: 113, y: 12, size: 6, font, color: rgb(.65, .12, .12) });
 const header = (page: PDFPage, font: PDFFont, name: string, x: number, y: number) => write(page, font, name, x, y, 220, 9);
 const siretDigits = (page: PDFPage, font: PDFFont, value: string, x: number, y: number, step = 15) => [...value.replace(/\D/g, "")].forEach((digit, index) => write(page, font, digit, x + index * step, y, 8, 9));
-const centeredDigits = (page: PDFPage, font: PDFFont, value: string, cellLeft: number, y: number, cellWidth: number, size = 8) => {
-  [...value.replace(/\D/g, "")].forEach((digit, index) => {
+const centeredDigitsInCells = (page: PDFPage, font: PDFFont, value: string, boundaries: number[], y: number, size = 8) => {
+  [...value.replace(/\D/g, "")].slice(0, boundaries.length - 1).forEach((digit, index) => {
+    const cellLeft = boundaries[index], cellWidth = boundaries[index + 1] - cellLeft;
     const width = font.widthOfTextAtSize(digit, size);
-    write(page, font, digit, cellLeft + index * cellWidth + (cellWidth - width) / 2, y, cellWidth, size);
+    write(page, font, digit, cellLeft + (cellWidth - width) / 2, y, cellWidth, size);
   });
 };
 const boxedDate = (page: PDFPage, font: PDFFont, value: string, x: number, y: number, step: number) => {
@@ -59,9 +60,9 @@ function fill2065(page: PDFPage, font: PDFFont, input: AnnualFilingPdfInput) {
   const { identity, form2065 } = input.package;
   write(page, font, frDate(input.period.startDate), 138, 730, 74, 9); write(page, font, frDate(input.period.endDate), 249, 730, 74, 9);
   write(page, font, identity.name, 26, 648, 274, 8); write(page, font, identity.address, 309, 648, 244, 6.5); write(page, font, identity.address, 26, 612, 274, 6.5);
-  centeredDigits(page, font, identity.siret, 104, 633, 13.93, 8); write(page, font, identity.email, 329, 633, 219, 8); write(page, font, identity.activity, 135, 529, 235, 8);
+  centeredDigitsInCells(page, font, identity.siret, [103.419, 117.825, 132.231, 146.636, 161.042, 175.448, 190.171, 204.576, 218.982, 233.388, 247.793, 263.747, 278.152, 292.558, 307.42], 633, 8); write(page, font, identity.email, 329, 633, 219, 8); write(page, font, identity.activity, 135, 529, 235, 8);
   right(page, font, form2065.taxableAt25, 474, 499, 10); right(page, font, form2065.deficit, 566, 499, 10); right(page, font, form2065.taxableAt15, 190, 479, 10);
-  write(page, font, "X", 260, 151, 10, 8); write(page, font, form2065.accountingSoftware, 449, 151, 103, 8);
+  write(page, font, "X", 260, 151, 10, 8); write(page, font, form2065.accountingSoftware, 475, 151, 77, 8);
   write(page, font, frDate(form2065.signatory.date), 329, 68, 75, 8); write(page, font, form2065.signatory.city, 451, 68, 100, 8); write(page, font, `${form2065.signatory.name} - ${form2065.signatory.role}`, 400, 55, 152, 8);
 }
 
