@@ -254,6 +254,10 @@ function balanceFlow(source: ComplianceSource, prefixes: string[], side: "expens
 
 function addValueAddedFields(fields: EfiField[], source: ComplianceSource) {
   const pack = source.filingPackage.form2033E;
+  if (pack.exempt) {
+    fields.push(value("2033-E", "Déclaration", "NEANT", "Cocher « formulaire néant » (chiffre d’affaires inférieur à 152 500 €)", "Oui", "Chiffre d’affaires de l’exercice", { monetary: false, portalFieldId: "A305681_0" }));
+    return;
+  }
   const period = source.period;
   const rent = balanceFlow(source, ["613"], "expense");
   const externalCharges = Number(source.simplifiedStatements.profitAndLoss.fields.find((item: any) => item.code === "242")?.value ?? 0);

@@ -117,4 +117,31 @@ describe("clôture annuelle par période datée", () => {
     expect(snapshot.accountingSummary.anomalies).toContainEqual(expect.objectContaining({ code: "UNIDENTIFIED_TRANSACTION", transactionId: "unknown" }));
     expect(snapshot.dataReady).toBe(false);
   });
+  it("sépare la TVA de l’exercice des à-nouveaux et propose sa centralisation", () => {
+    saveOpeningBalance(period, [
+      { id: "1", accountNumber: "445660", accountLabel: "TVA déductible", debit: 248, credit: 0 },
+      { id: "2", accountNumber: "512000", accountLabel: "Banque", debit: 932, credit: 0 },
+      { id: "3", accountNumber: "445710", accountLabel: "TVA collectée", debit: 0, credit: 1180 },
+    ]);
+    const transactions = [
+      transaction({ id: "sale", category: "service_revenue", amount_ht: 1000, vat: 200, amount_ttc: 1200 }),
+      transaction({ id: "purchase", category: "software", amount_ht: -100, vat: -20, amount_ttc: -120 }),
+      transaction({ id: "advance", category: "vat_advance_payment", amount_ht: -50, vat: 0, amount_ttc: -50 }),
+    ];
+    const before = buildAnnualClosingSnapshot(period, transactions);
+    expect(before.filingPackage.form2033D).toMatchObject({ vatCollected: 200, vatDeductible: 20 });
+    expect(before.vatClosing).toMatchObject({ required: true, annualCollected: 200, annualDeductible: 20 });
+    expect(before.vatClosing.suggestedLines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountNumber: "445710", debit: 1380 }),
+      expect.objectContaining({ accountNumber: "445660", credit: 268 }),
+      expect.objectContaining({ accountNumber: "445810", credit: 50 }),
+      expect.objectContaining({ accountNumber: "445510", credit: 1062 }),
+    ]));
+    const entry = createInventoryEntry(period, { date: period.endDate, kind: "vat_adjustment", label: "Centralisation TVA", lines: before.vatClosing.suggestedLines });
+    validateInventoryEntry(period.id, entry.id);
+    const after = buildAnnualClosingSnapshot(period, transactions);
+    expect(after.filingPackage.form2033D).toMatchObject({ vatCollected: 200, vatDeductible: 20 });
+    expect(after.vatClosing.required).toBe(false);
+    expect(after.steps).toContainEqual(expect.objectContaining({ id: "vat-centralization", status: "done" }));
+  });
 });

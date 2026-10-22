@@ -49,6 +49,10 @@ describe("conformité de clôture annuelle", () => {
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-C", code: "OTHER_TANGIBLE-AMORT-2", portalFieldId: "A304587_0", value: 294.33, copyValue: "294" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-D", code: "TVA-COLLECTEE", portalFieldId: "A907430_0", copyValue: "3439" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-E", code: "EFFECTIF", portalFieldId: "A907434_0", copyValue: "0" }));
+    const exemptSource = { ...source, filingPackage: { ...source.filingPackage, form2033E: { ...source.filingPackage.form2033E, exempt: true } } };
+    const exemptFields = buildEfiGuide(exemptSource);
+    expect(exemptFields).toContainEqual(expect.objectContaining({ form: "2033-E", code: "NEANT", portalFieldId: "A305681_0", copyValue: "Oui" }));
+    expect(exemptFields).not.toContainEqual(expect.objectContaining({ form: "2033-E", code: "CA-CVAE" }));
     expect(payload).toMatchObject({ format: "COMPTAOS-TDFC-PREPARATION", schemaVersion: "2026.1", officialInterchange: false, transmittableDirectly: false, requiresPartnerEdi: true });
     expect(payload.sha256).toMatch(/^[a-f0-9]{64}$/);
   });

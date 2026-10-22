@@ -39,6 +39,11 @@ export interface AnnualClosingRecord {
   updatedAt: string;
 }
 export interface AnnualClosingStep { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number }
+export interface VatClosingSummary {
+  required: boolean; alreadyCentralized: boolean; annualCollected: number; annualDeductible: number;
+  deferredVat: number; finalVatLiability: number;
+  suggestedLines: Array<{ id: string; accountNumber: string; accountLabel: string; debit: number; credit: number }>;
+}
 
 const emptyReview = (): AnnualReview => ({ bankBalance: false, customersAndSuppliers: false, fixedAssets: false, vat: false, accruals: false, equityLoansAndShareholders: false });
 const storePath = () => join(getWorkspaceRoot(), "settings", "annual-closing.json");
@@ -138,6 +143,28 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const inventoryDebit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.debit, 0));
   const inventoryCredit = round(inventoryPosted.flatMap((entry) => entry.lines).reduce((sum, line) => sum + line.credit, 0));
   const accounting = buildAnnualAccountingPreview(period, transactions);
+  const excludedVatMovementTransactionIds = new Set(inventoryEntries.filter((entry) => entry.kind === "vat_adjustment").map((entry) => `inventory:${entry.id}`));
+  const vatBalance = (prefixes: string[], side: "debit" | "credit") => round(accounting.balances.filter((row) => prefixes.some((prefix) => row.accountNumber.startsWith(prefix))).reduce((sum, row) => sum + (side === "debit" ? Math.max(0, row.balance) : Math.max(0, -row.balance)), 0));
+  const vatRows = (prefixes: string[], side: "debit" | "credit") => accounting.balances.filter((row) => prefixes.some((prefix) => row.accountNumber.startsWith(prefix)) && (side === "debit" ? row.balance > .009 : row.balance < -.009));
+  const vatMovement = (prefixes: string[], side: "debit" | "credit") => round(accounting.lines.filter((line) => line.journalCode !== "AN" && !excludedVatMovementTransactionIds.has(line.transactionId) && prefixes.some((prefix) => line.accountNumber.startsWith(prefix))).reduce((sum, line) => sum + (side === "debit" ? line.debit - line.credit : line.credit - line.debit), 0));
+  const collectedToClear = vatBalance(["44571"], "credit");
+  const deductibleToClear = vatBalance(["44562", "44566"], "debit");
+  const advancesToClear = vatBalance(["44581"], "debit");
+  const vatSettlement = round(collectedToClear - deductibleToClear - advancesToClear);
+  const suggestedVatLines = [
+    ...vatRows(["44571"], "credit").map((row) => ({ id: `vat-${row.accountNumber}`, accountNumber: row.accountNumber, accountLabel: row.accountLabel, debit: round(-row.balance), credit: 0 })),
+    ...vatRows(["44562", "44566"], "debit").map((row) => ({ id: `vat-${row.accountNumber}`, accountNumber: row.accountNumber, accountLabel: row.accountLabel, debit: 0, credit: round(row.balance) })),
+    ...vatRows(["44581"], "debit").map((row) => ({ id: `vat-${row.accountNumber}`, accountNumber: row.accountNumber, accountLabel: row.accountLabel, debit: 0, credit: round(row.balance) })),
+    ...(vatSettlement > 0 ? [{ id: "vat-payable", accountNumber: "445510", accountLabel: "TVA à décaisser", debit: 0, credit: vatSettlement }] : vatSettlement < 0 ? [{ id: "vat-credit", accountNumber: "445670", accountLabel: "Crédit de TVA à reporter", debit: -vatSettlement, credit: 0 }] : []),
+  ];
+  const vatClosing: VatClosingSummary = {
+    required: suggestedVatLines.length > 0,
+    alreadyCentralized: suggestedVatLines.length === 0,
+    annualCollected: Math.max(0, vatMovement(["44571"], "credit")), annualDeductible: Math.max(0, vatMovement(["44562", "44566"], "debit")),
+    deferredVat: vatBalance(["44580"], "credit"),
+    finalVatLiability: round(Math.max(0, vatBalance(["44551"], "credit") - vatBalance(["44551"], "debit") + vatSettlement) + vatBalance(["44580"], "credit")),
+    suggestedLines: suggestedVatLines,
+  };
   const accountingBlockers = accounting.anomalies.filter((item) => item.severity === "blocking");
   const currentPeriodLines = accounting.lines.filter((line) => line.journalCode !== "AN");
   const charges = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("6")).reduce((sum, line) => sum + line.debit - line.credit, 0));
@@ -160,7 +187,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const automaticTurnover = round(currentPeriodLines.filter((line) => line.accountNumber.startsWith("70")).reduce((sum, line) => sum + line.credit - line.debit, 0));
   const taxConfig = getAnnualTaxConfig(period.id); const rawTaxCalculation = calculateCorporateTax(period, fiscalResult, automaticTurnover, taxConfig); const taxCalculation = { ...rawTaxCalculation, ready: rawTaxCalculation.ready && !fiscalIssues.length, warnings: [...rawTaxCalculation.warnings, ...fiscalIssues] };
   const simplifiedStatements = buildSimplifiedStatements(accounting.balances, accounting.lines, accountingResult, fiscalAdjustments);
-  const filingPackage = buildAnnualFilingPackage({ period, openingBalance: record.openingBalance, balances: accounting.balances, lines: accounting.lines, statements: simplifiedStatements, tax: taxCalculation });
+  const filingPackage = buildAnnualFilingPackage({ period, openingBalance: record.openingBalance, balances: accounting.balances, lines: accounting.lines, statements: simplifiedStatements, tax: taxCalculation, excludedVatMovementTransactionIds });
   const active = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date >= period.startDate && transaction.date <= period.endDate);
   const pending = active.filter((transaction) => transaction.status !== "validated");
   const unreconciled = active.filter((transaction) => transaction.reconciled !== true);
@@ -186,6 +213,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
     { id: "fiscal-result", label: "Résultat fiscal provisoire", status: fiscalReview.confirmed && !fiscalDrafts.length && !fiscalIssues.length && accounting.balanced ? "done" : "blocked", detail: fiscalIssues.length ? "Corrige les incohérences fiscales avant de valider le résultat" : fiscalReview.confirmed ? `Résultat fiscal provisoire : ${fiscalResult.toFixed(2)} €` : "Le résultat fiscal ne sera contrôlé qu’après confirmation des corrections" },
     { id: "corporate-tax", label: "Calcul de l’impôt sur les sociétés", status: taxCalculation.ready ? "done" : "blocked", detail: taxCalculation.ready ? `IS net provisoire : ${taxCalculation.netTax.toFixed(2)} € ; solde après acomptes : ${taxCalculation.balance.toFixed(2)} €` : "Renseigne et confirme les conditions du taux réduit, les crédits d’impôt et les acomptes" },
     { id: "simplified-statements", label: "Bilan et compte de résultat 2033", status: record.profitTaxRegime !== "simplified" ? "warning" : Math.abs(simplifiedStatements.balanceSheet.difference) <= .01 ? "done" : "blocked", detail: record.profitTaxRegime !== "simplified" ? "Le mapping 2033 concerne le réel simplifié ; le mapping 2050 reste à construire pour le réel normal" : Math.abs(simplifiedStatements.balanceSheet.difference) <= .01 ? "Bilan simplifié équilibré et compte de résultat mappé" : `Écart actif/passif à expliquer : ${simplifiedStatements.balanceSheet.difference.toFixed(2)} €` },
+    { id: "vat-centralization", label: "Centralisation de la TVA", status: vatClosing.required ? "blocked" : "done", detail: vatClosing.required ? "Prépare puis valide l’écriture de centralisation TVA proposée dans le journal d’inventaire" : `TVA centralisée ; dette TVA de clôture ${vatClosing.finalVatLiability.toFixed(2)} €` },
     ...Object.entries({ bankBalance: "Solde bancaire au dernier jour", customersAndSuppliers: "Créances et dettes clients/fournisseurs", fixedAssets: "Immobilisations et amortissements", vat: "TVA et acomptes", accruals: "Écritures d’inventaire et cut-off", equityLoansAndShareholders: "Capital, emprunts et comptes courants" }).map(([id, label]) => ({ id, label, status: record.review[id as keyof AnnualReview] ? "done" as const : "blocked" as const, detail: record.review[id as keyof AnnualReview] ? "Contrôle confirmé" : "Contrôle à effectuer et documenter" })),
     { id: "statutory-output", label: "Comptes annuels et liasse", status: filingPackage.ready && taxCalculation.ready ? "done" : "blocked", detail: filingPackage.missing.length ? `Complète la fiche de dépôt : ${filingPackage.missing[0]}` : filingPackage.unreviewed.length ? `${filingPackage.unreviewed.length} contrôle(s) final(aux) 2033/2065 restent à confirmer` : !taxCalculation.ready ? "Confirme le calcul d’IS après les dernières modifications" : "Dossier de saisie 2065 + 2033-A à 2033-G complet et contrôlé ; transmission à effectuer séparément" , count: filingPackage.missing.length + filingPackage.unreviewed.length || undefined },
   ];
@@ -194,7 +222,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
   const tdfc = buildTdfcPreparation(complianceSource);
   const transmissions = listTaxTransmissions(period.id);
   return {
-    period, record, inventoryEntries, inventorySummary: { total: inventoryEntries.length, draft: inventoryDrafts.length, posted: inventoryPosted.length, cancelled: inventoryEntries.filter((entry) => entry.status === "cancelled").length, debit: inventoryDebit, credit: inventoryCredit, balanced: inventoryDebit === inventoryCredit }, accountingSummary: { eligibleTransactions: accounting.eligibleCount, excludedTransactions: accounting.excludedCount, lines: accounting.lines.length, debit: accounting.totalDebit, credit: accounting.totalCredit, balanced: accounting.balanced, anomalies: accounting.anomalies, balances: accounting.balances }, fiscalAdjustments, fiscalReview, fiscalSummary: { charges, products, accountingResult, reintegrations, deductions, fiscalResult, taxableProfit: Math.max(0, fiscalResult), taxLoss: Math.max(0, -fiscalResult), draft: fiscalDrafts.length, validated: fiscalValidated.length, fiscalBeforeLoss, lossesApplied, corporateTaxExpense, corporateTaxReintegration, issues: fiscalIssues }, taxConfig, taxCalculation, simplifiedStatements, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, unidentified: unidentified.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
+    period, record, inventoryEntries, inventorySummary: { total: inventoryEntries.length, draft: inventoryDrafts.length, posted: inventoryPosted.length, cancelled: inventoryEntries.filter((entry) => entry.status === "cancelled").length, debit: inventoryDebit, credit: inventoryCredit, balanced: inventoryDebit === inventoryCredit }, vatClosing, accountingSummary: { eligibleTransactions: accounting.eligibleCount, excludedTransactions: accounting.excludedCount, lines: accounting.lines.length, debit: accounting.totalDebit, credit: accounting.totalCredit, balanced: accounting.balanced, anomalies: accounting.anomalies, balances: accounting.balances }, fiscalAdjustments, fiscalReview, fiscalSummary: { charges, products, accountingResult, reintegrations, deductions, fiscalResult, taxableProfit: Math.max(0, fiscalResult), taxLoss: Math.max(0, -fiscalResult), draft: fiscalDrafts.length, validated: fiscalValidated.length, fiscalBeforeLoss, lossesApplied, corporateTaxExpense, corporateTaxReintegration, issues: fiscalIssues }, taxConfig, taxCalculation, simplifiedStatements, transactionSummary: { total: active.length, pending: pending.length, unreconciled: unreconciled.length, misc: misc.length, unidentified: unidentified.length, missingEvidence: missingEvidence.length, missingFiles: missingFiles.length },
     openingBalanceSummary: { lines: record.openingBalance.length, debit: openingDebit, credit: openingCredit, balanced: openingDebit === openingCredit },
     deadlines: { resultDeclaration: endOfMonth(addMonths(period.endDate, 3)), corporateTaxBalance: `${addMonths(period.endDate, 4).slice(0, 8)}15` },
     filingConfig: getAnnualFilingConfig(period.id), filingPackage,
