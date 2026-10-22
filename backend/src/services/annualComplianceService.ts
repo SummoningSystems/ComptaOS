@@ -95,19 +95,19 @@ const manualValue = (form: string, section: string, code: string, label: string,
 });
 
 // Identifiants du formulaire EFI 2033-A version 15 fourni par impots.gouv.fr.
-const assetPortalFields: Record<string, { gross: string; provision: string }> = {
-  "010": { gross: "A304328_0", provision: "A304343_0" },
-  "014": { gross: "A304329_0", provision: "A304344_0" },
-  "028": { gross: "A304330_0", provision: "A304345_0" },
-  "040": { gross: "A304331_0", provision: "A304346_0" },
-  "050": { gross: "A304333_0", provision: "A304348_0" },
-  "060": { gross: "A304334_0", provision: "A304349_0" },
-  "064": { gross: "A304335_0", provision: "A304350_0" },
-  "068": { gross: "A304336_0", provision: "A304351_0" },
-  "072": { gross: "A304337_0", provision: "A304352_0" },
-  "092": { gross: "A304341_0", provision: "A304355_0" },
-  "080": { gross: "A304338_0", provision: "A304353_0" },
-  "084": { gross: "A304339_0", provision: "A304354_0" },
+const assetPortalFields: Record<string, { label: string; gross: string; provision: string }> = {
+  "010": { label: "Immobilisations incorporelles - Fonds commercial", gross: "A304328_0", provision: "A304343_0" },
+  "014": { label: "Immobilisations incorporelles - Autres", gross: "A304329_0", provision: "A304344_0" },
+  "028": { label: "Immobilisations corporelles", gross: "A304330_0", provision: "A304345_0" },
+  "040": { label: "Immobilisations financières (1)", gross: "A304331_0", provision: "A304346_0" },
+  "050": { label: "Stocks matières premières, approvisionnements, en cours de production", gross: "A304333_0", provision: "A304348_0" },
+  "060": { label: "Stocks marchandises", gross: "A304334_0", provision: "A304349_0" },
+  "064": { label: "Avances et acomptes versés sur commandes", gross: "A304335_0", provision: "A304350_0" },
+  "068": { label: "Créances (2) clients et comptes rattachés", gross: "A304336_0", provision: "A304351_0" },
+  "072": { label: "Créances autres (3)", gross: "A304337_0", provision: "A304352_0" },
+  "092": { label: "Charges constatées d’avance", gross: "A304341_0", provision: "A304355_0" },
+  "080": { label: "Valeurs mobilières de placement", gross: "A304338_0", provision: "A304353_0" },
+  "084": { label: "Disponibilités", gross: "A304339_0", provision: "A304354_0" },
 };
 
 const liabilityPortalFields: Record<string, string> = {
@@ -129,9 +129,9 @@ function addAssetFields(fields: EfiField[], source: ComplianceSource) {
     const provisionRows = balances.filter((item) => accounts.has(item.accountNumber) && /^(28|29|39|49|59)/.test(item.accountNumber));
     const provision = round(provisionRows.reduce((sum, item) => sum + Math.max(0, -item.balance), 0));
     const gross = round(Number(row.value ?? 0) + provision);
-    const baseLabel = String(row.label).replace(/\s*[—-]\s*net$/iu, "");
     const grossAccounts = [...accounts].filter((account) => !/^(28|29|39|49|59)/.test(account));
     const portal = assetPortalFields[grossCode];
+    const baseLabel = portal?.label ?? String(row.label).replace(/\s*[—-]\s*net$/iu, "");
     fields.push(value("2033-A", "Actif", grossCode, `${baseLabel} — brut`, gross, `Comptes ${grossAccounts.join(", ") || "calculés"}`, { column: "Brut", portalFieldId: portal?.gross }));
     fields.push(value("2033-A", "Actif", provisionCode, `${baseLabel} — amortissements ou provisions`, provision, `Comptes ${provisionRows.map((item) => item.accountNumber).join(", ") || "aucun"}`, { column: "Amortissements / provisions", portalFieldId: portal?.provision }));
   }

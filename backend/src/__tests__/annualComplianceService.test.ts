@@ -32,6 +32,10 @@ describe("conformité de clôture annuelle", () => {
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "028", value: 883, copyValue: "883", column: "Brut", portalFieldId: "A304330_0" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "030", value: 488.33, copyValue: "488", column: "Amortissements / provisions", portalFieldId: "A304345_0" }));
     expect(fields).not.toContainEqual(expect.objectContaining({ form: "2033-A", code: "028/030" }));
+    const clientSource = { ...source, simplifiedStatements: { ...source.simplifiedStatements, balanceSheet: { ...source.simplifiedStatements.balanceSheet, assets: [{ code: "068/070", label: "Clients et comptes rattachés", value: 4800, sourceAccounts: ["411000"] }] } }, accountingSummary: { balances: [{ accountNumber: "411000", balance: 4800 }] } };
+    expect(buildEfiGuide(clientSource)).toContainEqual(expect.objectContaining({ code: "068", label: "Créances (2) clients et comptes rattachés — brut", portalFieldId: "A304336_0", copyValue: "4800" }));
+    const receivableSource = { ...clientSource, simplifiedStatements: { ...clientSource.simplifiedStatements, balanceSheet: { ...clientSource.simplifiedStatements.balanceSheet, assets: [{ code: "072/074", label: "Autres créances", value: 1116.18, sourceAccounts: ["445660"] }] } }, accountingSummary: { balances: [{ accountNumber: "445660", balance: 1116.18 }] } };
+    expect(buildEfiGuide(receivableSource)).toContainEqual(expect.objectContaining({ code: "072", label: "Créances autres (3) — brut", portalFieldId: "A304337_0", copyValue: "1116" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "120", portalFieldId: "A304391_0" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "DONT-TVA", portalFieldId: "A913095_0", copyValue: "3439" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "172", portalFieldId: "A913096_0", copyValue: "3439" }));
