@@ -12,12 +12,12 @@ const source: any = {
   filingPackage: {
     identity: { name: "Summoning Systems", legalForm: "SAS", siren: "939154605", siret: "93915460500017", address: "30 boulevard de Sébastopol 75004 Paris", capital: "900" },
     form2065: { taxableAt15: 14431.21, taxableAt25: 0, grossTax: 2164.68, netTax: 2164.68, prepayments: 0, balance: 2164.68, signatory: { city: "Toulouse", name: "Benoit Jurado", role: "Président" } },
-    form2033C: { fixedAssets: [{ label: "Immobilisations corporelles", closingGross: 883, closingDepreciation: 488.33 }] },
+    form2033C: { fixedAssets: [{ code: "tangible", label: "Immobilisations corporelles", closingGross: 883, closingDepreciation: 488.33 }] },
     form2033D: { lossCarryforwards: 0 }, form2033E: { production: 24895.11, valueAdded: 14725.8 },
     form2033F: { owners: [{ name: "Benoit Jurado", ownershipPercent: 33.34, shareCount: 3000 }] }, form2033G: { subsidiaries: [] },
   },
-  simplifiedStatements: { balanceSheet: { assets: [{ code: "014", label: "Immobilisations", value: 1094.67, sourceAccounts: ["218300"] }], liabilities: [{ code: "142", label: "Capital", value: 900, sourceAccounts: ["101000"] }] }, profitAndLoss: { fields: [{ code: "310", label: "Production vendue", value: 24895.11, sourceAccounts: ["706000"] }] }, fiscalTable: { fields: [{ code: "352", label: "Réintégrations", value: 30 }] } },
-  taxCalculation: {}, fiscalSummary: { accountingResult: 12266.53 }, accountingSummary: { balances: [] },
+  simplifiedStatements: { balanceSheet: { assets: [{ code: "028/030", label: "Immobilisations corporelles — net", value: 394.67, sourceAccounts: ["218300", "281830"] }], liabilities: [{ code: "142", label: "Capital", value: 900, sourceAccounts: ["101000"] }] }, profitAndLoss: { fields: [{ code: "310", label: "Production vendue", value: 24895.11, sourceAccounts: ["706000"] }] }, fiscalTable: { fields: [{ code: "352", label: "Réintégrations", value: 30 }] } },
+  taxCalculation: {}, fiscalSummary: { accountingResult: 12266.53 }, accountingSummary: { balances: [{ accountNumber: "218300", balance: 883 }, { accountNumber: "281830", balance: -488.33 }] },
 };
 
 describe("conformité de clôture annuelle", () => {
@@ -26,7 +26,12 @@ describe("conformité de clôture annuelle", () => {
 
   it("produit une grille EFI et un paquet TDFC préparatoire explicitement non transmissible", () => {
     const fields = buildEfiGuide(source); const payload = buildTdfcPreparation(source);
-    expect(fields).toContainEqual(expect.objectContaining({ form: "2065", code: "BENEFICE-15", value: 14431.21 }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2065", code: "BENEFICE-15", value: 14431.21, formattedValue: "14 431", copyValue: "14431" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2572-SD", code: "IS-NET", value: 2164.68, copyValue: "2165" }));
+    expect(fields).not.toContainEqual(expect.objectContaining({ form: "2065", code: "IS-NET" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "028", value: 883, copyValue: "883", column: "Brut" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "030", value: 488.33, copyValue: "488", column: "Amortissements / provisions" }));
+    expect(fields).not.toContainEqual(expect.objectContaining({ form: "2033-A", code: "028/030" }));
     expect(payload).toMatchObject({ format: "COMPTAOS-TDFC-PREPARATION", schemaVersion: "2026.1", officialInterchange: false, transmittableDirectly: false, requiresPartnerEdi: true });
     expect(payload.sha256).toMatch(/^[a-f0-9]{64}$/);
   });

@@ -14,7 +14,8 @@ const ZipArchive: new (options: { zlib: { level: number } }) => any = (archiverN
 
 export interface EfiField {
   id: string; form: string; section: string; code: string; label: string;
-  value: string | number; formattedValue: string; source: string;
+  value: string | number; formattedValue: string; copyValue: string; exactFormattedValue?: string;
+  column?: "Brut" | "Amortissements / provisions"; source: string;
 }
 export type TransmissionMode = "efi" | "edi";
 export type TransmissionStatus = "draft" | "validated" | "sent" | "accepted" | "rejected" | "cancelled";
@@ -43,6 +44,8 @@ interface ComplianceSource {
 const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const euro = (value: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+const wholeEuro = (value: number) => value >= 0 ? Math.floor(value + .5) : Math.ceil(value - .5);
+const wholeEuroDisplay = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(wholeEuro(value));
 const transmissionsPath = () => join(getWorkspaceRoot(), "settings", "annual-transmissions.json");
 const governancePath = () => join(getWorkspaceRoot(), "settings", "annual-governance.json");
 const ediPartnerPath = () => join(getWorkspaceRoot(), "settings", "annual-edi-partner.json");
@@ -72,10 +75,36 @@ export function saveEdiPartnerConfig(input: Omit<EdiPartnerConfig, "apiConfigure
   atomicWriteFileSync(ediPartnerPath(), JSON.stringify(value, null, 2)); return value;
 }
 
-const value = (form: string, section: string, code: string, label: string, raw: string | number, source: string): EfiField => ({
-  id: `${form}:${code}:${label}`, form, section, code, label, value: raw,
-  formattedValue: typeof raw === "number" ? euro(raw) : String(raw ?? ""), source,
-});
+const value = (form: string, section: string, code: string, label: string, raw: string | number, source: string, options: { monetary?: boolean; column?: EfiField["column"] } = {}): EfiField => {
+  const monetary = typeof raw === "number" && options.monetary !== false;
+  const rounded = monetary ? wholeEuro(raw) : raw;
+  return {
+    id: `${form}:${code}:${label}`, form, section, code, label, value: raw,
+    formattedValue: monetary ? wholeEuroDisplay(raw) : String(raw ?? "").replace(".", ","),
+    copyValue: String(rounded ?? "").replace(".", ","),
+    ...(monetary && round(raw) !== rounded ? { exactFormattedValue: euro(raw) } : {}),
+    ...(options.column ? { column: options.column } : {}), source,
+  };
+};
+
+function addAssetFields(fields: EfiField[], source: ComplianceSource) {
+  const balances = source.accountingSummary.balances;
+  for (const row of source.simplifiedStatements.balanceSheet.assets) {
+    const [grossCode, provisionCode] = String(row.code).split("/");
+    if (!provisionCode) {
+      fields.push(value("2033-A", "Actif", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
+      continue;
+    }
+    const accounts = new Set<string>(row.sourceAccounts ?? []);
+    const provisionRows = balances.filter((item) => accounts.has(item.accountNumber) && /^(28|29|39|49|59)/.test(item.accountNumber));
+    const provision = round(provisionRows.reduce((sum, item) => sum + Math.max(0, -item.balance), 0));
+    const gross = round(Number(row.value ?? 0) + provision);
+    const baseLabel = String(row.label).replace(/\s*[—-]\s*net$/iu, "");
+    const grossAccounts = [...accounts].filter((account) => !/^(28|29|39|49|59)/.test(account));
+    fields.push(value("2033-A", "Actif", grossCode, `${baseLabel} — brut`, gross, `Comptes ${grossAccounts.join(", ") || "calculés"}`, { column: "Brut" }));
+    fields.push(value("2033-A", "Actif", provisionCode, `${baseLabel} — amortissements ou provisions`, provision, `Comptes ${provisionRows.map((item) => item.accountNumber).join(", ") || "aucun"}`, { column: "Amortissements / provisions" }));
+  }
+}
 
 export function buildEfiGuide(source: ComplianceSource): EfiField[] {
   const pack = source.filingPackage, statements = source.simplifiedStatements, tax = source.taxCalculation;
@@ -88,12 +117,12 @@ export function buildEfiGuide(source: ComplianceSource): EfiField[] {
     value("2065", "Exercice", "DATE-FIN", "Exercice clos le", source.period.endDate, "Exercice comptable"),
     value("2065", "Résultat fiscal", "BENEFICE-15", "Bénéfice imposable à 15 %", pack.form2065.taxableAt15, "Calcul d’IS"),
     value("2065", "Résultat fiscal", "BENEFICE-25", "Bénéfice imposable à 25 %", pack.form2065.taxableAt25, "Calcul d’IS"),
-    value("2065", "Liquidation", "IS-BRUT", "Impôt brut", pack.form2065.grossTax, "Calcul d’IS"),
-    value("2065", "Liquidation", "IS-NET", "Impôt net", pack.form2065.netTax, "Calcul d’IS"),
-    value("2065", "Liquidation", "ACOMPTES", "Acomptes d’IS", pack.form2065.prepayments, "Hypothèses d’IS"),
-    value("2065", "Liquidation", "SOLDE", "Solde d’IS", pack.form2065.balance, "Calcul d’IS"),
+    value("2572-SD", "Liquidation de l’IS", "IS-BRUT", "Impôt brut", pack.form2065.grossTax, "Calcul d’IS"),
+    value("2572-SD", "Liquidation de l’IS", "IS-NET", "Impôt net", pack.form2065.netTax, "Calcul d’IS"),
+    value("2572-SD", "Liquidation de l’IS", "ACOMPTES", "Acomptes d’IS", pack.form2065.prepayments, "Hypothèses d’IS"),
+    value("2572-SD", "Liquidation de l’IS", "SOLDE", "Solde d’IS", pack.form2065.balance, "Calcul d’IS"),
   ];
-  for (const row of statements.balanceSheet.assets) fields.push(value("2033-A", "Actif", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
+  addAssetFields(fields, source);
   for (const row of statements.balanceSheet.liabilities) fields.push(value("2033-A", "Passif", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
   for (const row of statements.profitAndLoss.fields) fields.push(value("2033-B", "Compte de résultat", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
   for (const row of statements.fiscalTable.fields) fields.push(value("2033-B", "Résultat fiscal", row.code, row.label, row.value, "Corrections fiscales"));
@@ -106,13 +135,13 @@ export function buildEfiGuide(source: ComplianceSource): EfiField[] {
   Object.entries(pack.form2033E).forEach(([code, raw]) => fields.push(value("2033-E", "Valeur ajoutée", code.toUpperCase(), code, Number(raw ?? 0), "Journal comptable")));
   pack.form2033F.owners.forEach((owner: any, index: number) => {
     fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-NOM`, "Nom ou dénomination", owner.name, "Structure financière"));
-    fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-PART`, "Pourcentage détenu", owner.ownershipPercent ?? 0, "Structure financière"));
-    fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-TITRES`, "Nombre de titres", owner.shareCount ?? 0, "Structure financière"));
+    fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-PART`, "Pourcentage détenu", owner.ownershipPercent ?? 0, "Structure financière", { monetary: false }));
+    fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-TITRES`, "Nombre de titres", owner.shareCount ?? 0, "Structure financière", { monetary: false }));
   });
   if (!pack.form2033G.subsidiaries.length) fields.push(value("2033-G", "Participations", "NEANT", "Néant", "Oui", "Structure financière"));
   pack.form2033G.subsidiaries.forEach((item: any, index: number) => {
     fields.push(value("2033-G", "Participations", `FILIALE-${index + 1}-NOM`, "Dénomination", item.name, "Structure financière"));
-    fields.push(value("2033-G", "Participations", `FILIALE-${index + 1}-PART`, "Pourcentage détenu", item.ownershipPercent ?? 0, "Structure financière"));
+    fields.push(value("2033-G", "Participations", `FILIALE-${index + 1}-PART`, "Pourcentage détenu", item.ownershipPercent ?? 0, "Structure financière", { monetary: false }));
   });
   return fields;
 }
