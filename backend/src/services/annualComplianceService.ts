@@ -15,7 +15,7 @@ const ZipArchive: new (options: { zlib: { level: number } }) => any = (archiverN
 export interface EfiField {
   id: string; form: string; section: string; code: string; label: string;
   value: string | number; formattedValue: string; copyValue: string; exactFormattedValue?: string;
-  column?: "Brut" | "Amortissements / provisions"; source: string;
+  column?: string; portalFieldId?: string; manualReview?: boolean; source: string;
 }
 export type TransmissionMode = "efi" | "edi";
 export type TransmissionStatus = "draft" | "validated" | "sent" | "accepted" | "rejected" | "cancelled";
@@ -75,7 +75,7 @@ export function saveEdiPartnerConfig(input: Omit<EdiPartnerConfig, "apiConfigure
   atomicWriteFileSync(ediPartnerPath(), JSON.stringify(value, null, 2)); return value;
 }
 
-const value = (form: string, section: string, code: string, label: string, raw: string | number, source: string, options: { monetary?: boolean; column?: EfiField["column"] } = {}): EfiField => {
+const value = (form: string, section: string, code: string, label: string, raw: string | number, source: string, options: { monetary?: boolean; column?: string; portalFieldId?: string } = {}): EfiField => {
   const monetary = typeof raw === "number" && options.monetary !== false;
   const rounded = monetary ? wholeEuro(raw) : raw;
   return {
@@ -84,7 +84,36 @@ const value = (form: string, section: string, code: string, label: string, raw: 
     copyValue: String(rounded ?? "").replace(".", ","),
     ...(monetary && round(raw) !== rounded ? { exactFormattedValue: euro(raw) } : {}),
     ...(options.column ? { column: options.column } : {}), source,
+    ...(options.portalFieldId ? { portalFieldId: options.portalFieldId } : {}),
   };
+};
+
+const manualValue = (code: string, label: string, portalFieldId: string, source: string): EfiField => ({
+  id: `2033-A:${code}:${label}`, form: "2033-A", section: "Renvois", code, label,
+  value: "", formattedValue: "À vérifier si concerné", copyValue: "", column: "Renvois", portalFieldId, manualReview: true, source,
+});
+
+// Identifiants du formulaire EFI 2033-A version 15 fourni par impots.gouv.fr.
+const assetPortalFields: Record<string, { gross: string; provision: string }> = {
+  "010": { gross: "A304328_0", provision: "A304343_0" },
+  "014": { gross: "A304329_0", provision: "A304344_0" },
+  "028": { gross: "A304330_0", provision: "A304345_0" },
+  "040": { gross: "A304331_0", provision: "A304346_0" },
+  "050": { gross: "A304333_0", provision: "A304348_0" },
+  "060": { gross: "A304334_0", provision: "A304349_0" },
+  "064": { gross: "A304335_0", provision: "A304350_0" },
+  "068": { gross: "A304336_0", provision: "A304351_0" },
+  "072": { gross: "A304337_0", provision: "A304352_0" },
+  "092": { gross: "A304341_0", provision: "A304355_0" },
+  "080": { gross: "A304338_0", provision: "A304353_0" },
+  "084": { gross: "A304339_0", provision: "A304354_0" },
+};
+
+const liabilityPortalFields: Record<string, string> = {
+  "120": "A304391_0", "126": "A304393_0", "130/132": "A304395_0", "134": "A304396_0",
+  "136": "A304397_0", "137": "A912390_0", "140": "A304398_0", "156": "A304401_0",
+  "164": "A304402_0", "166": "A304403_0", "172": "A913096_0", "173": "A304390_0",
+  "175": "A304404_0", "174": "A304405_0",
 };
 
 function addAssetFields(fields: EfiField[], source: ComplianceSource) {
@@ -101,9 +130,33 @@ function addAssetFields(fields: EfiField[], source: ComplianceSource) {
     const gross = round(Number(row.value ?? 0) + provision);
     const baseLabel = String(row.label).replace(/\s*[—-]\s*net$/iu, "");
     const grossAccounts = [...accounts].filter((account) => !/^(28|29|39|49|59)/.test(account));
-    fields.push(value("2033-A", "Actif", grossCode, `${baseLabel} — brut`, gross, `Comptes ${grossAccounts.join(", ") || "calculés"}`, { column: "Brut" }));
-    fields.push(value("2033-A", "Actif", provisionCode, `${baseLabel} — amortissements ou provisions`, provision, `Comptes ${provisionRows.map((item) => item.accountNumber).join(", ") || "aucun"}`, { column: "Amortissements / provisions" }));
+    const portal = assetPortalFields[grossCode];
+    fields.push(value("2033-A", "Actif", grossCode, `${baseLabel} — brut`, gross, `Comptes ${grossAccounts.join(", ") || "calculés"}`, { column: "Brut", portalFieldId: portal?.gross }));
+    fields.push(value("2033-A", "Actif", provisionCode, `${baseLabel} — amortissements ou provisions`, provision, `Comptes ${provisionRows.map((item) => item.accountNumber).join(", ") || "aucun"}`, { column: "Amortissements / provisions", portalFieldId: portal?.provision }));
   }
+}
+
+function addLiabilityFields(fields: EfiField[], source: ComplianceSource) {
+  for (const row of source.simplifiedStatements.balanceSheet.liabilities) {
+    if (row.code === "172") {
+      const vatRows = source.accountingSummary.balances.filter((item) => item.accountNumber.startsWith("445") && item.balance < 0);
+      const vatLiability = round(vatRows.reduce((sum, item) => sum - item.balance, 0));
+      fields.push(value("2033-A", "Passif · dettes", "DONT-TVA", "Dont montant de la TVA", vatLiability, `Comptes ${vatRows.map((item) => item.accountNumber).join(", ") || "aucun"}`, { column: "Dont TVA", portalFieldId: "A913095_0" }));
+    }
+    fields.push(value("2033-A", "Passif", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`, { column: "Net exercice clos en N", portalFieldId: liabilityPortalFields[row.code] }));
+  }
+}
+
+function addReferralFields(fields: EfiField[], source: ComplianceSource) {
+  const pack = source.filingPackage;
+  const debtorShareholders = round(source.accountingSummary.balances.filter((item) => item.accountNumber.startsWith("455") && item.balance > 0).reduce((sum, item) => sum + item.balance, 0));
+  const acquisitions = round((pack.form2033C.fixedAssets ?? []).reduce((sum: number, item: any) => sum + Number(item.increases ?? 0), 0));
+  fields.push(manualValue("RENVOI-1", "Dont immobilisations financières à moins d’un an", "A304425_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(manualValue("RENVOI-2", "Dont créances à plus d’un an", "A304426_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(value("2033-A", "Renvois", "RENVOI-3", "Dont comptes courants d’associés débiteurs", debtorShareholders, "Comptes 455 débiteurs", { column: "Renvois", portalFieldId: "A304427_0" }));
+  fields.push(manualValue("RENVOI-4", "Dont dettes à plus d’un an", "A304428_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(value("2033-A", "Renvois", "RENVOI-5-ACQ", "Coût de revient des immobilisations acquises ou créées durant l’exercice", acquisitions, "Mouvements d’immobilisations 2033-C", { column: "Renvois", portalFieldId: "A304429_0" }));
+  fields.push(value("2033-A", "Renvois", "RENVOI-5-CESS", "Prix de vente HT des immobilisations cédées durant l’exercice", pack.form2033C.capitalGains?.saleProceeds ?? 0, "Cessions d’immobilisations 2033-C", { column: "Renvois", portalFieldId: "A304430_0" }));
 }
 
 export function buildEfiGuide(source: ComplianceSource): EfiField[] {
@@ -123,7 +176,8 @@ export function buildEfiGuide(source: ComplianceSource): EfiField[] {
     value("2572-SD", "Liquidation de l’IS", "SOLDE", "Solde d’IS", pack.form2065.balance, "Calcul d’IS"),
   ];
   addAssetFields(fields, source);
-  for (const row of statements.balanceSheet.liabilities) fields.push(value("2033-A", "Passif", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
+  addLiabilityFields(fields, source);
+  addReferralFields(fields, source);
   for (const row of statements.profitAndLoss.fields) fields.push(value("2033-B", "Compte de résultat", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
   for (const row of statements.fiscalTable.fields) fields.push(value("2033-B", "Résultat fiscal", row.code, row.label, row.value, "Corrections fiscales"));
   pack.form2033C.fixedAssets.forEach((row: any, index: number) => {
@@ -147,7 +201,7 @@ export function buildEfiGuide(source: ComplianceSource): EfiField[] {
 }
 
 export function buildTdfcPreparation(source: ComplianceSource) {
-  const fields = buildEfiGuide(source); const forms = Object.fromEntries([...new Set(fields.map((field) => field.form))].map((form) => [form, fields.filter((field) => field.form === form).map(({ code, label, value: raw }) => ({ code, label, value: raw }))]));
+  const fields = buildEfiGuide(source); const forms = Object.fromEntries([...new Set(fields.map((field) => field.form))].map((form) => [form, fields.filter((field) => field.form === form).map(({ code, label, value: raw, portalFieldId, column, manualReview }) => ({ code, label, value: raw, ...(portalFieldId ? { portalFieldId } : {}), ...(column ? { column } : {}), ...(manualReview ? { manualReview: true } : {}) }))]));
   const body = { format: "COMPTAOS-TDFC-PREPARATION", schemaVersion: "2026.1", campaign: 2026, officialInterchange: false, transmittableDirectly: false, requiresPartnerEdi: true, generatedAt: new Date().toISOString(), period: source.period, declarant: { name: source.filingPackage.identity.name, siren: source.filingPackage.identity.siren, siret: source.filingPackage.identity.siret }, forms };
   return { ...body, sha256: sha256(JSON.stringify(body)), warnings: ["Ce fichier contient les données fiscales structurées mais n’est pas un interchange EDIFACT attesté.", "La transmission exige un partenaire EDI et un adaptateur conforme à son protocole."] };
 }

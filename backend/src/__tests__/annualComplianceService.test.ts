@@ -12,12 +12,12 @@ const source: any = {
   filingPackage: {
     identity: { name: "Summoning Systems", legalForm: "SAS", siren: "939154605", siret: "93915460500017", address: "30 boulevard de Sébastopol 75004 Paris", capital: "900" },
     form2065: { taxableAt15: 14431.21, taxableAt25: 0, grossTax: 2164.68, netTax: 2164.68, prepayments: 0, balance: 2164.68, signatory: { city: "Toulouse", name: "Benoit Jurado", role: "Président" } },
-    form2033C: { fixedAssets: [{ code: "tangible", label: "Immobilisations corporelles", closingGross: 883, closingDepreciation: 488.33 }] },
+    form2033C: { fixedAssets: [{ code: "tangible", label: "Immobilisations corporelles", closingGross: 883, closingDepreciation: 488.33, increases: 0 }], capitalGains: { saleProceeds: 0 } },
     form2033D: { lossCarryforwards: 0 }, form2033E: { production: 24895.11, valueAdded: 14725.8 },
     form2033F: { owners: [{ name: "Benoit Jurado", ownershipPercent: 33.34, shareCount: 3000 }] }, form2033G: { subsidiaries: [] },
   },
-  simplifiedStatements: { balanceSheet: { assets: [{ code: "028/030", label: "Immobilisations corporelles — net", value: 394.67, sourceAccounts: ["218300", "281830"] }], liabilities: [{ code: "142", label: "Capital", value: 900, sourceAccounts: ["101000"] }] }, profitAndLoss: { fields: [{ code: "310", label: "Production vendue", value: 24895.11, sourceAccounts: ["706000"] }] }, fiscalTable: { fields: [{ code: "352", label: "Réintégrations", value: 30 }] } },
-  taxCalculation: {}, fiscalSummary: { accountingResult: 12266.53 }, accountingSummary: { balances: [{ accountNumber: "218300", balance: 883 }, { accountNumber: "281830", balance: -488.33 }] },
+  simplifiedStatements: { balanceSheet: { assets: [{ code: "028/030", label: "Immobilisations corporelles — net", value: 394.67, sourceAccounts: ["218300", "281830"] }], liabilities: [{ code: "120", label: "Capital", value: 900, sourceAccounts: ["101000"] }, { code: "172", label: "Dettes fiscales et sociales", value: 3439.02, sourceAccounts: ["445710"] }] }, profitAndLoss: { fields: [{ code: "310", label: "Production vendue", value: 24895.11, sourceAccounts: ["706000"] }] }, fiscalTable: { fields: [{ code: "352", label: "Réintégrations", value: 30 }] } },
+  taxCalculation: {}, fiscalSummary: { accountingResult: 12266.53 }, accountingSummary: { balances: [{ accountNumber: "218300", balance: 883 }, { accountNumber: "281830", balance: -488.33 }, { accountNumber: "445710", balance: -3439.02 }] },
 };
 
 describe("conformité de clôture annuelle", () => {
@@ -29,9 +29,15 @@ describe("conformité de clôture annuelle", () => {
     expect(fields).toContainEqual(expect.objectContaining({ form: "2065", code: "BENEFICE-15", value: 14431.21, formattedValue: "14 431", copyValue: "14431" }));
     expect(fields).toContainEqual(expect.objectContaining({ form: "2572-SD", code: "IS-NET", value: 2164.68, copyValue: "2165" }));
     expect(fields).not.toContainEqual(expect.objectContaining({ form: "2065", code: "IS-NET" }));
-    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "028", value: 883, copyValue: "883", column: "Brut" }));
-    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "030", value: 488.33, copyValue: "488", column: "Amortissements / provisions" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "028", value: 883, copyValue: "883", column: "Brut", portalFieldId: "A304330_0" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "030", value: 488.33, copyValue: "488", column: "Amortissements / provisions", portalFieldId: "A304345_0" }));
     expect(fields).not.toContainEqual(expect.objectContaining({ form: "2033-A", code: "028/030" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "120", portalFieldId: "A304391_0" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "DONT-TVA", portalFieldId: "A913095_0", copyValue: "3439" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "172", portalFieldId: "A913096_0", copyValue: "3439" }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "RENVOI-5-ACQ", portalFieldId: "A304429_0", value: 0 }));
+    expect(fields).toContainEqual(expect.objectContaining({ form: "2033-A", code: "RENVOI-1", portalFieldId: "A304425_0", manualReview: true }));
+    expect((payload.forms as any)["2033-A"]).toContainEqual(expect.objectContaining({ code: "028", portalFieldId: "A304330_0", column: "Brut", value: 883 }));
     expect(payload).toMatchObject({ format: "COMPTAOS-TDFC-PREPARATION", schemaVersion: "2026.1", officialInterchange: false, transmittableDirectly: false, requiresPartnerEdi: true });
     expect(payload.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
