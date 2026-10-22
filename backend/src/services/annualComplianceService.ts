@@ -46,6 +46,7 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 const euro = (value: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 const wholeEuro = (value: number) => value >= 0 ? Math.floor(value + .5) : Math.ceil(value - .5);
 const wholeEuroDisplay = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(wholeEuro(value));
+const portalDate = (raw: string) => /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw.slice(8, 10)}/${raw.slice(5, 7)}/${raw.slice(0, 4)}` : raw;
 const transmissionsPath = () => join(getWorkspaceRoot(), "settings", "annual-transmissions.json");
 const governancePath = () => join(getWorkspaceRoot(), "settings", "annual-governance.json");
 const ediPartnerPath = () => join(getWorkspaceRoot(), "settings", "annual-edi-partner.json");
@@ -88,9 +89,9 @@ const value = (form: string, section: string, code: string, label: string, raw: 
   };
 };
 
-const manualValue = (code: string, label: string, portalFieldId: string, source: string): EfiField => ({
-  id: `2033-A:${code}:${label}`, form: "2033-A", section: "Renvois", code, label,
-  value: "", formattedValue: "À vérifier si concerné", copyValue: "", column: "Renvois", portalFieldId, manualReview: true, source,
+const manualValue = (form: string, section: string, code: string, label: string, portalFieldId: string | undefined, source: string): EfiField => ({
+  id: `${form}:${code}:${label}`, form, section, code, label,
+  value: "", formattedValue: "À vérifier si concerné", copyValue: "", column: section, ...(portalFieldId ? { portalFieldId } : {}), manualReview: true, source,
 });
 
 // Identifiants du formulaire EFI 2033-A version 15 fourni par impots.gouv.fr.
@@ -151,12 +152,131 @@ function addReferralFields(fields: EfiField[], source: ComplianceSource) {
   const pack = source.filingPackage;
   const debtorShareholders = round(source.accountingSummary.balances.filter((item) => item.accountNumber.startsWith("455") && item.balance > 0).reduce((sum, item) => sum + item.balance, 0));
   const acquisitions = round((pack.form2033C.fixedAssets ?? []).reduce((sum: number, item: any) => sum + Number(item.increases ?? 0), 0));
-  fields.push(manualValue("RENVOI-1", "Dont immobilisations financières à moins d’un an", "A304425_0", "Échéance non suivie dans les comptes généraux"));
-  fields.push(manualValue("RENVOI-2", "Dont créances à plus d’un an", "A304426_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(manualValue("2033-A", "Renvois", "RENVOI-1", "Dont immobilisations financières à moins d’un an", "A304425_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(manualValue("2033-A", "Renvois", "RENVOI-2", "Dont créances à plus d’un an", "A304426_0", "Échéance non suivie dans les comptes généraux"));
   fields.push(value("2033-A", "Renvois", "RENVOI-3", "Dont comptes courants d’associés débiteurs", debtorShareholders, "Comptes 455 débiteurs", { column: "Renvois", portalFieldId: "A304427_0" }));
-  fields.push(manualValue("RENVOI-4", "Dont dettes à plus d’un an", "A304428_0", "Échéance non suivie dans les comptes généraux"));
+  fields.push(manualValue("2033-A", "Renvois", "RENVOI-4", "Dont dettes à plus d’un an", "A304428_0", "Échéance non suivie dans les comptes généraux"));
   fields.push(value("2033-A", "Renvois", "RENVOI-5-ACQ", "Coût de revient des immobilisations acquises ou créées durant l’exercice", acquisitions, "Mouvements d’immobilisations 2033-C", { column: "Renvois", portalFieldId: "A304429_0" }));
   fields.push(value("2033-A", "Renvois", "RENVOI-5-CESS", "Prix de vente HT des immobilisations cédées durant l’exercice", pack.form2033C.capitalGains?.saleProceeds ?? 0, "Cessions d’immobilisations 2033-C", { column: "Renvois", portalFieldId: "A304430_0" }));
+}
+
+const profitAndLossPortalFields: Record<string, string> = {
+  "210": "A304449_0", "214": "A304450_0", "218": "A304451_0", "222": "A304452_0",
+  "224": "A304453_0", "226": "A304454_0", "230": "A304455_0", "234": "A304457_0",
+  "236": "A304458_0", "238": "A304459_0", "240": "A304460_0", "242": "A304461_0",
+  "244": "A304462_0", "250": "A304463_0", "252": "A304464_0", "254": "A304465_0",
+  "256": "A304466_0", "262": "A304467_0", "280": "A304470_0", "290": "A304471_0",
+  "294": "A304472_0", "300": "A304473_0", "306": "A304474_0",
+};
+
+function addProfitAndTaxFields(fields: EfiField[], source: ComplianceSource) {
+  const statements = source.simplifiedStatements;
+  for (const row of statements.profitAndLoss.fields) {
+    const portalFieldId = profitAndLossPortalFields[row.code];
+    if (!portalFieldId) continue; // Les totaux et résultats sont calculés par le portail EFI.
+    fields.push(value("2033-B", "Compte de résultat", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`, { column: "Total", portalFieldId }));
+  }
+  const reintegrations: any[] = statements.fiscalTable.reintegrations ?? [];
+  const deductions: any[] = statements.fiscalTable.deductions ?? [];
+  const losses: any[] = statements.fiscalTable.lossCarryforwards ?? [];
+  const sumKinds = (items: any[], kinds: string[]) => round(items.filter((item) => kinds.includes(item.kind)).reduce((sum, item) => sum + Number(item.amount ?? 0), 0));
+  const nonDeductibleTaxes = sumKinds(reintegrations, ["corporate_tax", "fines_penalties"]);
+  const excessDepreciation = sumKinds(reintegrations, ["excess_depreciation"]);
+  const otherReintegrations = round(reintegrations.filter((item) => !["corporate_tax", "fines_penalties", "excess_depreciation"].includes(item.kind)).reduce((sum, item) => sum + Number(item.amount ?? 0), 0));
+  const ordinaryDeductions = round(deductions.reduce((sum, item) => sum + Number(item.amount ?? 0), 0));
+  const lossesApplied = round(losses.reduce((sum, item) => sum + Number(item.amount ?? 0), 0));
+  fields.push(value("2033-B", "Résultat fiscal · réintégrations", "IMPOTS-NON-DEDUCTIBLES", "Impôts, IS et pénalités non déductibles", nonDeductibleTaxes, "Corrections fiscales validées", { portalFieldId: "A304480_0" }));
+  fields.push(value("2033-B", "Résultat fiscal · réintégrations", "AMORT-EXCEDENTAIRES", "Amortissements excédentaires non déductibles", excessDepreciation, "Corrections fiscales validées", { portalFieldId: "A304478_0" }));
+  fields.push(value("2033-B", "Résultat fiscal · réintégrations", "REINTEGRATIONS-DIVERSES", "Réintégrations diverses", otherReintegrations, "Corrections fiscales validées", { portalFieldId: "A304481_0" }));
+  fields.push(value("2033-B", "Résultat fiscal · déductions", "DEDUCTIONS-DIVERSES", "Déductions diverses", ordinaryDeductions, "Corrections fiscales validées", { portalFieldId: "A304511_0" }));
+  fields.push(value("2033-B", "Résultat fiscal · déficits", "DEFICITS-IMPUTES", "Déficits antérieurs imputés", lossesApplied, "Corrections fiscales validées", { portalFieldId: "A304517_0" }));
+}
+
+const fixedAssetPortalFields: Record<string, { label: string; gross: [string, string, string, string]; amort?: [string, string, string] }> = {
+  goodwill: { label: "Fonds commercial", gross: ["A304524_0", "A304534_0", "A304544_0", "A304563_0"], amort: ["A911841_0", "A911842_0", "A911843_0"] },
+  immaterial: { label: "Autres immobilisations incorporelles", gross: ["A304525_0", "A304535_0", "A304545_0", "A304564_0"], amort: ["A304573_0", "A304581_0", "A304589_0"] },
+  land: { label: "Terrains", gross: ["A304526_0", "A304536_0", "A304546_0", "A304565_0"], amort: ["A304574_0", "A304582_0", "A304590_0"] },
+  construction: { label: "Constructions", gross: ["A304527_0", "A304537_0", "A304547_0", "A304566_0"], amort: ["A304575_0", "A304583_0", "A304591_0"] },
+  technical: { label: "Installations techniques, matériel et outillage", gross: ["A304528_0", "A304538_0", "A304548_0", "A304567_0"], amort: ["A304576_0", "A304584_0", "A304592_0"] },
+  fittings: { label: "Installations générales et aménagements", gross: ["A304529_0", "A304539_0", "A304549_0", "A304568_0"], amort: ["A304577_0", "A304585_0", "A304593_0"] },
+  transport: { label: "Matériel de transport", gross: ["A304530_0", "A304540_0", "A304550_0", "A304569_0"], amort: ["A304578_0", "A304586_0", "A304594_0"] },
+  other_tangible: { label: "Autres immobilisations corporelles", gross: ["A304531_0", "A304541_0", "A304551_0", "A304570_0"], amort: ["A304579_0", "A304587_0", "A304595_0"] },
+  financial: { label: "Immobilisations financières", gross: ["A304532_0", "A304542_0", "A304552_0", "A304571_0"] },
+};
+
+function fixedAssetKind(row: any, balances: ComplianceSource["accountingSummary"]["balances"]) {
+  if (row.code === "financial") return "financial";
+  if (row.code === "immaterial") {
+    const hasGoodwill = balances.some((item) => item.accountNumber.startsWith("207") && item.balance > 0);
+    const hasOther = balances.some((item) => item.accountNumber.startsWith("20") && !item.accountNumber.startsWith("207") && item.balance > 0);
+    if (hasGoodwill && hasOther) return undefined;
+    if (!hasGoodwill && !hasOther && [row.openingGross, row.increases, row.decreases, row.closingGross].some((item) => Number(item ?? 0) !== 0)) return undefined;
+    return hasGoodwill ? "goodwill" : "immaterial";
+  }
+  const accounts = balances.filter((item) => /^(21|22|23)/.test(item.accountNumber) && item.balance > 0).map((item) => item.accountNumber);
+  const kinds = new Set(accounts.map((account) => /^(211|212)/.test(account) ? "land" : /^(213|214)/.test(account) ? "construction" : account.startsWith("215") ? "technical" : account.startsWith("2181") ? "fittings" : account.startsWith("2182") ? "transport" : "other_tangible"));
+  if (!kinds.size && [row.openingGross, row.increases, row.decreases, row.closingGross].some((item) => Number(item ?? 0) !== 0)) return undefined;
+  return kinds.size <= 1 ? ([...kinds][0] ?? "other_tangible") : undefined;
+}
+
+function addFixedAssetFields(fields: EfiField[], source: ComplianceSource) {
+  for (const row of source.filingPackage.form2033C.fixedAssets ?? []) {
+    const kind = fixedAssetKind(row, source.accountingSummary.balances);
+    if (!kind) {
+      fields.push(manualValue("2033-C", "Immobilisations", `VENTILATION-${row.code}`, `Ventiler ${row.label} entre les lignes du formulaire`, undefined, "Plusieurs catégories d’immobilisations sont présentes"));
+      continue;
+    }
+    const portal = fixedAssetPortalFields[kind];
+    const grossValues = [row.openingGross, row.increases, row.decreases, row.closingGross];
+    const grossLabels = ["Valeur brute au début", "Augmentations", "Diminutions", "Valeur brute à la fin"];
+    grossValues.forEach((raw, index) => fields.push(value("2033-C", "Immobilisations", `${kind.toUpperCase()}-${index + 1}`, `${portal.label} · ${grossLabels[index]}`, raw ?? 0, "Tableau des immobilisations", { column: grossLabels[index], portalFieldId: portal.gross[index] })));
+    if (portal.amort) {
+      const amortValues = [row.openingDepreciation, row.depreciationCharge, row.depreciationDecrease];
+      const amortLabels = ["Amortissements au début", "Dotations de l’exercice", "Sorties et reprises"];
+      amortValues.forEach((raw, index) => fields.push(value("2033-C", "Amortissements", `${kind.toUpperCase()}-AMORT-${index + 1}`, `${portal.label} · ${amortLabels[index]}`, raw ?? 0, "Journal d’inventaire", { column: amortLabels[index], portalFieldId: portal.amort![index] })));
+    }
+  }
+}
+
+function addProvisionAndVatFields(fields: EfiField[], source: ComplianceSource) {
+  const pack = source.filingPackage.form2033D;
+  if ((pack.provisions ?? []).some((item: any) => Number(item.amount ?? 0) !== 0)) fields.push(manualValue("2033-D", "Provisions", "VENTILATION-PROVISIONS", "Ventiler les provisions entre ouverture, dotations et reprises", undefined, "Le solde de clôture seul ne suffit pas au formulaire"));
+  fields.push(value("2033-D", "Déficits", "DEFICITS-IMPUTES", "Déficits imputés durant l’exercice", pack.lossCarryforwards ?? 0, "Corrections fiscales", { portalFieldId: "A309331_0" }));
+  const deficit = Number(source.simplifiedStatements.fiscalTable.fields.find((item: any) => item.code === "372")?.value ?? 0);
+  fields.push(value("2033-D", "Déficits", "DEFICIT-EXERCICE", "Déficit de l’exercice", deficit, "Résultat fiscal", { portalFieldId: "A304694_0" }));
+  fields.push(value("2033-D", "TVA", "TVA-COLLECTEE", "Montant de la TVA collectée", pack.vatCollected ?? 0, "Comptes 44571", { portalFieldId: "A907430_0" }));
+  fields.push(value("2033-D", "TVA", "TVA-DEDUCTIBLE", "Montant de la TVA déductible sur biens et services", pack.vatDeductible ?? 0, "Comptes 44562 et 44566", { portalFieldId: "A907431_0" }));
+}
+
+function balanceFlow(source: ComplianceSource, prefixes: string[], side: "expense" | "income", excludes: string[] = []) {
+  return round(source.accountingSummary.balances.filter((item) => prefixes.some((prefix) => item.accountNumber.startsWith(prefix)) && !excludes.some((prefix) => item.accountNumber.startsWith(prefix))).reduce((sum, item) => sum + (side === "expense" ? Math.max(0, item.balance) : Math.max(0, -item.balance)), 0));
+}
+
+function addValueAddedFields(fields: EfiField[], source: ComplianceSource) {
+  const pack = source.filingPackage.form2033E;
+  const period = source.period;
+  const rent = balanceFlow(source, ["613"], "expense");
+  const externalCharges = Number(source.simplifiedStatements.profitAndLoss.fields.find((item: any) => item.code === "242")?.value ?? 0);
+  const otherExternal = Math.max(0, round(externalCharges - rent));
+  const rows = [
+    ["EFFECTIF", "Effectif moyen du personnel", pack.averageEmployees ?? 0, "A907434_0", false],
+    ["AUTRES-PRODUITS", "Autres produits de gestion courante", balanceFlow(source, ["75"], "income", ["751"]), "A900911_0", true],
+    ["PRODUCTION-IMMOBILISEE", "Production immobilisée", balanceFlow(source, ["72"], "income"), "A900907_0", true],
+    ["SUBVENTIONS", "Subventions d’exploitation", balanceFlow(source, ["74"], "income"), "A900908_0", true],
+    ["VARIATION-STOCK-POSITIVE", "Variation positive des stocks", balanceFlow(source, ["71"], "income"), "A909397_0", true],
+    ["VARIATION-STOCK-NEGATIVE", "Variation négative des stocks", balanceFlow(source, ["603"], "expense"), "A909399_0", true],
+    ["CHARGES-EXTERNES-HORS-LOYERS", "Autres achats et charges externes hors loyers", otherExternal, "A900920_0", true],
+    ["LOYERS", "Loyers et redevances", rent, "A900922_0", true],
+    ["TAXES", "Taxes hors TVA et contributions directes", pack.taxes ?? 0, "A900921_0", true],
+    ["AUTRES-CHARGES", "Autres charges de gestion courante", balanceFlow(source, ["65"], "expense"), "A900923_0", true],
+    ["VA-CVAE", "Valeur ajoutée assujettie à la CVAE", Math.max(0, round(Number(pack.valueAdded ?? 0) - Number(pack.taxes ?? 0))), "A903444_0", true],
+    ["CA-CVAE", "Chiffre d’affaires de référence CVAE", pack.turnover ?? 0, "A905913_0", true],
+  ] as const;
+  for (const [code, label, raw, portalFieldId, monetary] of rows) fields.push(value("2033-E", code === "EFFECTIF" ? "Effectifs" : "Valeur ajoutée", code, label, raw, "Journal comptable", { monetary, portalFieldId }));
+  fields.push(value("2033-E", "Période CVAE", "PERIODE-DU", "Période de référence · du", portalDate(period.startDate), "Exercice comptable", { monetary: false, portalFieldId: "A905914_0" }));
+  fields.push(value("2033-E", "Période CVAE", "PERIODE-AU", "Période de référence · au", portalDate(period.endDate), "Exercice comptable", { monetary: false, portalFieldId: "A905915_0" }));
+  fields.push(manualValue("2033-E", "Effectifs", "EFFECTIF-APPRENTIS", "Dont apprentis", "A907435_0", "Donnée sociale non suivie dans ComptaOS"));
+  fields.push(manualValue("2033-E", "Effectifs", "EFFECTIF-HANDICAPES", "Dont personnes handicapées", "A907436_0", "Donnée sociale non suivie dans ComptaOS"));
 }
 
 export function buildEfiGuide(source: ComplianceSource): EfiField[] {
@@ -178,15 +298,10 @@ export function buildEfiGuide(source: ComplianceSource): EfiField[] {
   addAssetFields(fields, source);
   addLiabilityFields(fields, source);
   addReferralFields(fields, source);
-  for (const row of statements.profitAndLoss.fields) fields.push(value("2033-B", "Compte de résultat", row.code, row.label, row.value, `Comptes ${row.sourceAccounts?.join(", ") || "calculés"}`));
-  for (const row of statements.fiscalTable.fields) fields.push(value("2033-B", "Résultat fiscal", row.code, row.label, row.value, "Corrections fiscales"));
-  pack.form2033C.fixedAssets.forEach((row: any, index: number) => {
-    const prefix = `IMM-${index + 1}`;
-    fields.push(value("2033-C", "Immobilisations", `${prefix}-BRUT`, `${row.label} — brut clôture`, row.closingGross, "Journal et balance"));
-    fields.push(value("2033-C", "Amortissements", `${prefix}-AMORT`, `${row.label} — amortissements clôture`, row.closingDepreciation, "Journal d’inventaire"));
-  });
-  fields.push(value("2033-D", "Déficits", "DEFICITS", "Déficits antérieurs imputés", pack.form2033D.lossCarryforwards, "Corrections fiscales"));
-  Object.entries(pack.form2033E).forEach(([code, raw]) => fields.push(value("2033-E", "Valeur ajoutée", code.toUpperCase(), code, Number(raw ?? 0), "Journal comptable")));
+  addProfitAndTaxFields(fields, source);
+  addFixedAssetFields(fields, source);
+  addProvisionAndVatFields(fields, source);
+  addValueAddedFields(fields, source);
   pack.form2033F.owners.forEach((owner: any, index: number) => {
     fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-NOM`, "Nom ou dénomination", owner.name, "Structure financière"));
     fields.push(value("2033-F", "Associés", `ASSOCIE-${index + 1}-PART`, "Pourcentage détenu", owner.ownershipPercent ?? 0, "Structure financière", { monetary: false }));
