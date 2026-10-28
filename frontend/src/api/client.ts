@@ -721,6 +721,15 @@ export interface VatQuarterData {
 
 export interface VatSummaryData {
   year: string;
+  selection: {
+    key: string;
+    kind: "fiscal_period" | "calendar_year";
+    label: string;
+    startDate: string;
+    endDate: string;
+    periodId?: string;
+  };
+  availablePeriods: Array<{ id: string; startDate: string; endDate: string; label?: string }>;
   quarters: VatQuarterData[];
   total: { collected: number; deductible: number; net: number };
   regime?: import("../types").CompanyProfile["vatRegime"];
@@ -728,12 +737,25 @@ export interface VatSummaryData {
   referenceAmount?: number;
   reserve?: number;
   payments?: number;
+  declaration: {
+    collected: number;
+    deductible: number;
+    advances: number;
+    balancePayments: number;
+    netBeforeAdvances: number;
+    netAfterAdvances: number;
+  };
   nextDue?: { period: string; label: string; estimatedAmount: number; provisional: boolean };
   details: VatTransactionDetail[];
 }
 
-export async function fetchVatSummary(year: string): Promise<VatSummaryData> {
-  const { data } = await api.get<VatSummaryData>(`/reports/vat-summary?year=${year}`);
+export async function fetchVatSummary(selection = ""): Promise<VatSummaryData> {
+  const params = new URLSearchParams();
+  if (selection.startsWith("period:")) params.set("periodId", selection.slice(7));
+  else if (selection.startsWith("year:")) params.set("year", selection.slice(5));
+  else if (selection) params.set("year", selection);
+  const query = params.toString();
+  const { data } = await api.get<VatSummaryData>(`/reports/vat-summary${query ? `?${query}` : ""}`);
   return data;
 }
 

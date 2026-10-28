@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "../types/index.js";
-import { computeVatPosition, isVatPayment, vatPaymentAmount } from "../services/vatPositionService.js";
+import { computeVatDeclaration, computeVatPosition, isVatPayment, vatPaymentAmount } from "../services/vatPositionService.js";
 
 const transaction = (patch: Partial<Transaction>): Transaction => ({ id: "txn", date: "2026-08-01", label: "Opération", amount_ht: 0, vat: 0, amount_ttc: 0, currency: "EUR", category: "misc", account: "main", status: "validated", ...patch });
 
@@ -46,5 +46,21 @@ describe("position de TVA et trésorerie disponible", () => {
     ], { name: "Entreprise", vatRegime: "monthly_ca3" }, new Date("2026-08-28T12:00:00Z"));
 
     expect(result).toMatchObject({ collected: 0, deductible: 15, netLiability: 0 });
+  });
+
+  it("calcule une CA12E sur un exercice décalé sans reprendre le solde de TVA antérieur ni la pénalité", () => {
+    const result = computeVatDeclaration([
+      transaction({ id: "sale-2025", date: "2025-12-01", category: "sales", amount_ht: 5_000, vat: 1_000, amount_ttc: 6_000 }),
+      transaction({ id: "sale-2026", date: "2026-09-01", category: "sales", amount_ht: 6_295.1, vat: 1_259.02, amount_ttc: 7_554.12 }),
+      transaction({ id: "purchase", date: "2026-04-01", category: "software", amount_ht: -3_565.05, vat: -713.01, amount_ttc: -4_278.06 }),
+      transaction({ id: "advance", date: "2026-08-26", amount_ttc: -630, category: "vat_advance_payment", accounting_splits: [
+        { category: "vat_advance_payment", amount: -609 },
+        { category: "tax_penalty", amount: -21 },
+      ] }),
+      transaction({ id: "old-balance", date: "2026-06-02", amount_ttc: -931, category: "vat_balance_payment" }),
+      transaction({ id: "outside", date: "2025-09-30", category: "sales", amount_ht: 100, vat: 20, amount_ttc: 120 }),
+    ], "2025-10-01", "2026-09-30");
+
+    expect(result).toEqual({ collected: 2259.02, deductible: 713.01, advances: 609, balancePayments: 931, netBeforeAdvances: 1546.01, netAfterAdvances: 937.01 });
   });
 });

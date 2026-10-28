@@ -27,6 +27,28 @@ export function vatPaymentAmount(transaction: Transaction): number {
   return isVatPayment(transaction) ? Math.abs(transaction.amount_ttc) : 0;
 }
 
+export function vatAdvanceAmount(transaction: Transaction): number {
+  if (transaction.amount_ttc >= 0) return 0;
+  const splits = transaction.accounting_splits?.filter((split) => split.category === "vat_advance_payment");
+  if (splits?.length) return round2(splits.reduce((sum, split) => sum + Math.abs(split.amount), 0));
+  return transaction.category === "vat_advance_payment" ? Math.abs(transaction.amount_ttc) : 0;
+}
+
+export function computeVatDeclaration(transactions: Transaction[], startDate: string, endDate: string) {
+  const valid = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date >= startDate && transaction.date <= endDate);
+  const collected = round2(valid.filter((transaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "revenue").reduce((sum, transaction) => sum + Math.abs(transaction.vat), 0));
+  const deductible = round2(valid.reduce((sum, transaction) => {
+    const nature = transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment);
+    if (nature === "expense" && !isVatPayment(transaction)) return sum + Math.abs(transaction.vat);
+    if (nature === "expense_refund") return sum - Math.abs(transaction.vat);
+    return sum;
+  }, 0));
+  const advances = round2(valid.reduce((sum, transaction) => sum + vatAdvanceAmount(transaction), 0));
+  const balancePayments = round2(valid.reduce((sum, transaction) => sum + (transaction.category === "vat_balance_payment" ? vatPaymentAmount(transaction) : 0), 0));
+  const netBeforeAdvances = round2(collected - deductible);
+  return { collected, deductible, advances, balancePayments, netBeforeAdvances, netAfterAdvances: round2(netBeforeAdvances - advances) };
+}
+
 function simplifiedNextDue(profile: CompanyProfile, now: Date) {
   const year = now.getFullYear();
   const reference = Math.max(0, Number(profile.vatReferenceAmount) || 0);

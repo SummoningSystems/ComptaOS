@@ -2,8 +2,11 @@ import { FastifyInstance } from "fastify";
 import { generateReport, ReportType } from "../services/reportService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { loadCompanyProfile } from "../services/settingsService.js";
-import { computeVatPosition } from "../services/vatPositionService.js";
+import { computeVatDeclaration, computeVatPosition } from "../services/vatPositionService.js";
 import { loadCategoryCatalog, transactionAccountingNature } from "../services/categoryCatalogService.js";
+import { getActiveCompanyId } from "../services/companiesService.js";
+import { getPlatformState } from "../services/platformService.js";
+import { workspaceContext } from "../services/workspaceContext.js";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 
 // ── Helpers PDF partagés ──────────────────────────────────────────────────────
@@ -36,6 +39,32 @@ function pdfHeader(page: PDFPage, title: string, subtitle: string, fontBold: PDF
   page.drawLine({ start: { x: MARGIN, y: PAGE_H - MARGIN - 36 }, end: { x: PAGE_W - MARGIN, y: PAGE_H - MARGIN - 36 }, thickness: 0.5, color: COL_MUTED });
 }
 
+type VatPeriod = { id: string; startDate: string; endDate: string; label?: string };
+function vatPeriods(): VatPeriod[] {
+  const companyId = workspaceContext.getStore()?.companyId ?? getActiveCompanyId();
+  const entity = getPlatformState().entities.find((item) => item.workspaceId === companyId);
+  return [...(entity?.fiscalPeriods ?? [])].sort((a, b) => b.endDate.localeCompare(a.endDate));
+}
+
+function calendarQuarterRanges(startDate: string, endDate: string, calendarYear?: string) {
+  const ranges: Array<{ label: string; startDate: string; endDate: string }> = [];
+  let cursor = startDate.slice(0, 7);
+  const last = endDate.slice(0, 7);
+  const seen = new Set<string>();
+  while (cursor <= last) {
+    const year = Number(cursor.slice(0, 4)); const month = Number(cursor.slice(5, 7)); const quarter = Math.floor((month - 1) / 3) + 1;
+    const key = `${year}-T${quarter}`;
+    if (!seen.has(key)) {
+      seen.add(key); const firstMonth = (quarter - 1) * 3 + 1; const lastMonth = firstMonth + 2;
+      const quarterStart = `${year}-${String(firstMonth).padStart(2, "0")}-01`;
+      const quarterEnd = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
+      ranges.push({ label: calendarYear ? `T${quarter}` : `T${quarter} ${year}`, startDate: quarterStart < startDate ? startDate : quarterStart, endDate: quarterEnd > endDate ? endDate : quarterEnd });
+    }
+    const next = new Date(Date.UTC(year, month, 1)); cursor = next.toISOString().slice(0, 7);
+  }
+  return ranges;
+}
+
 export async function reportsRoutes(app: FastifyInstance) {
   type VatTransactionDetail = {
     id: string;
@@ -66,23 +95,23 @@ export async function reportsRoutes(app: FastifyInstance) {
    * GET /api/reports/vat-summary?year=2025
    * Retourne la TVA collectée, déductible et à reverser par trimestre.
    */
-  app.get<{ Querystring: { year?: string } }>("/vat-summary", async (req, reply) => {
-    const year = req.query.year ?? String(new Date().getFullYear());
+  app.get<{ Querystring: { year?: string; periodId?: string } }>("/vat-summary", async (req, reply) => {
+    const profile = loadCompanyProfile(); const availablePeriods = vatPeriods();
+    const defaultPeriod = profile.vatRegime === "simplified_ca12" ? availablePeriods.find((period) => period.endDate <= new Date().toISOString().slice(0, 10)) : undefined;
+    const selectedPeriod = req.query.periodId ? availablePeriods.find((period) => period.id === req.query.periodId) : !req.query.year ? defaultPeriod : undefined;
+    if (req.query.periodId && !selectedPeriod) return reply.status(404).send({ error: "Exercice comptable introuvable." });
+    const year = req.query.year ?? selectedPeriod?.endDate.slice(0, 4) ?? String(new Date().getFullYear());
+    const startDate = selectedPeriod?.startDate ?? `${year}-01-01`; const endDate = selectedPeriod?.endDate ?? `${year}-12-31`;
     const all = await loadAllTransactions();
     const txns = all.filter(
-      (t) => t.date.startsWith(year) && t.status !== "rejected"
+      (t) => t.date >= startDate && t.date <= endDate && t.status !== "rejected"
     );
 
     // Calcul par trimestre
-    const quarters = [
-      { label: "T1", months: ["01", "02", "03"] },
-      { label: "T2", months: ["04", "05", "06"] },
-      { label: "T3", months: ["07", "08", "09"] },
-      { label: "T4", months: ["10", "11", "12"] },
-    ];
+    const quarters = calendarQuarterRanges(startDate, endDate, selectedPeriod ? undefined : year);
 
-    const rows = quarters.map(({ label, months }) => {
-      const qt = txns.filter((t) => months.includes(t.date.slice(5, 7)));
+    const rows = quarters.map(({ label, startDate: quarterStart, endDate: quarterEnd }) => {
+      const qt = txns.filter((t) => t.date >= quarterStart && t.date <= quarterEnd);
       const collected = qt
         .filter(isRevenue)
         .reduce((s, t) => s + t.vat, 0);
@@ -100,8 +129,7 @@ export async function reportsRoutes(app: FastifyInstance) {
     const details: VatTransactionDetail[] = txns
       .filter((t) => Math.abs(t.vat) > 0.0001)
       .map((t) => {
-        const month = t.date.slice(5, 7);
-        const quarter = quarters.find((q) => q.months.includes(month))?.label ?? "T1";
+        const quarter = quarters.find((q) => t.date >= q.startDate && t.date <= q.endDate)?.label ?? "Hors période";
         const direction: "collected" | "deductible" = isRevenue(t) ? "collected" : "deductible";
         const inferredVatRate = typeof t.vat_rate === "number"
           ? t.vat_rate
@@ -127,11 +155,13 @@ export async function reportsRoutes(app: FastifyInstance) {
 
     const totalCollected = rows.reduce((s, r) => s + r.collected, 0);
     const totalDeductible = rows.reduce((s, r) => s + r.deductible, 0);
-    const profile = loadCompanyProfile();
     const vatPosition = computeVatPosition(all, profile);
+    const declaration = computeVatDeclaration(all, startDate, endDate);
 
     return reply.send({
       year,
+      selection: { key: selectedPeriod ? `period:${selectedPeriod.id}` : `year:${year}`, kind: selectedPeriod ? "fiscal_period" : "calendar_year", label: selectedPeriod ? `${selectedPeriod.label || "Exercice"} · ${startDate} → ${endDate}` : `Année civile ${year}`, startDate, endDate, periodId: selectedPeriod?.id },
+      availablePeriods,
       quarters: rows,
       total: {
         collected: parseFloat(totalCollected.toFixed(2)),
@@ -141,9 +171,12 @@ export async function reportsRoutes(app: FastifyInstance) {
       regime: profile.vatRegime,
       referenceYear: profile.vatReferenceYear,
       referenceAmount: profile.vatReferenceAmount,
-      reserve: vatPosition.reserve,
-      payments: vatPosition.payments,
-      nextDue: vatPosition.nextDue,
+      reserve: selectedPeriod ? Math.max(0, declaration.netAfterAdvances) : vatPosition.reserve,
+      payments: declaration.advances,
+      declaration,
+      nextDue: selectedPeriod
+        ? { period: `${startDate} → ${endDate}`, label: "CA12E à déposer dans les 3 mois de la clôture", estimatedAmount: Math.max(0, declaration.netAfterAdvances), provisional: true }
+        : vatPosition.nextDue,
       details,
     });
   });
@@ -215,24 +248,22 @@ export async function reportsRoutes(app: FastifyInstance) {
   });
 
   // ── GET /api/reports/vat-pdf?year=2025&quarter=T2 ─────────────────────────
-  app.get<{ Querystring: { year?: string; quarter?: string } }>("/vat-pdf", async (req, reply) => {
-    const year    = req.query.year ?? String(new Date().getFullYear());
+  app.get<{ Querystring: { year?: string; periodId?: string; quarter?: string } }>("/vat-pdf", async (req, reply) => {
+    const periods = vatPeriods();
+    const selectedPeriod = req.query.periodId ? periods.find((period) => period.id === req.query.periodId) : undefined;
+    if (req.query.periodId && !selectedPeriod) return reply.status(404).send({ error: "Exercice comptable introuvable." });
+    const year    = req.query.year ?? selectedPeriod?.endDate.slice(0, 4) ?? String(new Date().getFullYear());
     const quarter = req.query.quarter ?? "annual";
+    const startDate = selectedPeriod?.startDate ?? `${year}-01-01`;
+    const endDate = selectedPeriod?.endDate ?? `${year}-12-31`;
+    const quarterRanges = calendarQuarterRanges(startDate, endDate, selectedPeriod ? undefined : year);
+    const selectedQuarter = quarter === "annual" ? undefined : quarterRanges.find((range) => range.label === quarter);
     const all     = await loadAllTransactions();
     const profile = loadCompanyProfile();
 
-    const quarterDef: Record<string, string[]> = {
-      T1: ["01","02","03"], T2: ["04","05","06"],
-      T3: ["07","08","09"], T4: ["10","11","12"],
-    };
-
     const txns = all.filter((t) => {
-      if (t.status === "rejected" || !t.date.startsWith(year)) return false;
-      if (quarter !== "annual") {
-        const m = t.date.slice(5, 7);
-        return (quarterDef[quarter] ?? []).includes(m);
-      }
-      return true;
+      if (t.status === "rejected" || t.date < startDate || t.date > endDate) return false;
+      return !selectedQuarter || (t.date >= selectedQuarter.startDate && t.date <= selectedQuarter.endDate);
     });
 
     const collected  = txns.filter(isRevenue).reduce((s, t) => s + t.vat, 0);
@@ -245,9 +276,9 @@ export async function reportsRoutes(app: FastifyInstance) {
     const page     = doc.addPage([PAGE_W, PAGE_H]);
     const fontReg  = await doc.embedFont(StandardFonts.Helvetica);
     const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-    const label    = quarter === "annual" ? `Annuel ${year}` : `${quarter} ${year}`;
+    const label    = quarter === "annual" ? (selectedPeriod ? `${selectedPeriod.label || "Exercice"} · ${startDate} → ${endDate}` : `Annuel ${year}`) : quarter;
 
-    pdfHeader(page, "Déclaration de TVA — CA3", `${profile.name || "Mon entreprise"} · ${label} · Généré le ${new Date().toLocaleDateString("fr-FR")}`, fontBold, fontReg);
+    pdfHeader(page, selectedPeriod && profile.vatRegime === "simplified_ca12" ? "Synthèse TVA — CA12E" : "Déclaration de TVA — CA3", `${profile.name || "Mon entreprise"} · ${label} · Généré le ${new Date().toLocaleDateString("fr-FR")}`, fontBold, fontReg);
 
     let y = PAGE_H - MARGIN - 60;
 
@@ -291,7 +322,7 @@ export async function reportsRoutes(app: FastifyInstance) {
     const pdfBytes = await doc.save();
     reply
       .header("Content-Type", "application/pdf")
-      .header("Content-Disposition", `attachment; filename="TVA_${year}_${quarter}.pdf"`)
+      .header("Content-Disposition", `attachment; filename="TVA_${startDate}_${endDate}_${quarter.replace(/\s+/g, "-")}.pdf"`)
       .send(Buffer.from(pdfBytes));
   });
 

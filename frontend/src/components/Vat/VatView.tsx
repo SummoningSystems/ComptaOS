@@ -264,8 +264,9 @@ function SplitEditor({
   );
 }
 
-function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total: VatSummaryData["total"]; year: string }) {
+function Ca3Panel({ quarters, total, selection, regime }: { quarters: VatQuarterData[]; total: VatSummaryData["total"]; selection: VatSummaryData["selection"]; regime: VatSummaryData["regime"] }) {
   const [selectedQ, setSelectedQ] = useState<string>("annual");
+  const isCa12 = regime === "simplified_ca12" && selection.kind === "fiscal_period";
 
   const activeData = selectedQ === "annual"
     ? { revenue: quarters.reduce((s, q) => s + q.revenue, 0), expenses: quarters.reduce((s, q) => s + q.expenses, 0), collected: total.collected, deductible: total.deductible, net: total.net }
@@ -279,7 +280,7 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
 
   function copyToClipboard() {
     const text = [
-      `SIMULATION CA3 — ${selectedQ === "annual" ? `Annuel ${year}` : `${selectedQ} ${year}`}`,
+      `${isCa12 ? "PRÉPARATION CA12E" : "SIMULATION CA3"} — ${selectedQ === "annual" ? selection.label : selectedQ}`,
       ``,
       `A  — Base HT (ventes 20%) :          ${fmt(baseHT)} €`,
       `08 — TVA collectée :                 ${fmt(data.collected)} €`,
@@ -304,15 +305,15 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">Simulation CA3</h3>
+        <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">{isCa12 ? "Préparation CA12E" : "Simulation CA3"}</h3>
         <div className="flex items-center gap-2">
           <select
             value={selectedQ}
             onChange={(e) => setSelectedQ(e.target.value)}
             className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
           >
-            <option value="annual">Annuel {year}</option>
-            {quarters.map((q) => <option key={q.quarter} value={q.quarter}>{q.quarter} {year}</option>)}
+            <option value="annual">{selection.label}</option>
+            {quarters.map((q) => <option key={q.quarter} value={q.quarter}>{q.quarter}</option>)}
           </select>
           <button
             onClick={copyToClipboard}
@@ -321,7 +322,7 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
             📋 Copier
           </button>
           <a
-            href={apiUrl(`/reports/vat-pdf?year=${year}&quarter=${selectedQ}`)}
+            href={apiUrl(`/reports/vat-pdf?${selection.periodId ? `periodId=${encodeURIComponent(selection.periodId)}` : `year=${selection.endDate.slice(0, 4)}`}&quarter=${encodeURIComponent(selectedQ)}`)}
             target="_blank"
             rel="noreferrer"
             className="text-xs text-vscode-muted hover:text-vscode-text border border-vscode-border rounded px-2 py-1 flex items-center gap-1"
@@ -333,7 +334,7 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
 
       <div className="border border-vscode-border rounded overflow-hidden text-xs">
         <div className="bg-vscode-panel px-4 py-2 text-[10px] font-semibold text-blue-400 uppercase tracking-widest">
-          OPÉRATIONS IMPOSABLES — {selectedQ === "annual" ? `Année ${year}` : `${selectedQ} ${year}`}
+          OPÉRATIONS IMPOSABLES — {selectedQ === "annual" ? selection.label : selectedQ}
         </div>
         <Ca3Row code="A" label="Base HT des opérations imposables à 20 %" value={baseHT} />
         <Ca3Row code="08" label="Taxe due à 20 %" value={data.collected} color="text-blue-300" bold />
@@ -361,7 +362,7 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
       </div>
 
       <p className="text-[10px] text-vscode-muted mt-2">
-        ⚠ Simulation à titre indicatif. Vérifiez avec votre expert-comptable avant dépôt sur impots.gouv.fr.
+        ⚠ Document de travail à contrôler avant dépôt sur impots.gouv.fr.
       </p>
     </div>
   );
@@ -369,18 +370,20 @@ function Ca3Panel({ quarters, total, year }: { quarters: VatQuarterData[]; total
 
 export function VatView() {
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(String(currentYear));
+  const [selectionKey, setSelectionKey] = useState("");
   const [data, setData] = useState<VatSummaryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailQuarter, setDetailQuarter] = useState<string>("annual");
   const [savingIds, setSavingIds] = useState<string[]>([]);
   const [splitEditId, setSplitEditId] = useState<string | null>(null);
 
-  async function load(y: string) {
+  async function load(selection = selectionKey) {
     setLoading(true);
     try {
-      const summary = await fetchVatSummary(y);
+      const summary = await fetchVatSummary(selection);
       setData(summary);
+      setSelectionKey(summary.selection.key);
+      setDetailQuarter("annual");
     } finally {
       setLoading(false);
     }
@@ -390,13 +393,13 @@ export function VatView() {
     setSavingIds((current) => current.includes(id) ? current : [...current, id]);
     try {
       await updateTransaction(id, patch);
-      await load(year);
+      await load(selectionKey);
     } finally {
       setSavingIds((current) => current.filter((item) => item !== id));
     }
   }
 
-  useEffect(() => { load(year); }, [year]);
+  useEffect(() => { void load(""); }, []);
 
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 
@@ -406,14 +409,19 @@ export function VatView() {
       <div className="flex items-center gap-4">
         <h2 className="text-vscode-text text-base font-semibold">Déclaration TVA</h2>
         <select
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
+          value={selectionKey}
+          onChange={(e) => { setSelectionKey(e.target.value); void load(e.target.value); }}
           className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
         >
-          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          {data?.availablePeriods.length ? <optgroup label="Exercices comptables">
+            {data.availablePeriods.map((period) => <option key={period.id} value={`period:${period.id}`}>{period.label || "Exercice"} · {period.startDate} → {period.endDate}</option>)}
+          </optgroup> : null}
+          <optgroup label="Années civiles">
+            {years.map((y) => <option key={y} value={`year:${y}`}>{y}</option>)}
+          </optgroup>
         </select>
         <button
-          onClick={() => load(year)}
+          onClick={() => void load(selectionKey)}
           className="text-xs text-vscode-muted hover:text-vscode-text border border-vscode-border rounded px-2 py-1"
         >
           ↺ Recharger
@@ -431,9 +439,23 @@ export function VatView() {
 
           <section className="max-w-3xl rounded-lg border border-blue-800 bg-blue-950/20 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-blue-200">Régime de TVA de la société</h3><p className="mt-1 text-xs text-vscode-text">{data.regime === "simplified_ca12" ? "Régime simplifié — CA12 annuelle et deux acomptes" : data.regime === "quarterly_ca3" ? "Régime réel normal — CA3 trimestrielle" : data.regime === "franchise" ? "Franchise en base de TVA" : "Régime réel normal — CA3 mensuelle"}</p></div>{data.nextDue && <div className="rounded border border-blue-800 px-3 py-2 text-right text-xs"><strong>{data.nextDue.label}</strong><br/><span className="text-vscode-muted">{data.nextDue.period} · estimation {data.nextDue.estimatedAmount.toFixed(2)} €</span></div>}</div>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4"><span>Provision actuelle<br/><strong className="text-amber-300">{(data.reserve ?? Math.max(0, data.total.net)).toFixed(2)} €</strong></span><span>Paiements TVA détectés<br/><strong>{(data.payments ?? 0).toFixed(2)} €</strong></span>{data.regime === "simplified_ca12" && <><span>Référence {data.referenceYear ?? "N-1"}<br/><strong>{(data.referenceAmount ?? 0).toFixed(2)} €</strong></span><span>Acomptes théoriques<br/><strong>55 % / 40 %</strong></span></>}</div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4"><span>{data.selection.kind === "fiscal_period" ? "Solde CA12E estimé" : "Provision actuelle"}<br/><strong className="text-amber-300">{(data.reserve ?? Math.max(0, data.total.net)).toFixed(2)} €</strong></span><span>Acomptes imputables<br/><strong>{(data.payments ?? 0).toFixed(2)} €</strong></span>{data.regime === "simplified_ca12" && <><span>Référence {data.referenceYear ?? "N-1"}<br/><strong>{(data.referenceAmount ?? 0).toFixed(2)} €</strong></span><span>Acomptes théoriques<br/><strong>55 % / 40 %</strong></span></>}</div>
             <p className="mt-3 text-[10px] text-vscode-muted">Les échéances affichées sont prévisionnelles. Les montants et dates opposables restent ceux de l’espace professionnel impots.gouv.fr.</p>
           </section>
+
+          {data.regime === "simplified_ca12" && data.selection.kind === "fiscal_period" && (
+            <section className="max-w-3xl rounded-lg border border-amber-700/60 bg-amber-950/10 p-4">
+              <h3 className="text-sm font-semibold text-amber-200">Calcul de la CA12E · {data.selection.startDate} → {data.selection.endDate}</h3>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
+                <span>TVA collectée<br/><strong>{data.declaration.collected.toFixed(2)} €</strong></span>
+                <span>TVA déductible<br/><strong>{data.declaration.deductible.toFixed(2)} €</strong></span>
+                <span>TVA avant acomptes<br/><strong>{data.declaration.netBeforeAdvances.toFixed(2)} €</strong></span>
+                <span>Acomptes de l'exercice<br/><strong>{data.declaration.advances.toFixed(2)} €</strong></span>
+                <span>Solde estimé<br/><strong className="text-amber-300">{data.declaration.netAfterAdvances.toFixed(2)} €</strong></span>
+              </div>
+              {data.declaration.balancePayments > 0 && <p className="mt-3 text-[10px] text-vscode-muted">{data.declaration.balancePayments.toFixed(2)} € de règlements de soldes d'exercices antérieurs sont volontairement exclus des acomptes de cette CA12E. Les pénalités fiscales sont également exclues.</p>}
+            </section>
+          )}
 
           {/* Résumé annuel */}
           <div className="grid grid-cols-3 gap-4 max-w-2xl">
@@ -465,7 +487,7 @@ export function VatView() {
 
           {/* Tableau par trimestre */}
           <div className="max-w-3xl">
-            <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide mb-3">Détail par trimestre — {year}</h3>            <table className="w-full text-xs border border-vscode-border rounded overflow-hidden">
+            <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide mb-3">Détail par trimestre — {data.selection.label}</h3>            <table className="w-full text-xs border border-vscode-border rounded overflow-hidden">
               <thead className="bg-vscode-panel">
                 <tr>
                   <th className="text-left px-4 py-2 text-vscode-muted">Trimestre</th>
@@ -481,7 +503,7 @@ export function VatView() {
                   const isEmpty = q.collected === 0 && q.deductible === 0;
                   return (
                     <tr key={q.quarter} className={`border-t border-vscode-border ${isEmpty ? "opacity-40" : ""}`}>
-                      <td className="px-4 py-2 font-semibold text-vscode-text">{q.quarter} {year}</td>
+                      <td className="px-4 py-2 font-semibold text-vscode-text">{q.quarter}</td>
                       <td className="text-right px-3 py-2 text-green-400 tabular-nums">
                         {q.revenue > 0 ? `+${q.revenue.toFixed(2)} €` : "—"}
                       </td>
@@ -502,7 +524,7 @@ export function VatView() {
                 })}
                 {/* Total */}
                 <tr className="border-t-2 border-vscode-accent bg-vscode-panel">
-                  <td className="px-4 py-2 font-bold text-vscode-text">TOTAL {year}</td>
+                  <td className="px-4 py-2 font-bold text-vscode-text">TOTAL</td>
                   <td colSpan={2} />
                   <td className="text-right px-3 py-2 text-blue-300 font-mono font-bold tabular-nums">
                     {data.total.collected.toFixed(2)} €
@@ -519,7 +541,7 @@ export function VatView() {
           </div>
 
           {/* Simulateur CA3 */}
-          <Ca3Panel quarters={data.quarters} total={data.total} year={year} />
+          <Ca3Panel quarters={data.quarters} total={data.total} selection={data.selection} regime={data.regime} />
 
           <div className="max-w-5xl">
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -531,8 +553,8 @@ export function VatView() {
                   onChange={(e) => setDetailQuarter(e.target.value)}
                   className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
                 >
-                  <option value="annual">Annuel {year}</option>
-                  {data.quarters.map((q) => <option key={q.quarter} value={q.quarter}>{q.quarter} {year}</option>)}
+                  <option value="annual">{data.selection.label}</option>
+                  {data.quarters.map((q) => <option key={q.quarter} value={q.quarter}>{q.quarter}</option>)}
                 </select>
               </div>
             </div>
