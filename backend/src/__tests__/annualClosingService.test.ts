@@ -31,6 +31,12 @@ describe("clôture annuelle par période datée", () => {
     expect(lines.some((line) => line.accountNumber === "706000")).toBe(false);
     saveAnnualLock(period, { lockHash: "abc", archiveFile: "archives/annual-closing/test.zip" });
     expect(() => assertAnnualDateOpen("2026-03-01")).toThrow("verrouillé");
+    try {
+      assertAnnualDateOpen("2026-03-01");
+      throw new Error("Le verrouillage annuel aurait dû refuser la modification");
+    } catch (error) {
+      expect(error).toMatchObject({ statusCode: 409, code: "ANNUAL_PERIOD_LOCKED" });
+    }
     expect(() => assertAnnualDateOpen("2026-10-01")).not.toThrow();
   });
 

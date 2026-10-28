@@ -40,6 +40,12 @@ export function buildApiUrl(basePath: string, path = ""): string {
 
 export const api = axios.create({ baseURL: buildApiUrl(import.meta.env.BASE_URL) });
 
+/** Extrait le message métier renvoyé par l'API au lieu du libellé Axios générique. */
+export function apiErrorMessage(error: unknown, fallback = "Erreur inconnue"): string {
+  const response = (error as { response?: { data?: { error?: string; message?: string } } })?.response;
+  return response?.data?.error ?? response?.data?.message ?? (error instanceof Error ? error.message : fallback);
+}
+
 export interface ReceiptOcrProposal {
   supplier: string; date?: string; invoiceRef?: string; amountHt: number; amountVat?: number; amountTtc: number;
   category: Transaction["category"]; vatSplits: Array<{ rate: number; amountHt?: number; amountVat?: number; amountTtc: number }>;

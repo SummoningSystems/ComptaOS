@@ -71,12 +71,22 @@ function persist(period: FiscalPeriod, update: (record: AnnualClosingRecord) => 
 }
 
 export function assertAnnualPeriodOpen(period: FiscalPeriod) {
-  if (getAnnualClosingRecord(period).lockedAt) throw new Error(`L’exercice clos le ${period.endDate} est verrouillé. Crée une correction traçable au lieu de modifier directement ses données.`);
+  if (getAnnualClosingRecord(period).lockedAt) {
+    const error = new Error(`L’exercice clos le ${period.endDate} est verrouillé. Crée une correction traçable au lieu de modifier directement ses données.`) as Error & { statusCode?: number; code?: string };
+    error.statusCode = 409;
+    error.code = "ANNUAL_PERIOD_LOCKED";
+    throw error;
+  }
 }
 
 export function assertAnnualDateOpen(date: string) {
   const locked = loadStore().find((record) => record.lockedAt && date >= record.startDate && date <= record.endDate);
-  if (locked) throw new Error(`L’exercice ${locked.label} est verrouillé : cette opération ne peut plus être modifiée directement.`);
+  if (locked) {
+    const error = new Error(`L’exercice ${locked.label} est verrouillé : cette opération ne peut plus être modifiée directement. Utilise une correction traçable si la déclaration déjà déposée doit être rectifiée.`) as Error & { statusCode?: number; code?: string };
+    error.statusCode = 409;
+    error.code = "ANNUAL_PERIOD_LOCKED";
+    throw error;
+  }
 }
 
 export function saveAnnualLock(period: FiscalPeriod, input: { lockHash: string; archiveFile: string; carriedForwardTo?: string }) {

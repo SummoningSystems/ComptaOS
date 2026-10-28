@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Transaction, Category, VatSplit, AccountingSplit, CategoryDefinition } from "../../types";
 import { needsTransactionEvidence } from "../../utils/transactionEvidence";
-import { api, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
+import { api, apiErrorMessage, analyzeAttachment, fetchTransactions, updateTransaction, deleteTransaction, deleteTransactions, createTransaction, uploadAttachment, deleteAttachment, attachmentUrl, bulkUpdateStatus, fetchSmartSuggestions, applySmartCategories, type ReceiptOcrProposal } from "../../api/client";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { AttachmentDropZone } from "./AttachmentDropZone";
 import { ReceiptOcrDialog } from "./ReceiptOcrDialog";
@@ -640,7 +640,7 @@ export function TransactionsView({ workFilter, month }: { workFilter?: WorkFilte
       setVatSaveMessage({
         id,
         type: "error",
-        text: err instanceof Error ? err.message : "Échec de l'enregistrement de la TVA",
+        text: apiErrorMessage(err, "Échec de l'enregistrement de la TVA"),
       });
       throw err;
     }
