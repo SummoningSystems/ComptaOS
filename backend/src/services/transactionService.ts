@@ -267,7 +267,7 @@ export async function updateTransaction(id: string, patch: Partial<Transaction>)
   if (patch.date && patch.date !== txn.date) await assertMonthOpen(patch.date);
   if (patch.date && patch.date !== txn.date) assertAnnualDateOpen(patch.date);
   const merged = { ...txn, ...patch };
-  const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits", "accounting_splits"];
+  const accountingKeys: Array<keyof Transaction> = ["amount_ttc", "amount_ht", "vat", "vat_rate", "vat_splits", "accounting_splits", "vatTreatment"];
   const changesAccounting = accountingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
   // Une pièce jointe, un tag, une catégorie ou un statut ne doivent jamais
   // recalculer silencieusement la TVA à partir d'un ancien taux.

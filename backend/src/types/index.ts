@@ -37,6 +37,7 @@ export interface Transaction {
   invoiceRef?: string;
   reconciled?: boolean;
   accountingTreatment?: "revenue" | "expense_refund" | "supplier_advance_refund";
+  vatTreatment?: "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase";
 }
 
 export interface Invoice {

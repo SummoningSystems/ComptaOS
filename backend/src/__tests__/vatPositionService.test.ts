@@ -61,6 +61,29 @@ describe("position de TVA et trésorerie disponible", () => {
       transaction({ id: "outside", date: "2025-09-30", category: "sales", amount_ht: 100, vat: 20, amount_ttc: 120 }),
     ], "2025-10-01", "2026-09-30");
 
-    expect(result).toEqual({ collected: 2259.02, deductible: 713.01, advances: 609, balancePayments: 931, netBeforeAdvances: 1546.01, netAfterAdvances: 937.01 });
+    expect(result).toMatchObject({ collected: 2259.02, deductible: 713.01, advances: 609, balancePayments: 931, netBeforeAdvances: 1546.01, netAfterAdvances: 937.01 });
+    expect(result.taxableByRate).toEqual([{ rate: 20, base: 11295.1, tax: 2259.02 }]);
+    expect(result.revenueToReview).toMatchObject({ count: 0, amount: 0 });
+  });
+
+  it("isole les recettes sans traitement TVA au lieu de les mélanger à la base à 20 %", () => {
+    const result = computeVatDeclaration([
+      transaction({ id: "taxable", date: "2026-08-01", category: "service_revenue", amount_ht: 6_200, vat: 1_240, vat_rate: 20, amount_ttc: 7_440 }),
+      transaction({ id: "review", date: "2026-09-25", category: "service_revenue", amount_ht: 9_600, vat: 0, vat_rate: 0, amount_ttc: 9_600 }),
+      transaction({ id: "outside", date: "2026-09-26", category: "service_revenue", amount_ht: 500, vat: 0, vat_rate: 0, amount_ttc: 500, vatTreatment: "outside_scope" }),
+      transaction({ id: "shareholder", date: "2026-07-08", category: "shareholder_current_account_contribution", amount_ht: 2_000, vat: 0, amount_ttc: 2_000 }),
+    ], "2025-10-01", "2026-09-30");
+
+    expect(result.taxableByRate).toEqual([{ rate: 20, base: 6200, tax: 1240 }]);
+    expect(result.revenueToReview).toEqual({ count: 1, amount: 9600, transactionIds: ["review"] });
+    expect(result.excludedRevenue).toEqual({ count: 1, amount: 500 });
+  });
+
+  it("calcule l'autoliquidation d'un achat de service étranger sans changer le solde net", () => {
+    const result = computeVatDeclaration([
+      transaction({ id: "foreign", date: "2026-02-09", category: "hosting", amount_ht: -100, vat: 0, vat_rate: 20, amount_ttc: -100, vatTreatment: "reverse_charge_purchase" }),
+    ], "2025-10-01", "2026-09-30");
+
+    expect(result).toMatchObject({ collected: 20, deductible: 20, reverseChargeVat: 20, netBeforeAdvances: 0, netAfterAdvances: 0 });
   });
 });

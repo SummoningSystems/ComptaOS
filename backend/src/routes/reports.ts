@@ -75,6 +75,7 @@ export async function reportsRoutes(app: FastifyInstance) {
     amount_ht: number;
     vat: number;
     vat_rate: number;
+    vatTreatment?: "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase";
     direction: "collected" | "deductible";
     quarter: string;
   };
@@ -112,10 +113,9 @@ export async function reportsRoutes(app: FastifyInstance) {
 
     const rows = quarters.map(({ label, startDate: quarterStart, endDate: quarterEnd }) => {
       const qt = txns.filter((t) => t.date >= quarterStart && t.date <= quarterEnd);
-      const collected = qt
-        .filter(isRevenue)
-        .reduce((s, t) => s + t.vat, 0);
-      const deductible = deductibleVat(qt);
+      const quarterDeclaration = computeVatDeclaration(qt, quarterStart, quarterEnd);
+      const collected = quarterDeclaration.collected;
+      const deductible = quarterDeclaration.deductible;
       return {
         quarter: label,
         collected: parseFloat(collected.toFixed(2)),
@@ -127,7 +127,7 @@ export async function reportsRoutes(app: FastifyInstance) {
     });
 
     const details: VatTransactionDetail[] = txns
-      .filter((t) => Math.abs(t.vat) > 0.0001)
+      .filter((t) => Math.abs(t.vat) > 0.0001 || (t.amount_ttc > 0 && isRevenue(t)) || t.vatTreatment === "reverse_charge_purchase" || (t.amount_ttc < 0 && ["hosting", "software", "subscription"].includes(t.category)))
       .map((t) => {
         const quarter = quarters.find((q) => t.date >= q.startDate && t.date <= q.endDate)?.label ?? "Hors période";
         const direction: "collected" | "deductible" = isRevenue(t) ? "collected" : "deductible";
@@ -146,6 +146,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           amount_ht: parseFloat(t.amount_ht.toFixed(2)),
           vat: parseFloat(t.vat.toFixed(2)),
           vat_rate: inferredVatRate,
+          vatTreatment: t.vatTreatment,
           vat_splits: t.vat_splits ?? [],
           direction,
           quarter,
@@ -266,11 +267,9 @@ export async function reportsRoutes(app: FastifyInstance) {
       return !selectedQuarter || (t.date >= selectedQuarter.startDate && t.date <= selectedQuarter.endDate);
     });
 
-    const collected  = txns.filter(isRevenue).reduce((s, t) => s + t.vat, 0);
-    const deductible = deductibleVat(txns);
-    const net        = collected - deductible;
-    const revenue    = txns.filter(isRevenue).reduce((s, t) => s + t.amount_ttc, 0);
-    const baseHT     = revenue > 0 ? revenue - collected : 0;
+    const declarationStart = selectedQuarter?.startDate ?? startDate;
+    const declarationEnd = selectedQuarter?.endDate ?? endDate;
+    const declaration = computeVatDeclaration(all, declarationStart, declarationEnd);
 
     const doc      = await PDFDocument.create();
     const page     = doc.addPage([PAGE_W, PAGE_H]);
@@ -290,12 +289,17 @@ export async function reportsRoutes(app: FastifyInstance) {
 
     // Tableau CA3
     const rows = [
-      { code: "A",  label: "Base HT — ventes (taux 20%)",     value: baseHT,     bold: false },
-      { code: "08", label: "TVA collectée",                    value: collected,  bold: false },
-      { code: "20", label: "TVA déductible (achats & frais)",  value: deductible, bold: false },
-      { code: "28", label: "Total taxe due (ligne 08)",        value: collected,  bold: false },
-      { code: "29", label: "Total taxe déductible (ligne 20)", value: deductible, bold: false },
-      { code: "52", label: "TVA à payer (28 − 29)",            value: net,        bold: true  },
+      ...declaration.taxableByRate.flatMap((rate) => [
+        { code: rate.rate === 20 ? "5A" : "TAUX", label: `Base HT imposable à ${rate.rate} %`, value: rate.base, bold: false },
+        { code: rate.rate === 20 ? "5A" : "TAUX", label: `Taxe due à ${rate.rate} %`, value: rate.tax, bold: false },
+      ]),
+      { code: "19", label: "TVA brute due", value: declaration.collected, bold: false },
+      { code: "20", label: "TVA déductible sur autres biens et services", value: declaration.deductibleOther, bold: false },
+      { code: "23", label: "TVA déductible sur immobilisations", value: declaration.deductibleFixedAssets, bold: false },
+      { code: "26", label: "Total TVA déductible", value: declaration.deductible, bold: false },
+      { code: "28", label: "TVA nette due avant acomptes", value: Math.max(0, declaration.netBeforeAdvances), bold: false },
+      { code: "-", label: "Acomptes versés", value: declaration.advances, bold: false },
+      { code: "56", label: "Total estimé à payer", value: Math.max(0, declaration.netAfterAdvances), bold: true },
     ];
 
     // En-tête tableau
@@ -310,12 +314,16 @@ export async function reportsRoutes(app: FastifyInstance) {
       page.drawRectangle({ x: MARGIN, y: y - 6, width: PAGE_W - 2 * MARGIN, height: 20, color: bg });
       dt(page, row.code,  MARGIN + 4, y + 6, row.bold ? fontBold : fontReg, 9);
       dt(page, row.label, MARGIN + 44, y + 6, row.bold ? fontBold : fontReg, 9);
-      const col = row.code === "52" ? (net >= 0 ? COL_RED : COL_GREEN) : COL_TEXT;
+      const col = row.code === "56" ? (declaration.netAfterAdvances >= 0 ? COL_RED : COL_GREEN) : COL_TEXT;
       dt(page, fmtEur(row.value), PAGE_W - MARGIN - 90, y + 6, row.bold ? fontBold : fontReg, 9, col);
       y -= 22;
     }
 
     y -= 20;
+    if (declaration.revenueToReview.count > 0) {
+      dt(page, `BLOCAGE : ${declaration.revenueToReview.count} recette(s), soit ${fmtEur(declaration.revenueToReview.amount)}, sans traitement TVA confirmé.`, MARGIN, y, fontBold, 8, COL_RED);
+      y -= 14;
+    }
     dt(page, "⚠ Ce document est une simulation. Il ne constitue pas une déclaration officielle.", MARGIN, y, fontReg, 8, COL_MUTED);
     dt(page, `Période : ${label}  ·  ${txns.length} transactions analysées`, MARGIN, y - 14, fontReg, 8, COL_MUTED);
 

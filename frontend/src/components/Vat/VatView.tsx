@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiUrl, fetchVatSummary, updateTransaction, type VatQuarterData, type VatSummaryData, type VatTransactionDetail } from "../../api/client";
+import { apiUrl, fetchVatSummary, updateTransaction, type VatSummaryData, type VatTransactionDetail } from "../../api/client";
 import type { Category } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
 import { LocalizedNumberInput } from "../Common/LocalizedNumberInput";
@@ -264,30 +264,24 @@ function SplitEditor({
   );
 }
 
-function Ca3Panel({ quarters, total, selection, regime }: { quarters: VatQuarterData[]; total: VatSummaryData["total"]; selection: VatSummaryData["selection"]; regime: VatSummaryData["regime"] }) {
-  const [selectedQ, setSelectedQ] = useState<string>("annual");
+function Ca3Panel({ declaration, selection, regime }: { declaration: VatSummaryData["declaration"]; selection: VatSummaryData["selection"]; regime: VatSummaryData["regime"] }) {
   const isCa12 = regime === "simplified_ca12" && selection.kind === "fiscal_period";
 
-  const activeData = selectedQ === "annual"
-    ? { revenue: quarters.reduce((s, q) => s + q.revenue, 0), expenses: quarters.reduce((s, q) => s + q.expenses, 0), collected: total.collected, deductible: total.deductible, net: total.net }
-    : (() => { const q = quarters.find(q => q.quarter === selectedQ); return q ? { revenue: q.revenue, expenses: q.expenses, collected: q.collected, deductible: q.deductible, net: q.net } : null; })();
-
-  if (!activeData) return null;
-  const data = activeData;
-
-  const baseHT = data.revenue > 0 ? data.revenue - data.collected : 0;
   const fmt = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function copyToClipboard() {
     const text = [
-      `${isCa12 ? "PRÉPARATION CA12E" : "SIMULATION CA3"} — ${selectedQ === "annual" ? selection.label : selectedQ}`,
+      `${isCa12 ? "PRÉPARATION CA12E" : "SYNTHÈSE TVA"} — ${selection.label}`,
       ``,
-      `A  — Base HT (ventes 20%) :          ${fmt(baseHT)} €`,
-      `08 — TVA collectée :                 ${fmt(data.collected)} €`,
-      `20 — TVA déductible (achats) :       ${fmt(data.deductible)} €`,
-      `28 — Total taxe due (ligne 08) :     ${fmt(data.collected)} €`,
-      `29 — Total taxe déductible :         ${fmt(data.deductible)} €`,
-      `52 — TVA à payer (28 - 29) :         ${fmt(data.net)} €`,
+      ...declaration.taxableByRate.map((row) => `${row.rate === 20 ? "5A" : "TAUX"} — Base HT à ${fmt(row.rate)} % : ${fmt(row.base)} € ; taxe : ${fmt(row.tax)} €`),
+      `19 — TVA brute due :                         ${fmt(declaration.collected)} €`,
+      `20 — TVA déductible sur autres biens/services : ${fmt(declaration.deductibleOther)} €`,
+      `23 — TVA déductible sur immobilisations :      ${fmt(declaration.deductibleFixedAssets)} €`,
+      `26 — Total TVA déductible :                    ${fmt(declaration.deductible)} €`,
+      `28 — TVA nette avant acomptes :                  ${fmt(Math.max(0, declaration.netBeforeAdvances))} €`,
+      `Acomptes versés :                                ${fmt(declaration.advances)} €`,
+      `54 — TVA nette due après acomptes :                ${fmt(Math.max(0, declaration.netAfterAdvances))} €`,
+      `56 — Total estimé à payer :                     ${fmt(Math.max(0, declaration.netAfterAdvances))} €`,
     ].join("\n");
     navigator.clipboard.writeText(text).catch(() => {});
   }
@@ -305,16 +299,9 @@ function Ca3Panel({ quarters, total, selection, regime }: { quarters: VatQuarter
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">{isCa12 ? "Préparation CA12E" : "Simulation CA3"}</h3>
+        <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">{isCa12 ? "Préparation CA12E" : "Synthèse TVA"}</h3>
         <div className="flex items-center gap-2">
-          <select
-            value={selectedQ}
-            onChange={(e) => setSelectedQ(e.target.value)}
-            className="bg-vscode-bg border border-vscode-border text-vscode-text text-xs rounded px-2 py-1 focus:outline-none focus:border-vscode-accent"
-          >
-            <option value="annual">{selection.label}</option>
-            {quarters.map((q) => <option key={q.quarter} value={q.quarter}>{q.quarter}</option>)}
-          </select>
+          <span className="rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-xs text-vscode-text">{selection.label}</span>
           <button
             onClick={copyToClipboard}
             className="text-xs text-vscode-muted hover:text-vscode-text border border-vscode-border rounded px-2 py-1 flex items-center gap-1"
@@ -322,7 +309,7 @@ function Ca3Panel({ quarters, total, selection, regime }: { quarters: VatQuarter
             📋 Copier
           </button>
           <a
-            href={apiUrl(`/reports/vat-pdf?${selection.periodId ? `periodId=${encodeURIComponent(selection.periodId)}` : `year=${selection.endDate.slice(0, 4)}`}&quarter=${encodeURIComponent(selectedQ)}`)}
+            href={apiUrl(`/reports/vat-pdf?${selection.periodId ? `periodId=${encodeURIComponent(selection.periodId)}` : `year=${selection.endDate.slice(0, 4)}`}&quarter=annual`)}
             target="_blank"
             rel="noreferrer"
             className="text-xs text-vscode-muted hover:text-vscode-text border border-vscode-border rounded px-2 py-1 flex items-center gap-1"
@@ -334,29 +321,39 @@ function Ca3Panel({ quarters, total, selection, regime }: { quarters: VatQuarter
 
       <div className="border border-vscode-border rounded overflow-hidden text-xs">
         <div className="bg-vscode-panel px-4 py-2 text-[10px] font-semibold text-blue-400 uppercase tracking-widest">
-          OPÉRATIONS IMPOSABLES — {selectedQ === "annual" ? selection.label : selectedQ}
+          OPÉRATIONS IMPOSABLES — {selection.label}
         </div>
-        <Ca3Row code="A" label="Base HT des opérations imposables à 20 %" value={baseHT} />
-        <Ca3Row code="08" label="Taxe due à 20 %" value={data.collected} color="text-blue-300" bold />
+        {declaration.taxableByRate.map((row) => (
+          <div key={row.rate} className="grid grid-cols-[2rem_1fr_8rem_8rem] items-center gap-2 border-b border-vscode-border/40 px-4 py-2">
+            <span className="font-mono text-[10px] text-vscode-muted">{row.rate === 20 ? "5A" : "—"}</span>
+            <span className="text-xs text-vscode-muted">Opérations imposables à {fmt(row.rate)} %</span>
+            <span className="text-right font-mono text-xs">Base {fmt(row.base)} €</span>
+            <span className="text-right font-mono text-xs font-bold text-blue-300">Taxe {fmt(row.tax)} €</span>
+          </div>
+        ))}
+        <Ca3Row code="19" label="TVA brute due" value={declaration.collected} color="text-blue-300" bold />
 
         <div className="bg-vscode-panel px-4 py-2 text-[10px] font-semibold text-green-400 uppercase tracking-widest border-t border-vscode-border">
           TVA DÉDUCTIBLE
         </div>
-        <Ca3Row code="20" label="TVA déductible sur autres biens et services" value={data.deductible} color="text-green-300" />
+        <Ca3Row code="20" label="TVA déductible sur autres biens et services" value={declaration.deductibleOther} color="text-green-300" />
+        <Ca3Row code="23" label="TVA déductible sur immobilisations" value={declaration.deductibleFixedAssets} color="text-green-300" />
+        <Ca3Row code="26" label="Total TVA déductible" value={declaration.deductible} color="text-green-300" bold />
 
         <div className="bg-vscode-panel px-4 py-2 text-[10px] font-semibold text-orange-400 uppercase tracking-widest border-t border-vscode-border">
           RÉSULTAT
         </div>
-        <Ca3Row code="28" label="Total taxe due" value={data.collected} />
-        <Ca3Row code="29" label="Total taxe déductible" value={data.deductible} />
+        <Ca3Row code="28" label="TVA nette due avant acomptes" value={Math.max(0, declaration.netBeforeAdvances)} />
+        <Ca3Row code="29" label="Crédit de TVA" value={Math.max(0, -declaration.netBeforeAdvances)} />
+        <Ca3Row code="—" label="Acomptes de l'exercice déjà versés" value={declaration.advances} />
 
-        <div className={`flex items-center gap-2 px-4 py-3 border-t-2 ${data.net > 0 ? "border-orange-600 bg-orange-900/20" : "border-green-600 bg-green-900/20"}`}>
-          <span className="font-mono text-[10px] text-vscode-muted w-6 shrink-0">52</span>
+        <div className={`flex items-center gap-2 px-4 py-3 border-t-2 ${declaration.netAfterAdvances > 0 ? "border-orange-600 bg-orange-900/20" : "border-green-600 bg-green-900/20"}`}>
+          <span className="font-mono text-[10px] text-vscode-muted w-6 shrink-0">56</span>
           <span className="flex-1 font-bold text-vscode-text text-xs">
-            {data.net > 0 ? "TVA à payer (ligne 28 − 29)" : "Crédit de TVA"}
+            {declaration.netAfterAdvances > 0 ? "Total estimé à payer après acomptes" : "Crédit de TVA estimé"}
           </span>
-          <span className={`font-mono tabular-nums font-bold text-base w-32 text-right ${data.net > 0 ? "text-orange-300" : "text-green-300"}`}>
-            {fmt(Math.abs(data.net))} €
+          <span className={`font-mono tabular-nums font-bold text-base w-32 text-right ${declaration.netAfterAdvances > 0 ? "text-orange-300" : "text-green-300"}`}>
+            {fmt(Math.abs(declaration.netAfterAdvances))} €
           </span>
         </div>
       </div>
@@ -389,7 +386,7 @@ export function VatView() {
     }
   }
 
-  async function saveDetailPatch(id: string, patch: { label?: string; category?: Category; vat_rate?: number; vat_splits?: VatSplit[] }) {
+  async function saveDetailPatch(id: string, patch: { label?: string; category?: Category; vat_rate?: number; vat_splits?: VatSplit[]; vatTreatment?: "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase" }) {
     setSavingIds((current) => current.includes(id) ? current : [...current, id]);
     try {
       await updateTransaction(id, patch);
@@ -457,12 +454,23 @@ export function VatView() {
             </section>
           )}
 
+          {data.declaration.revenueToReview.count > 0 && (
+            <section className="max-w-3xl rounded-lg border-2 border-red-700 bg-red-950/20 p-4">
+              <h3 className="text-sm font-semibold text-red-300">Traitement TVA à confirmer avant la CA12E</h3>
+              <p className="mt-2 text-xs text-vscode-text">{data.declaration.revenueToReview.count} encaissement(s), soit <strong>{data.declaration.revenueToReview.amount.toFixed(2)} €</strong>, sont classés en recettes avec 0 € de TVA sans motif fiscal explicite. Ils ne sont pas ajoutés automatiquement à la base à 20 %.</p>
+              <div className="mt-3 space-y-1 text-[11px] text-vscode-muted">
+                {data.details.filter((item) => data.declaration.revenueToReview.transactionIds.includes(item.id)).map((item) => <p key={item.id}>{item.date} · {item.label} · <strong>{item.amount_ttc.toFixed(2)} €</strong></p>)}
+              </div>
+              <p className="mt-3 text-[10px] text-red-200">Choisis plus bas le traitement exact : TVA française, exonérée ou hors champ. Tant que ce contrôle reste rouge, le solde n'est pas prêt à déclarer.</p>
+            </section>
+          )}
+
           {/* Résumé annuel */}
           <div className="grid grid-cols-3 gap-4 max-w-2xl">
             <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">
-              <p className="text-[11px] text-vscode-muted uppercase tracking-wide mb-1">TVA collectée</p>
+              <p className="text-[11px] text-vscode-muted uppercase tracking-wide mb-1">TVA brute due</p>
               <p className="text-xl font-mono font-semibold text-blue-300">+{data.total.collected.toFixed(2)} €</p>
-              <p className="text-[10px] text-vscode-muted mt-1">sur revenus encaissés</p>
+              <p className="text-[10px] text-vscode-muted mt-1">ventes et autoliquidations</p>
             </div>
             <div className="bg-vscode-sidebar border border-vscode-border rounded-lg p-4">
               <p className="text-[11px] text-vscode-muted uppercase tracking-wide mb-1">TVA déductible</p>
@@ -470,12 +478,12 @@ export function VatView() {
               <p className="text-[10px] text-vscode-muted mt-1">sur dépenses pro</p>
             </div>
             <div className={`bg-vscode-sidebar border rounded-lg p-4 ${data.total.net > 0 ? "border-orange-700" : "border-vscode-border"}`}>
-              <p className="text-[11px] text-vscode-muted uppercase tracking-wide mb-1">TVA nette à reverser</p>
+              <p className="text-[11px] text-vscode-muted uppercase tracking-wide mb-1">TVA brute avant acomptes</p>
               <p className={`text-xl font-mono font-semibold ${data.total.net > 0 ? "text-orange-300" : "text-green-300"}`}>
-                {data.total.net >= 0 ? "+" : ""}{data.total.net.toFixed(2)} €
+                {data.declaration.netBeforeAdvances >= 0 ? "+" : ""}{data.declaration.netBeforeAdvances.toFixed(2)} €
               </p>
               <p className="text-[10px] text-vscode-muted mt-1">
-                {data.total.net > 0 ? "À payer à la DGFiP" : "Crédit de TVA"}
+                {data.declaration.netBeforeAdvances > 0 ? "Avant imputation des acomptes" : "Crédit de TVA avant acomptes"}
               </p>
             </div>
           </div>
@@ -491,7 +499,7 @@ export function VatView() {
               <thead className="bg-vscode-panel">
                 <tr>
                   <th className="text-left px-4 py-2 text-vscode-muted">Trimestre</th>
-                  <th className="text-right px-3 py-2 text-vscode-muted">CA HT</th>
+                  <th className="text-right px-3 py-2 text-vscode-muted">Encaissements TTC</th>
                   <th className="text-right px-3 py-2 text-vscode-muted">Dépenses HT</th>
                   <th className="text-right px-3 py-2 text-blue-400/70">TVA collectée</th>
                   <th className="text-right px-3 py-2 text-green-400/70">TVA déductible</th>
@@ -541,11 +549,11 @@ export function VatView() {
           </div>
 
           {/* Simulateur CA3 */}
-          <Ca3Panel quarters={data.quarters} total={data.total} selection={data.selection} regime={data.regime} />
+          <Ca3Panel declaration={data.declaration} selection={data.selection} regime={data.regime} />
 
           <div className="max-w-5xl">
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">Transactions avec TVA</h3>
+              <h3 className="text-xs font-semibold text-vscode-muted uppercase tracking-wide">Transactions TVA et opérations à contrôler</h3>
               <div className="flex items-center gap-3">
                 {savingIds.length > 0 && <span className="text-[11px] text-vscode-muted">Enregistrement…</span>}
                 <select
@@ -571,6 +579,7 @@ export function VatView() {
                     <th className="text-right px-3 py-2 text-vscode-muted">TVA</th>
                     <th className="text-right px-3 py-2 text-vscode-muted">TTC</th>
                     <th className="text-left px-3 py-2 text-vscode-muted">Type</th>
+                    <th className="text-left px-3 py-2 text-vscode-muted">Traitement fiscal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -636,6 +645,19 @@ export function VatView() {
                               {item.direction === "collected" ? "TVA collectée" : "TVA déductible"}
                             </span>
                           </td>
+                          <td className="px-3 py-2 min-w-[190px]">
+                            <select
+                              value={item.vatTreatment ?? "standard"}
+                              disabled={isSaving}
+                              onChange={(event) => void saveDetailPatch(item.id, { vatTreatment: event.target.value as "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase" })}
+                              className="w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-[10px] text-vscode-text"
+                            >
+                              <option value="standard">TVA française selon le taux</option>
+                              <option value="exempt">Exonérée — justificatif requis</option>
+                              <option value="outside_scope">Hors champ de TVA française</option>
+                              {item.amount_ttc < 0 && <option value="reverse_charge_purchase">Achat étranger — autoliquidation</option>}
+                            </select>
+                          </td>
                         </tr>
                       );
 
@@ -643,7 +665,7 @@ export function VatView() {
 
                       const splitRow = (
                         <tr key={`${item.id}-split`} className="bg-vscode-panel/60">
-                          <td colSpan={8} className="px-4 py-3">
+                          <td colSpan={9} className="px-4 py-3">
                             <SplitEditor
                               amountTtc={item.amount_ttc}
                               initialSplits={item.vat_splits ?? []}
@@ -659,7 +681,7 @@ export function VatView() {
                     })}
                   {data.details.filter((item) => detailQuarter === "annual" || item.quarter === detailQuarter).length === 0 && (
                     <tr className="border-t border-vscode-border">
-                      <td colSpan={8} className="px-3 py-6 text-center text-vscode-muted">
+                      <td colSpan={9} className="px-3 py-6 text-center text-vscode-muted">
                         Aucune transaction avec TVA sur cette période.
                       </td>
                     </tr>
