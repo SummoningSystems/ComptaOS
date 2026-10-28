@@ -74,6 +74,11 @@ export function saveAnnualFilingConfig(periodId: string, input: AnnualFilingConf
   const store = loadStore(); store[periodId] = value; atomicWriteFileSync(storePath(), JSON.stringify(store, null, 2)); return value;
 }
 
+export function invalidateAnnualFilingReview(periodId: string) {
+  const current = getAnnualFilingConfig(periodId);
+  return saveAnnualFilingConfig(periodId, { ...current, review: emptyReview() });
+}
+
 const balanceAmount = (balances: AccountBalance[], prefixes: string[], side: "debit" | "credit") => round(balances.filter((row) => prefixes.some((prefix) => row.accountNumber.startsWith(prefix))).reduce((sum, row) => sum + (side === "debit" ? Math.max(0, row.balance) : Math.max(0, -row.balance)), 0));
 const openingAmount = (opening: OpeningBalanceLine[], prefixes: string[], side: "debit" | "credit") => round(opening.filter((row) => prefixes.some((prefix) => row.accountNumber.startsWith(prefix))).reduce((sum, row) => sum + (side === "debit" ? row.debit : row.credit), 0));
 const movement = (lines: AccountingLine[], prefixes: string[], orientation: "debit" | "credit") => round(lines.filter((line) => line.journalCode !== "AN" && prefixes.some((prefix) => line.accountNumber.startsWith(prefix))).reduce((sum, line) => sum + (orientation === "debit" ? line.debit - line.credit : line.credit - line.debit), 0));

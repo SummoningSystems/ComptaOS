@@ -6,7 +6,7 @@ import type { Transaction } from "../types/index.js";
 
 const workspace = vi.hoisted(() => ({ root: "" }));
 vi.mock("../services/fileSystem.js", () => ({ getWorkspaceRoot: () => workspace.root }));
-import { assertAnnualDateOpen, buildAnnualClosingSnapshot, buildCarryForwardBalance, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, validateOpeningBalance, type FiscalPeriod } from "../services/annualClosingService.js";
+import { assertAnnualDateOpen, buildAnnualClosingSnapshot, buildCarryForwardBalance, getAnnualClosingRecord, reopenAnnualPeriod, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, validateOpeningBalance, type FiscalPeriod } from "../services/annualClosingService.js";
 import { createFiscalAdjustment, saveFiscalReview, validateFiscalAdjustment } from "../services/annualFiscalService.js";
 import { createInventoryEntry, validateInventoryEntry } from "../services/annualInventoryService.js";
 
@@ -38,6 +38,22 @@ describe("clôture annuelle par période datée", () => {
       expect(error).toMatchObject({ statusCode: 409, code: "ANNUAL_PERIOD_LOCKED" });
     }
     expect(() => assertAnnualDateOpen("2026-10-01")).not.toThrow();
+  });
+
+  it("réouvre une clôture pour rectification sans effacer son archive ni son motif", () => {
+    const carryForward = [
+      { id: "opening_1", accountNumber: "512000", accountLabel: "Banque", debit: 900, credit: 0 },
+      { id: "opening_2", accountNumber: "101000", accountLabel: "Capital", debit: 0, credit: 900 },
+    ];
+    saveAnnualReview(period, { vat: true, accruals: true });
+    saveAnnualLock(period, { lockHash: "archive-hash", archiveFile: "archives/annual-closing/initial.zip", carriedForwardTo: "fy_2027" });
+    reopenAnnualPeriod(period, "Correction du taux de TVA de la facture client", carryForward);
+    const record = getAnnualClosingRecord(period);
+    expect(record.lockedAt).toBeUndefined();
+    expect(record.review).toMatchObject({ vat: false, accruals: false });
+    expect(record.correctionRequired).toMatchObject({ lockHash: "archive-hash", archiveFile: "archives/annual-closing/initial.zip", reopenReason: "Correction du taux de TVA de la facture client", priorCarryForward: carryForward });
+    expect(record.lockHistory).toHaveLength(1);
+    expect(() => assertAnnualDateOpen("2026-03-01")).not.toThrow();
   });
 
   it("utilise les bornes exactes et conserve un verrou fiscal final", () => {

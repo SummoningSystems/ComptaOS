@@ -24,6 +24,10 @@ export interface AnnualReview {
   accruals: boolean;
   equityLoansAndShareholders: boolean;
 }
+export interface AnnualLockRevision {
+  lockedAt: string; lockHash?: string; archiveFile?: string; carriedForwardTo?: string;
+  reopenedAt: string; reopenReason: string; priorCarryForward: OpeningBalanceLine[];
+}
 export interface AnnualClosingRecord {
   periodId: string;
   startDate: string;
@@ -36,6 +40,8 @@ export interface AnnualClosingRecord {
   lockHash?: string;
   archiveFile?: string;
   carriedForwardTo?: string;
+  lockHistory?: AnnualLockRevision[];
+  correctionRequired?: AnnualLockRevision;
   updatedAt: string;
 }
 export interface AnnualClosingStep { id: string; label: string; status: "done" | "warning" | "blocked"; detail: string; count?: number }
@@ -95,6 +101,27 @@ export function saveAnnualLock(period: FiscalPeriod, input: { lockHash: string; 
     record.lockHash = input.lockHash;
     record.archiveFile = input.archiveFile;
     record.carriedForwardTo = input.carriedForwardTo;
+    delete record.correctionRequired;
+  });
+}
+
+export function reopenAnnualPeriod(period: FiscalPeriod, reason: string, priorCarryForward: OpeningBalanceLine[] = []) {
+  const cleanReason = String(reason ?? "").trim();
+  if (cleanReason.length < 10) throw new Error("Le motif de rectification doit contenir au moins 10 caractères.");
+  return persist(period, (record) => {
+    if (!record.lockedAt) throw new Error("Cet exercice n’est pas verrouillé.");
+    const revision: AnnualLockRevision = {
+      lockedAt: record.lockedAt, lockHash: record.lockHash, archiveFile: record.archiveFile,
+      carriedForwardTo: record.carriedForwardTo, reopenedAt: new Date().toISOString(),
+      reopenReason: cleanReason, priorCarryForward: validateOpeningBalance(priorCarryForward),
+    };
+    record.lockHistory = [...(record.lockHistory ?? []), revision];
+    record.correctionRequired = revision;
+    record.review = { ...record.review, vat: false, accruals: false };
+    delete record.lockedAt;
+    delete record.lockHash;
+    delete record.archiveFile;
+    delete record.carriedForwardTo;
   });
 }
 
@@ -241,7 +268,7 @@ export function buildAnnualClosingSnapshot(period: FiscalPeriod, transactions: T
       tdfc: { sha256: tdfc.sha256, schemaVersion: tdfc.schemaVersion, officialInterchange: tdfc.officialInterchange, transmittableDirectly: tdfc.transmittableDirectly, warnings: tdfc.warnings },
       transmissions,
       governanceConfig: getGovernanceConfig(period.id, complianceSource),
-      lock: { locked: Boolean(record.lockedAt), lockedAt: record.lockedAt, archiveFile: record.archiveFile, carriedForwardTo: record.carriedForwardTo },
+      lock: { locked: Boolean(record.lockedAt), lockedAt: record.lockedAt, archiveFile: record.archiveFile, carriedForwardTo: record.carriedForwardTo, correctionRequired: record.correctionRequired, history: record.lockHistory ?? [] },
       partnerConnector: { ...getEdiPartnerConfig(), configured: getEdiPartnerConfig().apiConfigured, detail: "Le fichier généré reste un dossier préparatoire tant qu’un adaptateur technique partenaire n’est pas configuré et testé." },
       taxEntryReady: taxCalculation.ready && (taxCalculation.netTax <= .009 || (Math.abs(corporateTaxExpense - taxCalculation.netTax) <= .01 && Math.abs(corporateTaxReintegration - taxCalculation.netTax) <= .01)),
     },

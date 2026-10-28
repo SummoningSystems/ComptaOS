@@ -5,11 +5,11 @@ import { getActiveCompanyId } from "../services/companiesService.js";
 import { loadAllTransactions } from "../services/transactionService.js";
 import { getPlatformState } from "../services/platformService.js";
 import { workspaceContext } from "../services/workspaceContext.js";
-import { assertAnnualPeriodOpen, buildAnnualAccountingPreview, buildAnnualClosingSnapshot, buildCarryForwardBalance, getAnnualClosingRecord, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, type AnnualReview, type FiscalPeriod, type OpeningBalanceLine, type ProfitTaxRegime } from "../services/annualClosingService.js";
+import { assertAnnualPeriodOpen, buildAnnualAccountingPreview, buildAnnualClosingSnapshot, buildCarryForwardBalance, getAnnualClosingRecord, reopenAnnualPeriod, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, type AnnualReview, type FiscalPeriod, type OpeningBalanceLine, type ProfitTaxRegime } from "../services/annualClosingService.js";
 import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, listInventoryEntries, updateInventoryEntry, validateInventoryEntry, type InventoryEntryInput } from "../services/annualInventoryService.js";
 import { cancelFiscalAdjustment, createFiscalAdjustment, deleteFiscalDraft, listFiscalAdjustments, saveFiscalReview, updateFiscalAdjustment, validateFiscalAdjustment, type FiscalAdjustmentInput } from "../services/annualFiscalService.js";
 import { saveAnnualTaxConfig, type AnnualTaxConfigInput } from "../services/annualTaxService.js";
-import { saveAnnualFilingConfig, type AnnualFilingConfigInput } from "../services/annualFilingService.js";
+import { invalidateAnnualFilingReview, saveAnnualFilingConfig, type AnnualFilingConfigInput } from "../services/annualFilingService.js";
 import { generateAnnualFilingPdf } from "../services/annualFilingPdfService.js";
 import { attachTransmissionReceipt, buildEfiGuide, buildTdfcPreparation, createAnnualArchive, createTaxTransmission, generateApprovalMinutes, getGovernanceConfig, saveEdiPartnerConfig, saveGovernanceConfig, updateTaxTransmission, type EdiPartnerConfig, type GovernanceConfig } from "../services/annualComplianceService.js";
 import { getWorkspaceRoot } from "../services/fileSystem.js";
@@ -195,7 +195,12 @@ export async function annualClosingRoutes(app: FastifyInstance) {
       if (!data.filingReady || !data.compliance.taxEntryReady) throw new Error("La liasse et l’écriture d’IS doivent être finalisées avant le verrouillage.");
       const next = request.body?.nextPeriodId ? available.find((item) => item.id === request.body?.nextPeriodId) : [...available].filter((item) => item.startDate > period.endDate).sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
       if (request.body?.nextPeriodId && !next) throw new Error("L’exercice suivant sélectionné est introuvable.");
-      if (next && getAnnualClosingRecord(next).openingBalance.length) throw new Error("L’exercice suivant possède déjà une balance d’ouverture. Contrôle-la avant de lancer le report automatique.");
+      const currentRecord = getAnnualClosingRecord(period);
+      if (next && getAnnualClosingRecord(next).openingBalance.length) {
+        const existing = getAnnualClosingRecord(next).openingBalance;
+        const prior = currentRecord.correctionRequired?.priorCarryForward ?? [];
+        if (!prior.length || JSON.stringify(existing) !== JSON.stringify(prior)) throw new Error("L’exercice suivant possède une balance d’ouverture différente du report initial. Contrôle-la avant de relancer le report.");
+      }
       const carryForward = next ? buildCarryForwardBalance(data) : [];
       const preview = buildAnnualAccountingPreview(period, transactions); const filingPdf = await generateAnnualFilingPdf({ period, package: data.filingPackage, statements: data.simplifiedStatements }); const tdfc = buildTdfcPreparation(data);
       const archive = await createAnnualArchive({ source: data, preview, transactions: transactions.filter((item) => item.date >= period.startDate && item.date <= period.endDate), filingPdf, tdfc });
@@ -205,8 +210,27 @@ export async function annualClosingRoutes(app: FastifyInstance) {
       return snapshot(period, available);
     } catch (caught) { return error(reply, caught); }
   });
+  app.post<{ Params: { periodId: string }; Body: { confirm?: boolean; reason?: string } }>("/:periodId/reopen-for-correction", async (request, reply) => {
+    try {
+      if (request.body?.confirm !== true) throw new Error("La confirmation explicite de la réouverture est obligatoire.");
+      const { period, available } = selected(request.params.periodId); const record = getAnnualClosingRecord(period);
+      if (!record.lockedAt) throw new Error("Cet exercice n’est pas verrouillé.");
+      const transactions = await loadAllTransactions(); const data = buildAnnualClosingSnapshot(period, transactions);
+      const priorCarryForward = record.carriedForwardTo ? buildCarryForwardBalance(data) : [];
+      if (record.carriedForwardTo) {
+        const next = available.find((item) => item.id === record.carriedForwardTo);
+        if (!next) throw new Error("L’exercice ayant reçu le report initial est introuvable.");
+        const existing = getAnnualClosingRecord(next).openingBalance;
+        if (JSON.stringify(existing) !== JSON.stringify(priorCarryForward)) throw new Error("La balance d’ouverture de l’exercice suivant a été modifiée depuis le report. La réouverture automatique est bloquée pour protéger ces données.");
+      }
+      reopenAnnualPeriod(period, request.body?.reason ?? "", priorCarryForward);
+      saveFiscalReview(period.id, false, `Revue à refaire après réouverture : ${String(request.body?.reason ?? "").trim()}`);
+      invalidateAnnualFilingReview(period.id);
+      return snapshot(period, available);
+    } catch (caught) { return error(reply, caught); }
+  });
   app.get<{ Params: { periodId: string } }>("/:periodId/archive", async (request, reply) => {
-    try { const { period } = selected(request.params.periodId); const record = getAnnualClosingRecord(period); if (!record.archiveFile) throw new Error("Aucune archive de clôture n’a encore été créée."); const base = resolve(getWorkspaceRoot(), "archives", "annual-closing"); const file = resolve(getWorkspaceRoot(), record.archiveFile); if (!file.startsWith(`${base}${sep}`) || !existsSync(file)) throw new Error("Archive de clôture introuvable."); return reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="${file.split(/[\\/]/).at(-1)}"`).send(readFileSync(file)); }
+    try { const { period } = selected(request.params.periodId); const record = getAnnualClosingRecord(period); const archiveFile = record.archiveFile ?? record.correctionRequired?.archiveFile; if (!archiveFile) throw new Error("Aucune archive de clôture n’a encore été créée."); const base = resolve(getWorkspaceRoot(), "archives", "annual-closing"); const file = resolve(getWorkspaceRoot(), archiveFile); if (!file.startsWith(`${base}${sep}`) || !existsSync(file)) throw new Error("Archive de clôture introuvable."); return reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="${file.split(/[\\/]/).at(-1)}"`).send(readFileSync(file)); }
     catch (caught) { return error(reply, caught); }
   });
 }
