@@ -92,6 +92,12 @@ export function buildAccountingPreview(transactions: Transaction[], config: Acco
     } else if (transaction.amount_ttc < 0 && advanceAccount) {
       lines.push(line(base, advanceAccount, `${transaction.label} - acompte fournisseur`, ttc, 0));
       lines.push(line(base, config.bank, `${transaction.label} - règlement acompte`, 0, ttc));
+    } else if (transaction.amount_ttc < 0 && transaction.vatTreatment === "reverse_charge_purchase") {
+      const reverseChargeVat = round(ht * Math.max(0, Number(transaction.vat_rate) || 20) / 100);
+      lines.push(line(base, config.categories[transaction.category], `${transaction.label} - base HT autoliquidation`, ht, 0));
+      lines.push(line(base, config.vatDeductible, `${transaction.label} - TVA autoliquidée déductible`, reverseChargeVat, 0));
+      lines.push(line(base, config.bank, `${transaction.label} - règlement fournisseur UE`, 0, ttc));
+      lines.push(line(base, config.vatCollected, `${transaction.label} - TVA autoliquidée due`, 0, reverseChargeVat));
     } else if (transaction.amount_ttc < 0) {
       lines.push(line(base, config.categories[transaction.category], `${transaction.label} - HT`, ht, 0));
       for (const part of vatParts(transaction, vat)) lines.push(line(base, config.vatDeductible, `${transaction.label} - TVA${part.rate === undefined ? "" : ` ${part.rate} %`}`, part.amount, 0));

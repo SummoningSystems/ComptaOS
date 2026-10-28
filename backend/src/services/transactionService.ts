@@ -140,6 +140,10 @@ function normalizeTransaction(txn: Transaction): Transaction {
   if (categoryForcesZeroVat(txn.category)) {
     return { ...txn, vat_rate: 0, amount_ht: round2(txn.amount_ttc), vat: 0, vat_splits: [] };
   }
+  if (txn.vatTreatment === "reverse_charge_purchase") {
+    const rate = Math.max(0, Number(txn.vat_rate) || 20);
+    return { ...txn, vat_rate: rate, amount_ht: round2(txn.amount_ttc), vat: 0, vat_splits: [] };
+  }
   // Si des splits sont définis, on en déduit HT/TVA/taux effectif
   if (txn.vat_splits && txn.vat_splits.length > 0) {
     const totalHt = round2(

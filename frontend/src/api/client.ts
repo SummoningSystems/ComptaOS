@@ -711,6 +711,7 @@ export interface VatTransactionDetail {
   amount_ht: number;
   vat: number;
   vat_rate: number;
+  reverseChargeVat?: number;
   vatTreatment?: "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase";
   vat_splits: { rate: number; amount_ttc: number }[];
   direction: "collected" | "deductible";
@@ -749,6 +750,7 @@ export interface VatSummaryData {
     deductible: number;
     deductibleOther: number;
     deductibleFixedAssets: number;
+    reverseChargeBase: number;
     reverseChargeVat: number;
     advances: number;
     balancePayments: number;

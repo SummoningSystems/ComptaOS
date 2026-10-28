@@ -84,6 +84,6 @@ describe("position de TVA et trésorerie disponible", () => {
       transaction({ id: "foreign", date: "2026-02-09", category: "hosting", amount_ht: -100, vat: 0, vat_rate: 20, amount_ttc: -100, vatTreatment: "reverse_charge_purchase" }),
     ], "2025-10-01", "2026-09-30");
 
-    expect(result).toMatchObject({ collected: 20, deductible: 20, reverseChargeVat: 20, netBeforeAdvances: 0, netAfterAdvances: 0 });
+    expect(result).toMatchObject({ collected: 20, deductible: 20, reverseChargeBase: 100, reverseChargeVat: 20, netBeforeAdvances: 0, netAfterAdvances: 0 });
   });
 });

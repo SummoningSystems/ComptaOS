@@ -274,6 +274,7 @@ function Ca3Panel({ declaration, selection, regime }: { declaration: VatSummaryD
       `${isCa12 ? "PRÉPARATION CA12E" : "SYNTHÈSE TVA"} — ${selection.label}`,
       ``,
       ...declaration.taxableByRate.map((row) => `${row.rate === 20 ? "5A" : "TAUX"} — Base HT à ${fmt(row.rate)} % : ${fmt(row.base)} € ; taxe : ${fmt(row.tax)} €`),
+      ...(declaration.reverseChargeBase > 0 ? [`AC — Achats de services UE : base ${fmt(declaration.reverseChargeBase)} € ; TVA autoliquidée ${fmt(declaration.reverseChargeVat)} €`] : []),
       `19 — TVA brute due :                         ${fmt(declaration.collected)} €`,
       `20 — TVA déductible sur autres biens/services : ${fmt(declaration.deductibleOther)} €`,
       `23 — TVA déductible sur immobilisations :      ${fmt(declaration.deductibleFixedAssets)} €`,
@@ -331,6 +332,14 @@ function Ca3Panel({ declaration, selection, regime }: { declaration: VatSummaryD
             <span className="text-right font-mono text-xs font-bold text-blue-300">Taxe {fmt(row.tax)} €</span>
           </div>
         ))}
+        {declaration.reverseChargeBase > 0 && (
+          <div className="grid grid-cols-[2rem_1fr_8rem_8rem] items-center gap-2 border-b border-vscode-border/40 bg-blue-950/10 px-4 py-2">
+            <span className="font-mono text-[10px] text-vscode-muted">AC</span>
+            <span className="text-xs text-vscode-muted">Achats de prestations de services UE — autoliquidation</span>
+            <span className="text-right font-mono text-xs">Base {fmt(declaration.reverseChargeBase)} €</span>
+            <span className="text-right font-mono text-xs font-bold text-blue-300">Taxe {fmt(declaration.reverseChargeVat)} €</span>
+          </div>
+        )}
         <Ca3Row code="19" label="TVA brute due" value={declaration.collected} color="text-blue-300" bold />
 
         <div className="bg-vscode-panel px-4 py-2 text-[10px] font-semibold text-green-400 uppercase tracking-widest border-t border-vscode-border">
@@ -638,24 +647,27 @@ export function VatView() {
                             )}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-vscode-text">{item.amount_ht.toFixed(2)} €</td>
-                          <td className={`px-3 py-2 text-right font-mono ${item.direction === "collected" ? "text-blue-300" : "text-green-300"}`}>{Math.abs(item.vat).toFixed(2)} €</td>
+                          <td className={`px-3 py-2 text-right font-mono ${item.direction === "collected" ? "text-blue-300" : "text-green-300"}`}>{Math.abs(item.reverseChargeVat ?? item.vat).toFixed(2)} €</td>
                           <td className={`px-3 py-2 text-right font-mono ${item.amount_ttc >= 0 ? "text-green-400" : "text-red-400"}`}>{item.amount_ttc.toFixed(2)} €</td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex rounded px-2 py-0.5 text-[10px] ${item.direction === "collected" ? "bg-blue-900/40 text-blue-300" : "bg-green-900/40 text-green-300"}`}>
-                              {item.direction === "collected" ? "TVA collectée" : "TVA déductible"}
+                              {item.vatTreatment === "reverse_charge_purchase" ? "Due + déductible" : item.direction === "collected" ? "TVA collectée" : "TVA déductible"}
                             </span>
                           </td>
                           <td className="px-3 py-2 min-w-[190px]">
                             <select
                               value={item.vatTreatment ?? "standard"}
                               disabled={isSaving}
-                              onChange={(event) => void saveDetailPatch(item.id, { vatTreatment: event.target.value as "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase" })}
+                              onChange={(event) => {
+                                const vatTreatment = event.target.value as "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase";
+                                void saveDetailPatch(item.id, vatTreatment === "reverse_charge_purchase" ? { vatTreatment, vat_rate: 20, vat_splits: [] } : { vatTreatment });
+                              }}
                               className="w-full rounded border border-vscode-border bg-vscode-bg px-2 py-1 text-[10px] text-vscode-text"
                             >
                               <option value="standard">TVA française selon le taux</option>
                               <option value="exempt">Exonérée — justificatif requis</option>
                               <option value="outside_scope">Hors champ de TVA française</option>
-                              {item.amount_ttc < 0 && <option value="reverse_charge_purchase">Achat étranger — autoliquidation</option>}
+                              {item.amount_ttc < 0 && <option value="reverse_charge_purchase">Achat de services UE — autoliquidation</option>}
                             </select>
                           </td>
                         </tr>

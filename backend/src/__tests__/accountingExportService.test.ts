@@ -129,6 +129,23 @@ describe("dossier expert-comptable", () => {
     expect(preview.anomalies.filter((item) => item.severity === "blocking")).toEqual([]);
   });
 
+  it("comptabilise un achat de services UE avec autoliquidation sans modifier la charge ni la banque", () => {
+    const preview = buildAccountingPreview([transaction({
+      id: "hostinger", label: "HOSTINGER HCY-21681330", category: "hosting",
+      amount_ht: -167.76, vat: 0, vat_rate: 20, amount_ttc: -167.76,
+      vatTreatment: "reverse_charge_purchase",
+    })], defaultAccountingConfig(), "2026");
+    expect(preview.lines.filter((line) => line.transactionId === "hostinger")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountNumber: "626000", debit: 167.76, credit: 0 }),
+      expect.objectContaining({ accountNumber: "445660", debit: 33.55, credit: 0 }),
+      expect.objectContaining({ accountNumber: "512100", debit: 0, credit: 167.76 }),
+      expect.objectContaining({ accountNumber: "445710", debit: 0, credit: 33.55 }),
+    ]));
+    expect(preview.totalDebit).toBe(201.31);
+    expect(preview.totalCredit).toBe(201.31);
+    expect(preview.anomalies.filter((item) => item.severity === "blocking")).toEqual([]);
+  });
+
 
   it("place une opération inconnue au 471 et bloque la clôture", () => {
     const preview = buildAccountingPreview([transaction({ id: "unknown", label: "COMMANDE", category: "unidentified_transaction", amount_ht: -4.76, vat: 0, vat_rate: 0, amount_ttc: -4.76 })], defaultAccountingConfig(), "2026");

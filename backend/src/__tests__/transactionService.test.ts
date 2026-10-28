@@ -129,6 +129,18 @@ describe("transactionService persistence", () => {
     expect(updated.vat).toBe(-3.49);
   });
 
+  it("conserve le montant payé comme base HT pour une autoliquidation de services UE", async () => {
+    await saveTransaction(transaction({ amount_ttc: -167.76, amount_ht: -167.76, vat: 0, vat_rate: 0, category: "hosting" }));
+
+    const updated = await updateTransaction("txn_test", {
+      vatTreatment: "reverse_charge_purchase",
+      vat_rate: 20,
+      vat_splits: [],
+    });
+
+    expect(updated).toMatchObject({ amount_ttc: -167.76, amount_ht: -167.76, vat: 0, vat_rate: 20, vatTreatment: "reverse_charge_purchase" });
+  });
+
   it("refuse une ventilation dont le total ne correspond pas a la transaction", () => {
     expect(validateVatSplits(-30, [
       { rate: 10, amount_ttc: -10 },

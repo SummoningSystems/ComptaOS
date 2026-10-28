@@ -75,6 +75,7 @@ export async function reportsRoutes(app: FastifyInstance) {
     amount_ht: number;
     vat: number;
     vat_rate: number;
+    reverseChargeVat?: number;
     vatTreatment?: "standard" | "exempt" | "outside_scope" | "reverse_charge_purchase";
     direction: "collected" | "deductible";
     quarter: string;
@@ -146,6 +147,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           amount_ht: parseFloat(t.amount_ht.toFixed(2)),
           vat: parseFloat(t.vat.toFixed(2)),
           vat_rate: inferredVatRate,
+          reverseChargeVat: t.vatTreatment === "reverse_charge_purchase" ? parseFloat((Math.abs(t.amount_ht) * Math.max(0, inferredVatRate || 20) / 100).toFixed(2)) : undefined,
           vatTreatment: t.vatTreatment,
           vat_splits: t.vat_splits ?? [],
           direction,
@@ -293,6 +295,10 @@ export async function reportsRoutes(app: FastifyInstance) {
         { code: rate.rate === 20 ? "5A" : "TAUX", label: `Base HT imposable à ${rate.rate} %`, value: rate.base, bold: false },
         { code: rate.rate === 20 ? "5A" : "TAUX", label: `Taxe due à ${rate.rate} %`, value: rate.tax, bold: false },
       ]),
+      ...(declaration.reverseChargeBase > 0 ? [
+        { code: "AC", label: "Achats de prestations de services UE — base HT", value: declaration.reverseChargeBase, bold: false },
+        { code: "AC", label: "TVA autoliquidée correspondante", value: declaration.reverseChargeVat, bold: false },
+      ] : []),
       { code: "19", label: "TVA brute due", value: declaration.collected, bold: false },
       { code: "20", label: "TVA déductible sur autres biens et services", value: declaration.deductibleOther, bold: false },
       { code: "23", label: "TVA déductible sur immobilisations", value: declaration.deductibleFixedAssets, bold: false },

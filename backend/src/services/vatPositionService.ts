@@ -37,6 +37,7 @@ export function vatAdvanceAmount(transaction: Transaction): number {
 export function computeVatDeclaration(transactions: Transaction[], startDate: string, endDate: string) {
   const valid = transactions.filter((transaction) => transaction.status !== "rejected" && transaction.date >= startDate && transaction.date <= endDate);
   const revenue = valid.filter((transaction) => transactionAccountingNature(transaction.category, transaction.amount_ttc, transaction.accountingTreatment) === "revenue");
+  const reverseChargeBase = round2(valid.reduce((sum, transaction) => transaction.vatTreatment === "reverse_charge_purchase" ? sum + Math.abs(transaction.amount_ht) : sum, 0));
   const reverseChargeVat = round2(valid.reduce((sum, transaction) => transaction.vatTreatment === "reverse_charge_purchase" ? sum + Math.abs(transaction.amount_ht) * Math.max(0, Number(transaction.vat_rate) || 20) / 100 : sum, 0));
   const collected = round2(revenue.reduce((sum, transaction) => sum + Math.abs(transaction.vat), 0) + reverseChargeVat);
   const deductibleFromPurchases = round2(valid.reduce((sum, transaction) => {
@@ -76,7 +77,7 @@ export function computeVatDeclaration(transactions: Transaction[], startDate: st
   const balancePayments = round2(valid.reduce((sum, transaction) => sum + (transaction.category === "vat_balance_payment" ? vatPaymentAmount(transaction) : 0), 0));
   const netBeforeAdvances = round2(collected - deductible);
   return {
-    collected, deductible, deductibleOther, deductibleFixedAssets, reverseChargeVat, advances, balancePayments,
+    collected, deductible, deductibleOther, deductibleFixedAssets, reverseChargeBase, reverseChargeVat, advances, balancePayments,
     taxableByRate,
     revenueToReview: { count: revenueToReview.length, amount: round2(revenueToReview.reduce((sum, transaction) => sum + Math.abs(transaction.amount_ttc), 0)), transactionIds: revenueToReview.map((transaction) => transaction.id) },
     excludedRevenue: { count: excludedRevenue.length, amount: round2(excludedRevenue.reduce((sum, transaction) => sum + Math.abs(transaction.amount_ttc), 0)) },
