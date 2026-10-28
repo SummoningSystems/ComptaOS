@@ -6,7 +6,7 @@ import { loadAllTransactions } from "../services/transactionService.js";
 import { getPlatformState } from "../services/platformService.js";
 import { workspaceContext } from "../services/workspaceContext.js";
 import { assertAnnualPeriodOpen, buildAnnualAccountingPreview, buildAnnualClosingSnapshot, buildCarryForwardBalance, getAnnualClosingRecord, reopenAnnualPeriod, saveAnnualLock, saveAnnualReview, saveAnnualSetup, saveOpeningBalance, type AnnualReview, type FiscalPeriod, type OpeningBalanceLine, type ProfitTaxRegime } from "../services/annualClosingService.js";
-import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, listInventoryEntries, updateInventoryEntry, validateInventoryEntry, type InventoryEntryInput } from "../services/annualInventoryService.js";
+import { cancelInventoryEntry, createInventoryEntry, deleteInventoryDraft, listActiveInventoryEntries, updateInventoryEntry, validateInventoryEntry, type InventoryEntryInput } from "../services/annualInventoryService.js";
 import { cancelFiscalAdjustment, createFiscalAdjustment, deleteFiscalDraft, listFiscalAdjustments, saveFiscalReview, updateFiscalAdjustment, validateFiscalAdjustment, type FiscalAdjustmentInput } from "../services/annualFiscalService.js";
 import { saveAnnualTaxConfig, type AnnualTaxConfigInput } from "../services/annualTaxService.js";
 import { invalidateAnnualFilingReview, saveAnnualFilingConfig, type AnnualFilingConfigInput } from "../services/annualFilingService.js";
@@ -130,7 +130,7 @@ export async function annualClosingRoutes(app: FastifyInstance) {
       if (!before.filingReady || !before.taxCalculation.ready) throw new Error("Le dossier fiscal doit être intégralement contrôlé avant de comptabiliser l’IS.");
       const amount = Math.round(Number(before.taxCalculation.netTax) * 100) / 100;
       if (amount <= .009) return { availablePeriods: available, ...before };
-      const existingEntry = listInventoryEntries(period.id).find((entry) => entry.kind === "corporate_tax" && entry.status !== "cancelled");
+      const existingEntry = listActiveInventoryEntries(period.id).find((entry) => entry.kind === "corporate_tax");
       if (existingEntry) {
         const debit = existingEntry.lines.filter((line) => line.accountNumber.startsWith("695")).reduce((sum, line) => sum + line.debit - line.credit, 0);
         if (Math.abs(debit - amount) > .01) throw new Error(`Une écriture d’IS de ${debit.toFixed(2)} € existe déjà. Annule-la ou corrige le calcul avant de continuer.`);

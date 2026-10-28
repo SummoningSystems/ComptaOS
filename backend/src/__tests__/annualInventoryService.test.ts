@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workspace = vi.hoisted(() => ({ root: "" }));
 vi.mock("../services/fileSystem.js", () => ({ getWorkspaceRoot: () => workspace.root }));
-import { cancelInventoryEntry, createInventoryEntry, inventoryAccountingLines, listInventoryEntries, updateInventoryEntry, validateInventoryEntry } from "../services/annualInventoryService.js";
+import { cancelInventoryEntry, createInventoryEntry, inventoryAccountingLines, listActiveInventoryEntries, listInventoryEntries, updateInventoryEntry, validateInventoryEntry } from "../services/annualInventoryService.js";
 
 const period = { id: "fy_2026", startDate: "2025-10-01", endDate: "2026-09-30" };
 const input = { date: "2026-09-30", kind: "corporate_tax" as const, label: "Impôt sur les sociétés à payer", reference: "IS-2026", lines: [
@@ -37,5 +37,6 @@ describe("journal d’inventaire annuel", () => {
     expect(result.original.status).toBe("cancelled"); expect(result.reversal.reversalOf).toBe(entry.id);
     expect(inventoryAccountingLines(period.id).reduce((sum, line) => sum + line.debit - line.credit, 0)).toBe(0);
     expect(listInventoryEntries(period.id)).toHaveLength(2);
+    expect(listActiveInventoryEntries(period.id)).toHaveLength(0);
   });
 });

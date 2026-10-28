@@ -53,6 +53,10 @@ export function validateInventoryInput(period: InventoryPeriod, input: Inventory
 
 export function listInventoryEntries(periodId: string) { return loadStore().filter((entry) => entry.periodId === periodId).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)); }
 
+export function listActiveInventoryEntries(periodId: string) {
+  return listInventoryEntries(periodId).filter((entry) => entry.status !== "cancelled" && !entry.reversalOf);
+}
+
 export function createInventoryEntry(period: InventoryPeriod, input: InventoryEntryInput) {
   const clean = validateInventoryInput(period, input); const now = new Date().toISOString();
   const entry: InventoryEntry = { id: randomUUID(), periodId: period.id, ...clean, reference: clean.reference ?? "", status: "draft", createdAt: now, updatedAt: now };
