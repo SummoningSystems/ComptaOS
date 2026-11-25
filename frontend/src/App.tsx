@@ -337,7 +337,10 @@ export default function App() {
       {/* Title bar */}
       <div className="relative z-[100] flex h-10 shrink-0 select-none items-center gap-1 overflow-visible border-b border-vscode-border bg-vscode-panel px-2 sm:gap-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-1 shrink-0 sm:gap-3">
-          <span className="text-xs text-vscode-muted font-semibold tracking-wide">ComptaOS</span>
+          <span className="flex items-center gap-1.5 text-xs text-vscode-muted font-semibold tracking-wide">
+            <img src={`${import.meta.env.BASE_URL}comptaos.svg`} alt="" width={18} height={18} />
+            ComptaOS
+          </span>
           <div className="hidden sm:block"><CompanySelector onCreateNew={() => { setWizardCanCancel(true); setShowCompanyWizard(true); }} onManageStructure={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} onActiveChange={setActiveWorkspace} /></div>
           <button onClick={() => openTab({ id: "structure", title: "Structure financière", type: "structure" })} className="rounded border border-vscode-border px-2 py-0.5 text-xs text-vscode-muted transition-colors hover:border-vscode-accent hover:text-vscode-text" title="Personnes, entreprises, comptes et relations">Structure</button>
         </div>

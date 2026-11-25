@@ -30,7 +30,7 @@ export function LoginView({ onLogin }: Props) {
     <div className="flex items-center justify-center h-screen bg-vscode-bg">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-4xl mb-3">📊</div>
+          <img src={`${import.meta.env.BASE_URL}comptaos.svg`} alt="" width={56} height={56} className="mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-vscode-text">ComptaOS</h1>
           <p className="text-sm text-vscode-muted mt-1">Connectez-vous pour continuer</p>
         </div>

@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchTransactions } from "../../api/client";
-import { Transaction } from "../../types";
+import type { Transaction } from "../../types";
 import { useCategoryCatalog } from "../../hooks/useCategoryCatalog";
+import { tierKey, tierName } from "./tierIdentity";
 
 interface TierStats {
+  key: string;
   name: string;
   count: number;
   totalIn: number;   // somme des montants > 0
@@ -28,32 +30,29 @@ export function TiersView() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Grouper par tiers (notes field)
-  const tierMap = new Map<string, Transaction[]>();
-  for (const t of transactions) {
-    const name = t.notes?.trim() || "(sans tiers)";
-    if (!tierMap.has(name)) tierMap.set(name, []);
-    tierMap.get(name)!.push(t);
-  }
-
-  const tiers: TierStats[] = [];
-  for (const [name, txns] of tierMap) {
-    const totalIn = txns.filter((t) => t.amount_ttc > 0).reduce((s, t) => s + t.amount_ttc, 0);
-    const totalOut = txns.filter((t) => t.amount_ttc < 0).reduce((s, t) => s + Math.abs(t.amount_ttc), 0);
-    tiers.push({
-      name,
-      count: txns.length,
-      totalIn,
-      totalOut,
-      balance: totalIn - totalOut,
-      lastDate: txns.map((t) => t.date).sort().at(-1) ?? "",
-      transactions: txns.sort((a, b) => b.date.localeCompare(a.date)),
+  const tiers = useMemo(() => {
+    const groups = new Map<string, { name: string; transactions: Transaction[] }>();
+    for (const transaction of transactions) {
+      const name = tierName(transaction);
+      const key = tierKey(name);
+      const group = groups.get(key);
+      if (group) group.transactions.push(transaction);
+      else groups.set(key, { name, transactions: [transaction] });
+    }
+    return [...groups].map<TierStats>(([key, group]) => {
+      const txns = group.transactions.sort((a, b) => b.date.localeCompare(a.date));
+      const totalIn = txns.reduce((sum, t) => sum + Math.max(0, t.amount_ttc), 0);
+      const totalOut = txns.reduce((sum, t) => sum + Math.max(0, -t.amount_ttc), 0);
+      return { key, name: group.name, count: txns.length, totalIn, totalOut,
+        balance: totalIn - totalOut, lastDate: txns[0].date, transactions: txns };
     });
-  }
+  }, [transactions]);
 
+  const query = tierKey(search);
   const filtered = tiers
     .filter((t) => {
-      const matchSearch = t.name.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = t.key.includes(query) || t.transactions.some((transaction) =>
+        tierKey(`${transaction.label} ${transaction.invoiceRef ?? ""}`).includes(query));
       const matchDir =
         directionFilter === "" ? true :
         directionFilter === "in" ? t.totalIn > 0 :
@@ -71,10 +70,10 @@ export function TiersView() {
   const totalIn = filtered.reduce((s, t) => s + t.totalIn, 0);
   const totalOut = filtered.reduce((s, t) => s + t.totalOut, 0);
 
-  function toggleExpand(name: string) {
+  function toggleExpand(key: string) {
     setExpanded((prev) => {
       const s = new Set(prev);
-      s.has(name) ? s.delete(name) : s.add(name);
+      s.has(key) ? s.delete(key) : s.add(key);
       return s;
     });
   }
@@ -149,17 +148,18 @@ export function TiersView() {
             </thead>
             <tbody>
               {filtered.map((tier) => {
-                const isExpanded = expanded.has(tier.name);
+                const isExpanded = expanded.has(tier.key);
                 return (
-                  <>
+                  <Fragment key={tier.key}>
                     <tr
-                      key={tier.name}
-                      onClick={() => toggleExpand(tier.name)}
+                      onClick={() => toggleExpand(tier.key)}
                       className="border-b border-vscode-border hover:bg-vscode-panel cursor-pointer select-none"
                     >
-                      <td className="px-4 py-2 flex items-center gap-2">
-                        <span className={`text-[10px] transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>▶</span>
-                        <span className="text-vscode-text font-medium">{tier.name}</span>
+                      <td className="px-4 py-2">
+                        <button type="button" aria-expanded={isExpanded} className="inline-flex items-center gap-2 text-left text-vscode-text font-medium">
+                          <span aria-hidden="true" className={`text-[10px] transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                          {tier.name}
+                        </button>
                       </td>
                       <td className="text-right px-3 py-2 text-vscode-muted">{tier.count}</td>
                       <td className="text-right px-3 py-2 text-green-400 tabular-nums">
@@ -184,7 +184,7 @@ export function TiersView() {
                         <td className="px-4 py-1.5 text-vscode-muted text-[10px]">{categories.find((category) => category.id === t.category)?.label ?? t.category}</td>
                       </tr>
                     ))}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -1,6 +1,7 @@
 {
   "appId": "fr.comptaos.app",
   "productName": "ComptaOS",
+  "icon": "frontend/public/comptaos.svg",
   "directories": {
     "output": "dist-electron"
   },
@@ -31,17 +32,14 @@
   ],
   "win": {
     "target": ["nsis"],
-    "icon": "electron/icons/icon.ico",
-    "signAndEditExecutable": false
+    "signExecutable": false
   },
   "mac": {
     "target": ["dmg"],
-    "icon": "electron/icons/icon.icns",
     "category": "public.app-category.finance"
   },
   "linux": {
     "target": ["AppImage"],
-    "icon": "electron/icons/icon.png",
     "category": "Office"
   },
   "nsis": {
